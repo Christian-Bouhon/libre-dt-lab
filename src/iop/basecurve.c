@@ -1102,8 +1102,7 @@ void tiling_callback(dt_iop_module_t *self,
     tiling->factor = 6.666f;                 // in + out + col[] + comb[] + 2*tmp
     tiling->maxbuf = 1.0f;
     tiling->overhead = 0;
-    tiling->xalign = 1;
-    tiling->yalign = 1;
+    tiling->align = 1;
     tiling->overlap = rad;
   }
   else
@@ -1111,8 +1110,7 @@ void tiling_callback(dt_iop_module_t *self,
     tiling->factor = 2.0f;                   // in + out
     tiling->maxbuf = 1.0f;
     tiling->overhead = 0;
-    tiling->xalign = 1;
-    tiling->yalign = 1;
+    tiling->align = 1;
     tiling->overlap = 0;
   }
 }
