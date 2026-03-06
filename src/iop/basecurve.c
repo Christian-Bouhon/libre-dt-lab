@@ -591,7 +591,8 @@ void reload_defaults(dt_iop_module_t *self)
     d->shadow_lift = 1.0f;
     d->highlight_gain = 1.0f;
     d->ucs_saturation_balance = 0.2f;
-    d->color_look = 1; // Natural look
+    d->color_look = 0; // Neutral look
+    d->look_opacity = 1.0f;
 
     d->basecurve_nodes[0] = 2;
     d->basecurve_type[0] = CUBIC_SPLINE;
@@ -756,6 +757,7 @@ int process_cl_fusion(dt_iop_module_t *self,
 
   cl_mem *dev_col = calloc(num_levels_max, sizeof(cl_mem));
   cl_mem *dev_comb = calloc(num_levels_max, sizeof(cl_mem));
+  if(!dev_col || !dev_comb) goto error;
 
   cl_mem dev_tmp1 = NULL;
   cl_mem dev_tmp2 = NULL;
@@ -820,25 +822,24 @@ int process_cl_fusion(dt_iop_module_t *self,
     {
       const float mul = exposure_increment(d->exposure_stops, e, d->exposure_fusion, d->exposure_bias);
 
-      size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
       if(d->preserve_colors == DT_RGB_NORM_NONE)
       {
-        dt_opencl_set_kernel_args(devid, gd->kernel_basecurve_legacy_lut, 0, CLARG(dev_in), CLARG(dev_tmp1),
-          CLARG(width), CLARG(height), CLARG(mul), CLARG(dev_m), CLARG(dev_coeffs));
-        err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_basecurve_legacy_lut, sizes);
+        err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_basecurve_legacy_lut, width, height,
+                                               CLARG(dev_in), CLARG(dev_tmp1), CLARG(width), CLARG(height),
+                                               CLARGFLOAT(mul), CLARG(dev_m), CLARG(dev_coeffs));
         if(err != CL_SUCCESS) goto error;
       }
       else
       {
-        dt_opencl_set_kernel_args(devid, gd->kernel_basecurve_lut, 0, CLARG(dev_in), CLARG(dev_tmp1), CLARG(width),
-          CLARG(height), CLARG(mul), CLARG(dev_m), CLARG(dev_coeffs), CLARG(preserve_colors), CLARG(dev_profile_info),
-          CLARG(dev_profile_lut), CLARG(use_work_profile));
-        err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_basecurve_lut, sizes);
+        err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_basecurve_lut, width, height, CLARG(dev_in),
+                                               CLARG(dev_tmp1), CLARG(width), CLARG(height), CLARGFLOAT(mul),
+                                               CLARG(dev_m), CLARG(dev_coeffs), CLARG(preserve_colors),
+                                               CLARG(dev_profile_info), CLARG(dev_profile_lut), CLARG(use_work_profile));
+        if(err != CL_SUCCESS) goto error;
       }
 
-      dt_opencl_set_kernel_args(devid, gd->kernel_basecurve_compute_features, 0, CLARG(dev_tmp1), CLARG(dev_col[0]),
-        CLARG(width), CLARG(height));
-      err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_basecurve_compute_features, sizes);
+      err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_basecurve_compute_features, width, height,
+                                             CLARG(dev_tmp1), CLARG(dev_col[0]), CLARG(width), CLARG(height));
       if(err != CL_SUCCESS) goto error;
     }
 
@@ -962,8 +963,9 @@ int process_cl_fusion(dt_iop_module_t *self,
   // Apply ACES/shadow_lift here if needed
   err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_basecurve_finalize, width, height,
       CLARG(dev_in), CLARG(dev_comb[0]), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(d->workflow_mode),
-      CLARG(d->shadow_lift), CLARG(d->highlight_gain), CLARG(d->ucs_saturation_balance), CLARG(d->gamut_strength),
-      CLARG(d->highlight_corr), CLARG(d->target_gamut), CLARG(d->look_opacity), CLARG(look_mat_buf), CLARG(alpha));
+      CLARGFLOAT(d->shadow_lift), CLARGFLOAT(d->highlight_gain), CLARGFLOAT(d->ucs_saturation_balance),
+      CLARGFLOAT(d->gamut_strength), CLARGFLOAT(d->highlight_corr), CLARG(d->target_gamut), CLARGFLOAT(d->look_opacity),
+      CLARG(look_mat_buf), CLARGFLOAT(alpha));
 
 error:
   for(int k = 0; k < num_levels_max; k++)
@@ -1012,7 +1014,6 @@ int process_cl_lut(dt_iop_module_t *self,
 
   const float mul = 1.0f;
 
-  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
   dev_m = dt_opencl_copy_host_to_device(devid, d->table, 256, 256, sizeof(float));
   if(dev_m == NULL) goto error;
 
@@ -1041,25 +1042,26 @@ int process_cl_lut(dt_iop_module_t *self,
   // Conditional is moved outside of the OpenCL operations for performance.
   if(d->preserve_colors == DT_RGB_NORM_NONE)
   {
-    dt_opencl_set_kernel_args(devid, gd->kernel_basecurve_legacy_lut, 0, CLARG(dev_in), CLARG(dev_dest),
-      CLARG(width), CLARG(height), CLARG(mul), CLARG(dev_m), CLARG(dev_coeffs));
-    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_basecurve_legacy_lut, sizes);
+    err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_basecurve_legacy_lut, width, height, CLARG(dev_in),
+                                           CLARG(dev_dest), CLARG(width), CLARG(height), CLARGFLOAT(mul), CLARG(dev_m),
+                                           CLARG(dev_coeffs));
   }
   else
   {
     //FIXME:  There are still conditionals on d->preserve_colors within this flow that could impact performance
-    dt_opencl_set_kernel_args(devid, gd->kernel_basecurve_lut, 0, CLARG(dev_in), CLARG(dev_dest), CLARG(width),
-      CLARG(height), CLARG(mul), CLARG(dev_m), CLARG(dev_coeffs), CLARG(preserve_colors), CLARG(dev_profile_info),
-      CLARG(dev_profile_lut), CLARG(use_work_profile));
-    err = dt_opencl_enqueue_kernel_2d(devid, gd->kernel_basecurve_lut, sizes);
+    err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_basecurve_lut, width, height, CLARG(dev_in),
+                                           CLARG(dev_dest), CLARG(width), CLARG(height), CLARGFLOAT(mul), CLARG(dev_m),
+                                           CLARG(dev_coeffs), CLARG(preserve_colors), CLARG(dev_profile_info),
+                                           CLARG(dev_profile_lut), CLARG(use_work_profile));
   }
 
   if(d->workflow_mode > 0)
   {
     err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_basecurve_finalize, width, height,
         CLARG(dev_in), CLARG(dev_tmp), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(d->workflow_mode),
-        CLARG(d->shadow_lift), CLARG(d->highlight_gain), CLARG(d->ucs_saturation_balance), CLARG(d->gamut_strength),
-        CLARG(d->highlight_corr), CLARG(d->target_gamut), CLARG(d->look_opacity), CLARG(look_mat_buf), CLARG(alpha));
+        CLARGFLOAT(d->shadow_lift), CLARGFLOAT(d->highlight_gain), CLARGFLOAT(d->ucs_saturation_balance),
+        CLARGFLOAT(d->gamut_strength), CLARGFLOAT(d->highlight_corr), CLARG(d->target_gamut),
+        CLARGFLOAT(d->look_opacity), CLARG(look_mat_buf), CLARGFLOAT(alpha));
     if(err != CL_SUCCESS) goto error;
   }
 
