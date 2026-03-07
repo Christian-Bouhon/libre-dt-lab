@@ -38,7 +38,7 @@ inline float _aces_tone_map(const float x)
 /*
   Narkowicz & Filiberto (2021) rational approximation of the ACES 2.0 RRT curve.
   More precise than the basic Narkowicz 2016 fit, with a softer shoulder.
-  The pre-scale factor (x * 1.257) in the caller adjusts the exposure point.
+  The pre-scale factor (x * 1.680) in the caller adjusts the exposure point.
   Does NOT implement the full ACES pipeline (no color space transform, no D60 whitepoint).
   Reference: https://github.com/h3r2tic/tony-mc-mapface (Narkowicz/Filiberto fit)
 */
@@ -417,7 +417,7 @@ basecurve_finalize(read_only image2d_t in,
       if(workflow_mode == 1)
         y_out = _aces_tone_map(x_scaled) * k;
       else
-        y_out = _aces_20_tonemap(x_scaled * 1.257f) * k;
+        y_out = _aces_20_tonemap(x_scaled * 1.680f) * k;
     }
 
     float gain = y_out / fmax(y_in, 1e-6f);

@@ -1458,7 +1458,7 @@ static void process_lut(dt_iop_module_t *self,
         if(d->workflow_mode == 1)
           y_out = _aces_tone_map(x_scaled) * k_scale;
         else /* workflow_mode == 2 */
-          y_out = _aces_20_tonemap(x_scaled * 1.680) * k_scale; //CB 20260307 1.680 (0.75ev) to better match ACES 1.0 tonemap at mid-tones
+          y_out = _aces_20_tonemap(x_scaled * 1.680f) * k_scale; //CB 20260307 1.680 (0.75ev) to better match ACES 1.0 tonemap at mid-tones
       }
 
       float gain = y_out / fmaxf(y_in, 1e-6f);
@@ -1856,7 +1856,7 @@ static void process_fusion(dt_iop_module_t *self,
         if(d->workflow_mode == 1)
           y_out = _aces_tone_map(x_scaled) * k_scale;
         else
-          y_out = _aces_20_tonemap(x_scaled * 1.680) * k_scale; //CB 20260307 1.680 (0.75ev) to better match ACES 1.0 tonemap at mid-tones
+          y_out = _aces_20_tonemap(x_scaled * 1.680f) * k_scale; //CB 20260307 1.680 (0.75ev) to better match ACES 1.0 tonemap at mid-tones
       }
 
       float gain = y_out / fmaxf(y_in, 1e-6f);
