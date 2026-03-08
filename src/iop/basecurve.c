@@ -618,6 +618,20 @@ void init_presets(dt_iop_module_so_t *self)
 
   const gboolean is_display_referred = dt_is_display_referred();
 
+  if(!is_display_referred)
+  {
+    dt_gui_presets_add_generic
+      (_("scene-referred default"), self->op, self->version(),
+       NULL, 0,
+       TRUE, DEVELOP_BLEND_CS_RGB_DISPLAY);
+
+    dt_gui_presets_update_format(BUILTIN_PRESET("scene-referred default"), self->op,
+                                 self->version(), FOR_RAW);
+
+    dt_gui_presets_update_autoapply(BUILTIN_PRESET("scene-referred default"),
+                                    self->op, self->version(), TRUE);
+  }
+
   if(is_display_referred)
   {
     dt_gui_presets_add_generic
@@ -1625,6 +1639,7 @@ static void process_lut(dt_iop_module_t *self,
         out[k+1] = orig_g * (1.0f - effective_strength) + out[k+1] * effective_strength;
         out[k+2] = orig_b * (1.0f - effective_strength) + out[k+2] * effective_strength;
       }
+      }
 
       // Final gamut check to preserve hue (exact color)
       if(out[k] < 0.0f || out[k] > 1.0f || out[k+1] < 0.0f || out[k+1] > 1.0f || out[k+2] < 0.0f || out[k+2] > 1.0f)
@@ -1642,7 +1657,6 @@ static void process_lut(dt_iop_module_t *self,
         out[k] = target_luma + t * (out[k] - target_luma);
         out[k+1] = target_luma + t * (out[k+1] - target_luma);
         out[k+2] = target_luma + t * (out[k+2] - target_luma);
-      }
       }
     }
   }
@@ -2021,6 +2035,7 @@ static void process_fusion(dt_iop_module_t *self,
         val[1] = orig_g * (1.0f - effective_strength) + val[1] * effective_strength;
         val[2] = orig_b * (1.0f - effective_strength) + val[2] * effective_strength;
       }
+      }
 
       // Final gamut check to preserve hue (exact color)
       if(val[0] < 0.0f || val[0] > 1.0f || val[1] < 0.0f || val[1] > 1.0f || val[2] < 0.0f || val[2] > 1.0f)
@@ -2038,7 +2053,6 @@ static void process_fusion(dt_iop_module_t *self,
         val[0] = target_luma + t * (val[0] - target_luma);
         val[1] = target_luma + t * (val[1] - target_luma);
         val[2] = target_luma + t * (val[2] - target_luma);
-      }
       }
     }
 
@@ -2797,7 +2811,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
           dt_bauhaus_slider_set(g->ucs_saturation_balance, 0.2f);
           // Set default color look when switching to this workflow
           p->color_look = 0; // Neutral look
-          dt_bauhaus_combobox_set(g->color_look, 1);
+          dt_bauhaus_combobox_set(g->color_look, 0);
           p->look_opacity = 1.0f;
           dt_bauhaus_slider_set(g->look_opacity, 1.0f);
           p->basecurve_type[0] = CUBIC_SPLINE;
