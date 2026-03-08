@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   AppImage:
-    if: github.repository == 'darktable-org/darktable' || github.event_name == 'workflow_dispatch'
+    if: github.repository == 'darktable-org/darktable' || github.repository == 'Christian-Bouhon/darktable' || github.event_name == 'workflow_dispatch'
     name: Nightly darktable AppImage
     runs-on: ${{ matrix.os }}
     strategy:
@@ -183,7 +183,7 @@ jobs:
           retention-days: 1
 
   Windows:
-    if: github.repository == 'darktable-org/darktable' || github.event_name == 'workflow_dispatch'
+    if: github.repository == 'darktable-org/darktable' || github.repository == 'Christian-Bouhon/darktable' || github.event_name == 'workflow_dispatch'
     name: Nightly darktable Windows
     runs-on: ${{ matrix.os }}
     strategy:
@@ -336,7 +336,7 @@ jobs:
           retention-days: 2
 
   macOS:
-    if: github.repository == 'darktable-org/darktable' || github.event_name == 'workflow_dispatch'
+    if: github.repository == 'darktable-org/darktable' || github.repository == 'Christian-Bouhon/darktable' || github.event_name == 'workflow_dispatch'
     name: Nightly darktable macOS
     runs-on: ${{ matrix.build.os }}
     strategy:
