@@ -610,6 +610,19 @@ void init_presets(dt_iop_module_so_t *self)
   set_presets(self, basecurve_presets, basecurve_presets_cnt, FALSE);
   set_presets(self, basecurve_camera_presets, basecurve_camera_presets_cnt, TRUE);
 
+  // Migrate user presets from v6 to v7: append new parameters with safe defaults.
+  sqlite3_stmt *stmt;
+  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
+    "UPDATE data.presets"
+    " SET op_params = op_params ||"
+    "   X'000000000000803F0000803FCDCC4C3E000000000000000002000000000000000000803F'"
+    " , op_version = 7"
+    " WHERE operation = 'basecurve' AND op_version = 6"
+    "   AND writeprotect = 0",
+    -1, &stmt, NULL);
+  sqlite3_step(stmt);
+  sqlite3_finalize(stmt);
+
   // sql commit
   dt_database_release_transaction(darktable.db);
 
@@ -2100,7 +2113,7 @@ void commit_params(dt_iop_module_t *self,
   d->exposure_bias = p->exposure_bias;
   d->preserve_colors = p->preserve_colors;
   d->workflow_mode = p->workflow_mode;
-  // Intentional inversion: slider to the right (>1.0) → exponent < 1.0 → lightens shadows
+  // Intentional inversion: slider to the right (>1.0) -> exponent < 1.0 -> lightens shadows
   d->shadow_lift = 2.0f - p->shadow_lift;
   d->highlight_gain = p->highlight_gain;
   d->ucs_saturation_balance = p->ucs_saturation_balance;
@@ -2918,8 +2931,8 @@ void gui_init(dt_iop_module_t *self)
 
   g->workflow_mode = dt_bauhaus_combobox_from_params(self, "workflow_mode");
   dt_bauhaus_combobox_add(g->workflow_mode, _("display"));
-  dt_bauhaus_combobox_add(g->workflow_mode, _("kinematics (ACES-like)"));
-  dt_bauhaus_combobox_add(g->workflow_mode, _("kinematics (Narkowicz)"));
+  dt_bauhaus_combobox_add(g->workflow_mode, _("kinematic"));
+  dt_bauhaus_combobox_add(g->workflow_mode, _("dynamic"));
   gtk_widget_set_tooltip_text(g->workflow_mode, _("tone mapping method applied after the curve"));
 
   g->color_look = dt_bauhaus_combobox_from_params(self, "color_look");

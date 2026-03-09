@@ -1978,7 +1978,7 @@ static gboolean _dev_auto_apply_presets(dt_develop_t *dev)
                "  THEN multi_name"
                "  ELSE (ROW_NUMBER() OVER (PARTITION BY operation ORDER BY operation) - 1)"
                " END",
-           "");  // basecurve n'est plus exclu en mode non-display : se comporte comme filmic/AGX/Sigmoid
+           "");  // The basecurve is no longer excluded in non-display mode.
   // clang-format on
 
   // query for all modules at once:

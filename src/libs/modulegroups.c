@@ -1499,7 +1499,9 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
       }														  \
       else if(wf_basecurve)                                                                                       \
       {                                                                                                           \
-        AM("basecurve/fusion");                                                                                   \
+        AM("basecurve/highlight gain");                                                                           \
+        AM("basecurve/shadow lift");                                                                              \
+        AM("basecurve/color look");                                                                               \
       }                                                                                                           \
       AM("channelmixerrgb/temperature");                                                                          \
       AM("channelmixerrgb/chroma");                                                                               \

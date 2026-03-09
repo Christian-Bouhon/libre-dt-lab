@@ -1205,15 +1205,14 @@ gboolean dt_gui_presets_autoapply_for_module(dt_iop_module_t *module, GtkWidget 
      "  OR (name = ?13)) AND op_version = ?14"
      " ORDER BY writeprotect ASC, rowid DESC",
      format_filter,
-     "");  // basecurve n'est plus exclu en mode non-display : il doit se comporter comme filmic/AGX/Sigmoid
+     "");  // The basecurve is no longer excluded in non-display mode.
   // clang-format on
 
   g_free(format_filter);
 
   sqlite3_stmt *stmt;
-  // display-referred : courbes boîtier historiques
-  // scene-referred    : preset "scene-referred default" (existant)
-  // "aucun"           : preset "kinematics default" — basecurve se comporte comme filmic/AGX/Sigmoid
+  // display-referred : legacy curve
+  // scene-referred    : preset "display-referred default"
   const char *workflow_preset = has_matrix && is_display_referred
                                 ? BUILTIN_PRESET("display-referred default")
                                 : (has_matrix && is_scene_referred
