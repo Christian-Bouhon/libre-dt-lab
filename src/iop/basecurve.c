@@ -610,19 +610,6 @@ void init_presets(dt_iop_module_so_t *self)
   set_presets(self, basecurve_presets, basecurve_presets_cnt, FALSE);
   set_presets(self, basecurve_camera_presets, basecurve_camera_presets_cnt, TRUE);
 
-  // Migrate user presets from v6 to v7: append new parameters with safe defaults.
-  sqlite3_stmt *stmt;
-  DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db),
-    "UPDATE data.presets"
-    " SET op_params = op_params ||"
-    "   X'000000000000803F0000803FCDCC4C3E000000000000000002000000000000000000803F'"
-    " , op_version = 7"
-    " WHERE operation = 'basecurve' AND op_version = 6"
-    "   AND writeprotect = 0",
-    -1, &stmt, NULL);
-  sqlite3_step(stmt);
-  sqlite3_finalize(stmt);
-
   // sql commit
   dt_database_release_transaction(darktable.db);
 
@@ -3046,7 +3033,9 @@ void gui_init(dt_iop_module_t *self)
   g->logbase = dt_bauhaus_slider_new_with_range(self, 0.0f, 40.0f, 0, 0.0f, 2);
   dt_bauhaus_widget_set_label(g->logbase, NULL, N_("scale for graph"));
   g_signal_connect(G_OBJECT(g->logbase), "value-changed", G_CALLBACK(logbase_callback), self);
-  dt_gui_box_add(self->widget, g->logbase);
+  
+  // CB 20260309 suite remarque Pascal Obry
+  // dt_gui_box_add(self->widget, g->logbase);
 
   gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK | darktable.gui->scroll_mask
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
