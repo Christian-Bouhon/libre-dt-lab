@@ -288,6 +288,7 @@ typedef struct dt_iop_basecurve_gui_data_t
   GtkWidget *color_look;
   GtkWidget *look_opacity;
   int last_workflow_mode;
+  gboolean look_selected_first_time;
 } dt_iop_basecurve_gui_data_t;
 
 typedef struct basecurve_preset_t
@@ -2782,7 +2783,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       gtk_widget_set_visible(g->highlight_corr, TRUE);
       gtk_widget_set_visible(g->target_gamut, TRUE);
       gtk_widget_set_visible(g->color_look, TRUE);
-      gtk_widget_set_visible(g->look_opacity, TRUE);
+      gtk_widget_set_visible(g->look_opacity, p->color_look > 0);
       gtk_widget_set_sensitive(g->shadow_lift, TRUE);
       gtk_widget_set_sensitive(g->highlight_gain, TRUE);
       gtk_widget_set_sensitive(g->ucs_saturation_balance, TRUE);
@@ -2791,11 +2792,17 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       gtk_widget_set_sensitive(g->target_gamut, TRUE);
       gtk_widget_set_sensitive(g->color_look, TRUE);
       gtk_widget_set_sensitive(g->look_opacity, p->color_look > 0);
-          if(w == g->color_look)
-          {
-            p->look_opacity = 1.0f;
-            dt_bauhaus_slider_set(g->look_opacity, 1.0f);
-          }
+      if(w == g->color_look)
+      {
+        // Only reset opacity to 100% if a look is selected for the first time.
+        if(p->color_look > 0 && !g->look_selected_first_time)
+        {
+          p->look_opacity = 1.0f;
+          dt_bauhaus_slider_set(g->look_opacity, 1.0f);
+          g->look_selected_first_time = TRUE;
+        }
+      }
+    
       gtk_widget_set_tooltip_text(g->fusion, _("exposure fusion operates in linear scene-referred space as a luminance normalization step,\n"
                                                "providing a stable radiometric reference prior to the final tone-mapping curve.\n"
                                                "it does not perform HDR blending nor exposure compensation."));
@@ -2879,6 +2886,7 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_combobox_set(g->color_look, p->color_look);
   dt_bauhaus_slider_set(g->look_opacity, p->look_opacity);
   g->last_workflow_mode = p->workflow_mode;
+  g->look_selected_first_time = (p->color_look != 0);
   gui_changed(self, NULL, NULL);
 
   // gui curve is read directly from params during expose event.
@@ -2905,6 +2913,7 @@ void gui_init(dt_iop_module_t *self)
   g->mouse_x = g->mouse_y = -1.0;
   g->selected = -1;
   g->loglogscale = 0;
+  g->look_selected_first_time = FALSE;
 
   g->area = GTK_DRAWING_AREA(dt_ui_resize_wrap(NULL, DT_PIXEL_APPLY_DPI(100), "plugins/darkroom/basecurve/graph_height"));
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("abscissa: input, ordinate: output. works on RGB channels"));
@@ -3034,9 +3043,6 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_widget_set_label(g->logbase, NULL, N_("scale for graph"));
   g_signal_connect(G_OBJECT(g->logbase), "value-changed", G_CALLBACK(logbase_callback), self);
   
-  // CB 20260309 suite remarque Pascal Obry
-  // dt_gui_box_add(self->widget, g->logbase);
-
   gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK | darktable.gui->scroll_mask
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                            | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
