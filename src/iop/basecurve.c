@@ -74,7 +74,7 @@ typedef struct dt_iop_basecurve_params_t
   float highlight_corr;   // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "highlight hue/sat"
   int target_gamut;       // $DEFAULT: 2 $DESCRIPTION: "target gamut"
   int color_look;         // $DEFAULT: 0 $DESCRIPTION: "color look style"
-  float look_opacity;     // $MIN: 0.1 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "look opacity"
+  float look_opacity;     // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "look opacity"
 } dt_iop_basecurve_params_t;
 
 static const float color_looks[10][10] = {
@@ -588,7 +588,7 @@ void reload_defaults(dt_iop_module_t *self)
 
   if(!dt_is_display_referred())
   {
-    // Force ACES defaults on top of whatever curve was found
+    // Force kinematic defaults for scene-referred workflow:
     d->workflow_mode = 1;
     d->shadow_lift = 1.0f;
     d->highlight_gain = 1.0f;
@@ -976,7 +976,7 @@ int process_cl_fusion(dt_iop_module_t *self,
   }
 
   // copy output buffer
-  // Apply ACES/shadow_lift here if needed
+  // Apply shadow_lift and tone mapping here if needed
   err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_basecurve_finalize, width, height,
       CLARG(dev_in), CLARG(dev_comb[0]), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(d->workflow_mode),
       CLARGFLOAT(d->shadow_lift), CLARGFLOAT(d->highlight_gain), CLARGFLOAT(d->ucs_saturation_balance),
@@ -1813,7 +1813,7 @@ static void process_fusion(dt_iop_module_t *self,
     val[1] = fminf(val[1], 1e6f);
     val[2] = fminf(val[2], 1e6f);
 
-    // If using ACES workflow, we apply shadow lift and tone mapping here, after fusion
+    // If using scene-referred workflow
     if(d->workflow_mode > 0)
     {
       // Apply Color Look
