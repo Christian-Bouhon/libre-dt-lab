@@ -243,7 +243,6 @@ int legacy_params(dt_iop_module_t *self,
                   int32_t *new_params_size,
                   int *new_version)
 {
-  // No legacy versions exist yet.
   return 1;
 }
 
@@ -415,23 +414,18 @@ static inline void apply_local_contrast(const float *const restrict in,
 
     const float L_final = lum_pixel * multiplier;
 
-    const int use_luminance_mode = 1;
-    if(use_luminance_mode)
+    float ratio = L_final / fmaxf(lum_pixel, 1e-6f);
+    ratio = fminf(ratio, 8.0f);
+    for_each_channel(c)
+        out[4 * k + c] = in[4 * k + c] * ratio;
+
+    // Slight saturation boost tied to CSF weight, active only above 50% of the slider.
+    // The boost starts at zero at 50% and grows progressively — no abrupt jump.
+    if(d->csf_adaptation > 0.5f)
     {
-        float ratio = L_final / fmaxf(lum_pixel, 1e-6f);
-        ratio = fminf(ratio, 8.0f);
-        for_each_channel(c) {
-            out[4 * k + c] = in[4 * k + c] * ratio;
-        }
-    }
-    else
-    {
-        const float ratio = L_final / fmaxf(lum_pixel, 1e-6f);
-        float saturation_boost = 1.0f;
-        if (d->csf_adaptation > 1.0f) {
-            saturation_boost = 1.0f + (d->csf_adaptation - 1.0f) * csf_weight * 0.1f;
-        }
-        for_each_channel(c) { out[4 * k + c] = in[4 * k + c] * ratio * saturation_boost; }
+        const float saturation_boost = 1.0f + (d->csf_adaptation - 0.5f) * csf_weight * 0.1f;
+        for_each_channel(c)
+            out[4 * k + c] *= saturation_boost;
     }
 
     if (fabsf(d->colorful_contrast) > 0.001f) {
@@ -834,7 +828,7 @@ void commit_params(dt_iop_module_t *self,
   
   // CB 20260221
   // The multipliers determine how the base epsilon for the guided filter is scaled for each detail level.
-  d->f_mult_micro    = p->f_mult_micro * 0.50f;
+ d->f_mult_micro    = p->f_mult_micro * 0.50f;
   d->f_mult_fine     = p->f_mult_fine * 0.75f;
   d->f_mult_local    = p->f_mult_local * 1.0f;
   d->f_mult_broad    = p->f_mult_broad * 1.50f; // 20260302 = 1.40f
