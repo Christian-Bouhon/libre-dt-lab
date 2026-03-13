@@ -817,18 +817,26 @@ void commit_params(dt_iop_module_t *self,
   d->contrast_balance = p->contrast_balance;
   d->colorful_contrast = p->colorful_contrast;
 
-  // UI blending param is the square root of the actual blending parameter
-  // to make it more sensitive to small values that represent the most important value domain.
-  // UI parameter is given in percentage of maximum blending value.
-  // The actual blending parameter represents the fraction of the largest image dimension.
-  d->blending = p->blending * p->blending / 100.0f;
+  // CB 20260313
+  // Normalize blending and feathering to the "sensor 3:2 36 MP" as reference.
+  // diag_ref = 8800.0f is the diagonal of the "sensor 3:2 36 MP" (7360 x 4912 px).
+  // N < 1 for lower resolution sensors, N > 1 for higher resolution sensors.
+  const float diag     = sqrtf((float)piece->iwidth  * piece->iwidth
+                             + (float)piece->iheight * piece->iheight);
+  const float diag_ref = 8848.0f; // sensor 36 MP
+  const float N        = diag / diag_ref;
 
-  // UI guided filter feathering param increases edge preservation
-  d->feathering = 1.0f / p->feathering;
+  // UI blending param is squared to increase sensitivity to small values.
+  // Scaled by sqrt(N) so larger sensors use proportionally wider radii.
+  d->blending = (p->blending * p->blending / 100.0f) * sqrtf(N);
+
+  // UI feathering is inverted (higher = stricter edge preservation).
+  // Scaled by N so higher resolution sensors get a proportionally larger epsilon.
+  d->feathering = (1.0f / p->feathering) * N * 1.6f;
   
   // CB 20260221
   // The multipliers determine how the base epsilon for the guided filter is scaled for each detail level.
- d->f_mult_micro     = p->f_mult_micro * 0.50f;
+  d->f_mult_micro     = p->f_mult_micro * 0.50f;
   d->f_mult_fine     = p->f_mult_fine * 0.75f;
   d->f_mult_local    = p->f_mult_local * 1.0f;
   d->f_mult_broad    = p->f_mult_broad * 1.50f; // 20260302 = 1.40f
