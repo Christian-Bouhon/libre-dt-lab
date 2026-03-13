@@ -832,7 +832,7 @@ void commit_params(dt_iop_module_t *self,
 
   // UI feathering is inverted (higher = stricter edge preservation).
   // Scaled by N so higher resolution sensors get a proportionally larger epsilon.
-  d->feathering = (1.0f / p->feathering) * N * 1.6f;
+  d->feathering = (1.0f / p->feathering) * N * 1.2f;
   
   // CB 20260221
   // The multipliers determine how the base epsilon for the guided filter is scaled for each detail level.
