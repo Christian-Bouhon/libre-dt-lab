@@ -819,7 +819,7 @@ void commit_params(dt_iop_module_t *self,
 
   // CB 20260313
   // Normalize blending and feathering to the "sensor 3:2 36 MP" as reference.
-  // diag_ref = 8800.0f is the diagonal of the "sensor 3:2 36 MP" (7360 x 4912 px).
+  // diag_ref = 8848.0f is the diagonal of the "sensor 3:2 36 MP" (7360 x 4912 px).
   // N < 1 for lower resolution sensors, N > 1 for higher resolution sensors.
   const float diag     = sqrtf((float)piece->iwidth  * piece->iwidth
                              + (float)piece->iheight * piece->iheight);
@@ -839,8 +839,8 @@ void commit_params(dt_iop_module_t *self,
   d->f_mult_micro     = p->f_mult_micro * 0.50f;
   d->f_mult_fine     = p->f_mult_fine * 0.75f;
   d->f_mult_local    = p->f_mult_local * 1.0f;
-  d->f_mult_broad    = p->f_mult_broad * 1.50f; // 20260302 = 1.40f
-  d->f_mult_extended = p->f_mult_extended * 2.00f; //20260302 = 1.80f
+  d->f_mult_broad    = p->f_mult_broad * 1.60f; // 20260302 = 1.40f 20260314 = 1.50f
+  d->f_mult_extended = p->f_mult_extended * 2.25f; //20260302 = 1.80f 20260314 = 2.00f
   
   // The multipliers determine how the blending parameter maps to the radius for each scale.
   d->s_mult_micro    = p->blending * 0.25f;
