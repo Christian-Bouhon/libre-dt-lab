@@ -24,6 +24,11 @@ designed for wide-gamut workflows and fully compatible with Rec.2020 working spa
 It builds upon the original proof-of-concept algorithm proposed by WileCoyote:  
 https://discuss.pixls.us/t/experiments-with-a-scene-referred-local-contrast-module-proof-of-concept/55402
 
+The module automatically adapts to the native sensor resolution.
+A 36 MP sensor is used as reference. 
+The contrast scale and pyramidal edge protection parameters are normalized accordingly, 
+the default settings provide a coherent starting point regardless of resolution, from 6 MP to 60 MP.
+
 Architecture
 The module decomposes the image into five interdependent frequency scales using edge-aware pyramidal filtering (EIGF).
 Contrast is modeled through three complementary components:
@@ -836,11 +841,11 @@ void commit_params(dt_iop_module_t *self,
   
   // CB 20260221
   // The multipliers determine how the base epsilon for the guided filter is scaled for each detail level.
-  d->f_mult_micro     = p->f_mult_micro * 0.50f;
-  d->f_mult_fine     = p->f_mult_fine * 0.75f;
-  d->f_mult_local    = p->f_mult_local * 1.0f;
-  d->f_mult_broad    = p->f_mult_broad * 1.60f; // 20260302 = 1.40f 20260314 = 1.50f
-  d->f_mult_extended = p->f_mult_extended * 2.25f; //20260302 = 1.80f 20260314 = 2.00f
+  d->f_mult_micro    = (1.0f / fmaxf(p->f_mult_micro,    1e-6f)) * 0.50f;
+  d->f_mult_fine     = (1.0f / fmaxf(p->f_mult_fine,     1e-6f)) * 0.75f;
+  d->f_mult_local    = (1.0f / fmaxf(p->f_mult_local,    1e-6f)) * 1.0f;
+  d->f_mult_broad    = (1.0f / fmaxf(p->f_mult_broad,    1e-6f)) * 1.60f;  // 20260302 = 1.40f 20260314 = 1.50f
+  d->f_mult_extended = (1.0f / fmaxf(p->f_mult_extended, 1e-6f)) * 2.25f;  //20260302 = 1.80f 20260314 = 2.00f
   
   // The multipliers determine how the blending parameter maps to the radius for each scale.
   d->s_mult_micro    = p->blending * 0.25f;
@@ -970,8 +975,8 @@ static void _create_slider_with_mask_button(dt_iop_module_t *self, GtkWidget *co
   dt_bauhaus_slider_set_format(*slider_widget, "%");
   dt_bauhaus_slider_set_factor(*slider_widget, 100.0);
   gtk_widget_set_tooltip_text(*slider_widget, _("multiplier for the 'edges refinement/feathering' setting, specific to this detail scale.\n"
-                                                "lower values increase edge preservation for this scale.\n"
-                                                "higher values give smoother transitions, but may cause halos to appear around edges."));
+                                                "higher values increase edge preservation for this scale.\n"
+                                                "lower values give smoother transitions, but may cause halos to appear around edges."));
 
   g_object_ref(*slider_widget);
   gtk_container_remove(GTK_CONTAINER(self->widget), *slider_widget);
