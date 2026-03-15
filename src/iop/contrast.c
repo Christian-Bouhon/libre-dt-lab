@@ -26,19 +26,19 @@ https://discuss.pixls.us/t/experiments-with-a-scene-referred-local-contrast-modu
 
 The module automatically adapts to the native sensor resolution.
 A 36 MP sensor is used as reference. 
-The contrast scale and pyramidal edge protection parameters are normalized accordingly, 
+The contrast scale and spatial edge protection parameters are normalized accordingly, 
 the default settings provide a coherent starting point regardless of resolution, from 6 MP to 60 MP.
 
 Architecture
-The module decomposes the image into five interdependent frequency scales using edge-aware pyramidal filtering (EIGF).
+The module decomposes the image into five interdependent frequency scales using edge-aware spatial filtering (EIGF).
 Contrast is modeled through three complementary components:
 
-1. Global Contrast  
+1. Luminance Contrast  
     Adjusted via a Contrast Sensitivity Function (CSF) centered around middle gray (0.1845), approximating human visual response.
     
 2. Multi-scale Local Contrast  
-    A harmonic five-layer frequency pyramid (micro to coarse), driven by a spatial blending parameter.  
-    Due to the nature of pyramidal decomposition, frequency bands are structurally interdependent.
+    A harmonic five-layer frequency (micro to coarse), driven by a spatial blending parameter.  
+    Due to the nature of spatial decomposition, frequency bands are structurally interdependent.
     
 3. Chromatic Contrast
 // _Colorimetric Contrast_: Modulates luminance contrast based on the red/blue channel
@@ -102,12 +102,12 @@ typedef struct dt_iop_contrast_params_t
   float local_scale;     // $MIN: 0.0 $MAX: 5.0 $DEFAULT: 1.0  $DESCRIPTION: "local contrast"
   float broad_scale;     // $MIN: 0.0 $MAX: 5.0 $DEFAULT: 1.0 $DESCRIPTION: "broad contrast"
   float coarse_scale;  // $MIN: 0.0 $MAX: 5.0 $DEFAULT: 1.0 $DESCRIPTION: "coarse contrast"
-  float global_scale;    // $MIN: 0.0 $MAX: 5.0 $DEFAULT: 1.0 $DESCRIPTION: "global contrast"
+  float global_scale;    // $MIN: 0.0 $MAX: 5.0 $DEFAULT: 1.0 $DESCRIPTION: "luminance contrast"
 
   // Masking parameters CB 20260221
   // Blending uses a quadratic curve because changes in small values are more noticeable
   float blending;        // $MIN: 1.0 $MAX: 2.0 $DEFAULT: 1.2 $DESCRIPTION: "contrast scale"
-  float feathering;      // $MIN: 0.01 $MAX: 10.0 $DEFAULT: 2.5 $DESCRIPTION: "pyramidal edge protection"
+  float feathering;      // $MIN: 0.01 $MAX: 10.0 $DEFAULT: 2.5 $DESCRIPTION: "spatial edge protection"
 
   float f_mult_micro;    // $MIN: 0.1 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "micro edge protection"
   float f_mult_fine;     // $MIN: 0.1 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "fine edge protection"
@@ -342,8 +342,8 @@ static inline void apply_local_contrast(const float *const restrict in,
   const float gain_global = d->global_scale;
 
   // Calculate weights for local vs global contrast based on contrast_balance
-  // balance > 0: favor local (pyramid), reduce global
-  // balance < 0: favor global, reduce local (pyramid)
+  // balance > 0: favor spatial contrast, reduce global
+  // balance < 0: favor global, reduce spatial contrast
   const float w_local = (d->contrast_balance < 0.0f) ? (1.0f + d->contrast_balance) : 1.0f;
   const float w_global = (d->contrast_balance > 0.0f) ? (1.0f - d->contrast_balance) : 1.0f;
 
@@ -499,7 +499,7 @@ static inline void display_local_mask(const float *const restrict luminance_pixe
 // Main processing function
 
 __DT_CLONE_TARGETS__
-static void pyramidal_contrast_process(dt_iop_module_t *self,
+static void spatial_contrast_process(dt_iop_module_t *self,
                                        dt_dev_pixelpipe_iop_t *piece,
                                        const void *const restrict ivoid,
                                        void *const restrict ovoid,
@@ -771,7 +771,7 @@ void process(dt_iop_module_t *self,
              const dt_iop_roi_t *const roi_in,
              const dt_iop_roi_t *const roi_out)
 {
-  pyramidal_contrast_process(self, piece, ivoid, ovoid, roi_in, roi_out);
+  spatial_contrast_process(self, piece, ivoid, ovoid, roi_in, roi_out);
 }
 
 
@@ -1139,7 +1139,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_factor(g->global_scale, 100.0);
   dt_bauhaus_slider_set_offset(g->global_scale, -100.0);
   dt_bauhaus_slider_set_default(g->global_scale, 1.0);
-  gtk_widget_set_tooltip_text(g->global_scale, _("amount of global contrast enhancement"));
+  gtk_widget_set_tooltip_text(g->global_scale, _("amount of luminance contrast enhancement"));
 
   g->csf_adaptation = dt_bauhaus_slider_from_params(self, "csf_adaptation");
   dt_bauhaus_slider_set_soft_range(g->csf_adaptation, 0.0, 1.0);
@@ -1167,8 +1167,8 @@ void gui_init(dt_iop_module_t *self)
                                                       "positive values boost the color separation between warm and cool tones.\n"
                                                       "this affects color intensity, whereas 'colorimetric contrast' affects brightness."));
 
-  // --- Section 2: Pyramidal Contrast ---
-  label = dt_ui_section_label_new(C_("section", "local contrast pyramids"));
+  // --- Section 2: spatial contrast ---
+  label = dt_ui_section_label_new(C_("section", "spatial contrast"));
   dt_gui_box_add(main_box, label);
 
   // Micro detail slider
@@ -1228,14 +1228,14 @@ void gui_init(dt_iop_module_t *self)
                              _("visualize coarse contrast mask"));
 
   g->contrast_balance = dt_bauhaus_slider_from_params(self, "contrast_balance");
-  dt_bauhaus_widget_set_label(g->contrast_balance, NULL, _("balance global <> local"));
+  dt_bauhaus_widget_set_label(g->contrast_balance, NULL, _("balance global <> spacial"));
   dt_bauhaus_slider_set_soft_range(g->contrast_balance, -1.0, 1.0);
   dt_bauhaus_slider_set_format(g->contrast_balance, "%");
   dt_bauhaus_slider_set_factor(g->contrast_balance, 100.0);
   dt_bauhaus_slider_set_step(g->contrast_balance, 0.01);
-  gtk_widget_set_tooltip_text(g->contrast_balance, _("balance between global contrast and local contrast (pyramid).\n"
+  gtk_widget_set_tooltip_text(g->contrast_balance, _("balance between global contrast and spatial contrast.\n"
                                                      "negative values favor global contrast,\n"
-                                                     "while positive values favor local contrast."));
+                                                     "while positive values favor spatial contrast."));
 
   // --- Section 3: Masking (collapsible) ---
   dt_gui_new_collapsible_section(&g->masking_expander, "plugins/darkroom/contrast/expanded_masking",
@@ -1249,7 +1249,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_soft_range(g->blending, 1.0, 4.0);
   gtk_widget_set_tooltip_text
     (g->blending,
-     _("adjusts the scale of details targeted by the sliders in the “pyramidal contrast” section.\n"
+     _("adjusts the scale of details targeted by the sliders in the “spatial contrast” section.\n"
        "higher values target larger features, lower values target finer details."));
 
   g->feathering = dt_bauhaus_slider_from_params(self, "feathering");
