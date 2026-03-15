@@ -40,13 +40,13 @@ Contrast is modeled through three complementary components:
     A harmonic five-layer frequency (micro to coarse), driven by a spatial blending parameter.  
     Due to the nature of spatial decomposition, frequency bands are structurally interdependent.
     
-3. Chromatic Contrast
-// _Colorimetric Contrast_: Modulates luminance contrast based on the red/blue channel
-// difference, normalized by mean brightness. Space-agnostic — works in any linear RGB
-// working space.
-// _Colorful Contrast_: Enhances color separation between warm and cool tones while
-// preserving overall luminance. The green channel compensation is derived from the
-// pipe working profile luminance coefficients.
+3. Chromatic Contrast  
+    _Colorimetric Contrast_: Modulates luminance contrast based on the red/blue channel
+    difference, normalized by mean brightness. Space-agnostic — works in any linear RGB
+    working space.
+    _Colorful Contrast_: Enhances color separation between warm and cool tones while
+    preserving overall luminance. The green channel compensation is derived from the
+    pipe working profile luminance coefficients.
 */
 
 
@@ -1193,7 +1193,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_widget_set_quad(g->fine_scale, self, dtgtk_cairo_paint_showmask, TRUE, _quad_callback,
                              _("visualize fine contrast mask"));
 
-  // Detail boost slider
+  // Local boost slider
   g->local_scale = dt_bauhaus_slider_from_params(self, "local_scale");
   dt_bauhaus_slider_set_soft_range(g->local_scale,0.10, 1.90);
   dt_bauhaus_slider_set_digits(g->local_scale, 2);
@@ -1205,7 +1205,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_widget_set_quad(g->local_scale, self, dtgtk_cairo_paint_showmask, TRUE, _quad_callback,
                              _("visualize local contrast mask"));
 
-  // Medium detail slider
+  // Broad detail slider
   g->broad_scale = dt_bauhaus_slider_from_params(self, "broad_scale");
   dt_bauhaus_slider_set_soft_range(g->broad_scale, 0.10, 1.90);
   dt_bauhaus_slider_set_digits(g->broad_scale, 2);
@@ -1216,7 +1216,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_widget_set_quad(g->broad_scale, self, dtgtk_cairo_paint_showmask, TRUE, _quad_callback,
                              _("visualize broad contrast mask"));
 
-  // Broad detail slider
+  // Coarse detail slider
   g->coarse_scale = dt_bauhaus_slider_from_params(self, "coarse_scale");
   dt_bauhaus_slider_set_soft_range(g->coarse_scale, 0.10, 1.90);
   dt_bauhaus_slider_set_digits(g->coarse_scale, 2);
@@ -1228,7 +1228,7 @@ void gui_init(dt_iop_module_t *self)
                              _("visualize coarse contrast mask"));
 
   g->contrast_balance = dt_bauhaus_slider_from_params(self, "contrast_balance");
-  dt_bauhaus_widget_set_label(g->contrast_balance, NULL, _("balance global <> spacial"));
+  dt_bauhaus_widget_set_label(g->contrast_balance, NULL, _("balance global <> spatial"));
   dt_bauhaus_slider_set_soft_range(g->contrast_balance, -1.0, 1.0);
   dt_bauhaus_slider_set_format(g->contrast_balance, "%");
   dt_bauhaus_slider_set_factor(g->contrast_balance, 100.0);
