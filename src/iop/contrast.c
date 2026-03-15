@@ -231,7 +231,7 @@ const char **description(dt_iop_module_t *self)
 
 int default_group()
 {
-  return IOP_GROUP_BASIC | IOP_GROUP_EFFECTS;
+  return IOP_GROUP_TONE | IOP_GROUP_EFFECTS;
 }
 
 int flags()
