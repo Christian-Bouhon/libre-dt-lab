@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2018-2025 darktable developers.
+    Copyright (C) 2018-2026 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@
 /*
 DOCUMENTATION
 This module performs advanced multi-scale contrast processing in scene-referred linear RGB space, 
-designed for wide-gamut workflows and fully compatible with Rec.2020 working spaces.
+designed for wide-gamut workflows in any linear RGB working space.
 
 It builds upon the original proof-of-concept algorithm proposed by WileCoyote:  
 https://discuss.pixls.us/t/experiments-with-a-scene-referred-local-contrast-module-proof-of-concept/55402
@@ -101,10 +101,9 @@ typedef struct dt_iop_contrast_params_t
   float fine_scale;      // $MIN: 0.0 $MAX: 5.0 $DEFAULT: 1.0 $DESCRIPTION: "fine contrast"
   float local_scale;     // $MIN: 0.0 $MAX: 5.0 $DEFAULT: 1.0  $DESCRIPTION: "local contrast"
   float broad_scale;     // $MIN: 0.0 $MAX: 5.0 $DEFAULT: 1.0 $DESCRIPTION: "broad contrast"
-  float coarse_scale;  // $MIN: 0.0 $MAX: 5.0 $DEFAULT: 1.0 $DESCRIPTION: "coarse contrast"
+  float coarse_scale;    // $MIN: 0.0 $MAX: 5.0 $DEFAULT: 1.0 $DESCRIPTION: "coarse contrast"
   float global_scale;    // $MIN: 0.0 $MAX: 5.0 $DEFAULT: 1.0 $DESCRIPTION: "luminance contrast"
 
-  // Masking parameters CB 20260221
   // Blending uses a quadratic curve because changes in small values are more noticeable
   float blending;        // $MIN: 1.0 $MAX: 2.0 $DEFAULT: 1.2 $DESCRIPTION: "contrast scale"
   float feathering;      // $MIN: 0.01 $MAX: 10.0 $DEFAULT: 2.5 $DESCRIPTION: "spatial edge protection"
@@ -113,7 +112,7 @@ typedef struct dt_iop_contrast_params_t
   float f_mult_fine;     // $MIN: 0.1 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "fine edge protection"
   float f_mult_local;    // $MIN: 0.1 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "local edge protection"
   float f_mult_broad;    // $MIN: 0.1 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "broad edge protection"
-  float f_mult_coarse; // $MIN: 0.1 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "coarse edge protection"
+  float f_mult_coarse;   // $MIN: 0.1 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "coarse edge protection"
 
   int reserved0;         // formerly 'details' filter type, now unused
   dt_iop_luminance_mask_method_t method;      // $DEFAULT: DT_TONEEQ_NORM_2 $DESCRIPTION: "luminance estimator"
@@ -827,7 +826,6 @@ void commit_params(dt_iop_module_t *self,
   d->contrast_balance = p->contrast_balance;
   d->colorful_contrast = p->colorful_contrast;
 
-  // CB 20260313
   // Normalize blending and feathering to the "sensor 3:2 36 MP" as reference.
   // diag_ref = 8848.0f is the diagonal of the "sensor 3:2 36 MP" (7360 x 4912 px).
   // N < 1 for lower resolution sensors, N > 1 for higher resolution sensors.
@@ -844,13 +842,12 @@ void commit_params(dt_iop_module_t *self,
   // Scaled by N so higher resolution sensors get a proportionally larger epsilon.
   d->feathering = (1.0f / p->feathering) * N * 1.2f;
   
-  // CB 20260221
   // The multipliers determine how the base epsilon for the guided filter is scaled for each detail level.
   d->f_mult_micro    = (1.0f / fmaxf(p->f_mult_micro,    1e-6f)) * 0.50f;
   d->f_mult_fine     = (1.0f / fmaxf(p->f_mult_fine,     1e-6f)) * 0.75f;
   d->f_mult_local    = (1.0f / fmaxf(p->f_mult_local,    1e-6f)) * 1.0f;
-  d->f_mult_broad    = (1.0f / fmaxf(p->f_mult_broad,    1e-6f)) * 1.60f;  // 20260302 = 1.40f 20260314 = 1.50f
-  d->f_mult_coarse   = (1.0f / fmaxf(p->f_mult_coarse,   1e-6f)) * 2.25f;  //20260302 = 1.80f 20260314 = 2.00f
+  d->f_mult_broad    = (1.0f / fmaxf(p->f_mult_broad,    1e-6f)) * 1.60f;
+  d->f_mult_coarse   = (1.0f / fmaxf(p->f_mult_coarse,   1e-6f)) * 2.25f;
   
   // The multipliers determine how the blending parameter maps to the radius for each scale.
   d->s_mult_micro    = p->blending * 0.25f;
@@ -1233,10 +1230,10 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->contrast_balance, "%");
   dt_bauhaus_slider_set_factor(g->contrast_balance, 100.0);
   dt_bauhaus_slider_set_step(g->contrast_balance, 0.01);
-  gtk_widget_set_tooltip_text(g->contrast_balance, _("balance between global contrast and spatial contrast.\n"
-                                                     "negative values favor global contrast,\n"
-                                                     "while positive values favor spatial contrast."));
-
+  gtk_widget_set_tooltip_text(g->contrast_balance, _("controls the relative weight between global luminance contrast and spatial luminance contrast.\n"
+                                                    "negative values favor global contrast,\n"
+                                                    "while positive values favor spatial contrast.\n"
+                                                    "colorimetric and colorful contrast are not affected."));
   // --- Section 3: Masking (collapsible) ---
   dt_gui_new_collapsible_section(&g->masking_expander, "plugins/darkroom/contrast/expanded_masking",
                                                        _("fine adjustment"), 
