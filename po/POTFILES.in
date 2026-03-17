@@ -266,7 +266,7 @@ src/iop/colorout.c
 src/iop/colorreconstruction.c
 src/iop/colortransfer.c
 src/iop/colorzones.c
-src/iop/contrast.c 
+src/iop/contrast.c
 src/iop/crop.c
 src/iop/defringe.c
 src/iop/demosaic.c
