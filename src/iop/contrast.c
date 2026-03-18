@@ -102,7 +102,7 @@ typedef struct dt_iop_contrast_params_t
   float local_scale;     // $MIN: 0.0 $MAX: 5.0 $DEFAULT: 1.0  $DESCRIPTION: "local contrast"
   float broad_scale;     // $MIN: 0.0 $MAX: 5.0 $DEFAULT: 1.0 $DESCRIPTION: "broad contrast"
   float coarse_scale;    // $MIN: 0.0 $MAX: 5.0 $DEFAULT: 1.0 $DESCRIPTION: "coarse contrast"
-  float global_scale;    // $MIN: 0.0 $MAX: 5.0 $DEFAULT: 1.0 $DESCRIPTION: "luminance contrast"
+  float global_scale;    // $MIN: 0.0 $MAX: 5.0 $DEFAULT: 1.0 $DESCRIPTION: "global contrast"
 
   // Blending uses a quadratic curve because changes in small values are more noticeable
   float blending;        // $MIN: 1.0 $MAX: 2.0 $DEFAULT: 1.2 $DESCRIPTION: "contrast scale"
@@ -1144,9 +1144,6 @@ void gui_init(dt_iop_module_t *self)
   self->widget = main_box;
 
   // --- Section 1: Global Contrast ---
-  GtkWidget *label = dt_ui_section_label_new(C_("section", "global contrast"));
-  dt_gui_box_add(main_box, label);
-
   g->global_scale = dt_bauhaus_slider_from_params(self, "global_scale");
   dt_bauhaus_slider_set_soft_range(g->global_scale, 0.25, 1.75);
   dt_bauhaus_slider_set_digits(g->global_scale, 2);
@@ -1154,7 +1151,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_factor(g->global_scale, 100.0);
   dt_bauhaus_slider_set_offset(g->global_scale, -100.0);
   dt_bauhaus_slider_set_default(g->global_scale, 1.0);
-  gtk_widget_set_tooltip_text(g->global_scale, _("amount of luminance contrast enhancement"));
+  gtk_widget_set_tooltip_text(g->global_scale, _("amount of global contrast enhancement"));
 
   g->csf_adaptation = dt_bauhaus_slider_from_params(self, "csf_adaptation");
   dt_bauhaus_slider_set_soft_range(g->csf_adaptation, 0.0, 1.0);
