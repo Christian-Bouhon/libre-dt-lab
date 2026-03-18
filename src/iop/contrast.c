@@ -33,7 +33,7 @@ Architecture
 The module decomposes the image into five interdependent frequency scales using edge-aware spatial filtering (EIGF).
 Contrast is modeled through three complementary components:
 
-1. Luminance Contrast  
+1. Global Contrast  
     Adjusted via a Contrast Sensitivity Function (CSF) centered around middle gray (0.1845), approximating human visual response.
     
 2. Multi-scale Local Contrast  
@@ -1180,7 +1180,7 @@ void gui_init(dt_iop_module_t *self)
                                                       "this affects color intensity, whereas 'colorimetric contrast' affects brightness."));
 
   // --- Section 2: spatial contrast ---
-  label = dt_ui_section_label_new(C_("section", "spatial contrast"));
+  GtkWidget *label = dt_ui_section_label_new(C_("section", "spatial contrast"));
   dt_gui_box_add(main_box, label);
 
   // Micro detail slider
