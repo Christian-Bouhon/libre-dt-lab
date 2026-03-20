@@ -474,7 +474,7 @@ jobs:
           name: 'Darktable nightly build ${{ env.RELEASE_DATE }}'
           # Please do not modify the body text by adding line breaks in paragraphs, as this text should display well on screens of different widths
           body: |
-            This is a nightly build of Darktable.
+            This is a experimental version of the darktable raw development software. This fork serves as a development lab for exploring new approaches to the photographic workflow. It includes specific modules and modifications to existing tools that are not part of the official release.
 
             You can use this if you want to try new features without waiting for releases. From time to time, in development builds, old difficult-to-reproduce bugs are fixed, but it is also true that in the development process with the introduction of new complex code, the stability of the program may suffer compared to official releases, so **use it with caution**!
 
