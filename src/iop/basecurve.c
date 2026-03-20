@@ -2928,7 +2928,7 @@ void gui_init(dt_iop_module_t *self)
   g->loglogscale = 0;
   g->look_selected_first_time = FALSE;
 
-  g->area = GTK_DRAWING_AREA(dt_ui_resize_wrap(NULL, DT_PIXEL_APPLY_DPI(100), "plugins/darkroom/basecurve/graph_height"));
+  g->area = GTK_DRAWING_AREA(dt_ui_resize_wrap(NULL, 0, "plugins/darkroom/basecurve/graph_height"));
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("abscissa: input, ordinate: output. works on RGB channels"));
   g_object_set_data(G_OBJECT(g->area), "iop-instance", self);
   dt_action_define_iop(self, NULL, N_("curve"), GTK_WIDGET(g->area), NULL);
