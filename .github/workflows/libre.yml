@@ -176,10 +176,14 @@ jobs:
         run: |
           cd src
           bash tools/appimage-build-script.sh
+      - name: Rename artifacts
+        run: |
+          cd src/build
+          for f in Darktable-*; do mv "$f" "${f/Darktable-/libre-dt-lab-}"; done
       - name: Package upload
         uses: actions/upload-artifact@v7
         with:
-          path: ${{ github.workspace }}/src/build/Darktable-*.AppImage*
+          path: ${{ github.workspace }}/src/build/libre-dt-lab-*.AppImage*
           name: artifact-appimage-${{ runner.arch }}
           retention-days: 1
 
@@ -329,10 +333,14 @@ jobs:
           cd ${SRC_DIR}
           echo "VERSION=$(git describe --tags --match release-* | sed 's/^release-//;s/-/+/;s/-/~/;s/rc/~rc/')" >> $GITHUB_ENV
           ([[ ${MSYSTEM_CARCH} == x86_64 ]] && echo "SYSTEM=win64" || echo "SYSTEM=woa64") >> $GITHUB_ENV
+      - name: Rename artifacts
+        run: |
+          cd "${BUILD_DIR}"
+          for f in darktable-*.exe; do mv "$f" "${f/darktable-/libre-dt-lab-}"; done
       - name: Package upload
         uses: actions/upload-artifact@v7
         with:
-          path: ${{ env.BUILD_DIR }}/*.exe
+          path: ${{ env.BUILD_DIR }}/libre-dt-lab-*.exe
           name: artifact-windows-${{ runner.arch }}
           retention-days: 2
 
@@ -414,10 +422,13 @@ jobs:
           cd ${SRC_DIR}
           echo "VERSION=$(git describe --tags --match release-* | sed 's/^release-//;s/-/+/;s/-/~/;s/rc/~rc/')" >> $GITHUB_ENV
           echo "ARCHITECTURE=$(uname -m)" >> $GITHUB_ENV
+      - name: Rename artifacts
+        run: |
+          mv "${{ env.INSTALL_PREFIX }}/darktable-${{ env.VERSION }}-${{ env.ARCHITECTURE }}.dmg" "${{ env.INSTALL_PREFIX }}/libre-dt-lab-${{ env.VERSION }}-${{ env.ARCHITECTURE }}.dmg"
       - name: Package upload
         uses: actions/upload-artifact@v7
         with:
-          path: ${{ env.INSTALL_PREFIX }}/darktable-${{ env.VERSION }}-${{ env.ARCHITECTURE }}.dmg
+          path: ${{ env.INSTALL_PREFIX }}/libre-dt-lab-${{ env.VERSION }}-${{ env.ARCHITECTURE }}.dmg
           name: artifact-macos-${{ runner.arch }}
           retention-days: 2
 
