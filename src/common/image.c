@@ -1649,6 +1649,8 @@ GList* dt_image_find_duplicates(const char* filename)
   static const char xmp[] = ".lab.xmp";
   const size_t xmp_len = strlen(xmp);
   // concatenate filename and sidecar extension
+  // xmp_compat for darktable fallback — declared here to avoid static-in-block issue
+  const char xmp_compat[] = ".xmp";
   // First try .lab.xmp (Libre DT-Lab native format)
   g_strlcpy(pattern,  filename, sizeof(pattern));
   g_strlcpy(pattern + fn_len, xmp, sizeof(pattern) - fn_len);
@@ -1660,7 +1662,6 @@ GList* dt_image_find_duplicates(const char* filename)
   else
   {
     // fallback: try .xmp (darktable compatibility)
-    static const char xmp_compat[] = ".xmp";
     g_strlcpy(pattern,  filename, sizeof(pattern));
     g_strlcpy(pattern + fn_len, xmp_compat, sizeof(pattern) - fn_len);
     if(dt_util_test_image_file(pattern))
@@ -1715,25 +1716,23 @@ static int _image_read_duplicates(const uint32_t id,
   // we store the xmp filename without version part in pattern to
   // speed up string comparison later
   g_snprintf(pattern, sizeof(pattern), "%s.lab.xmp", filename);
-
+  gchar pattern_compat[PATH_MAX] = { 0 };
+  g_snprintf(pattern_compat, sizeof(pattern_compat), "%s.xmp", filename);
   for(GList *file_iter = files; file_iter; file_iter = g_list_next(file_iter))
   {
     const gchar *xmpfilename = file_iter->data;
     int version = -1;
-
-    // we need to get the version number of the sidecar filename
-    if(!strncmp(xmpfilename, pattern, sizeof(pattern)))
+    const gboolean is_lab_xmp = g_str_has_suffix(xmpfilename, ".lab.xmp");
+    const int ext_skip = is_lab_xmp ? 9 : 5;
+    if(!strncmp(xmpfilename, pattern, sizeof(pattern))
+       || !strncmp(xmpfilename, pattern_compat, sizeof(pattern_compat)))
     {
-      // this is an xmp file without version number which corresponds
-      // to version 0.
       version = 0;
     }
     else
     {
-      // we need to derive the version number from the filename
-
       gchar *c3 = (gchar *)xmpfilename + strlen(xmpfilename)
-        - 9; // skip over .lab.xmp extension; position c3 at character before the '.'
+        - ext_skip;
 
       // skip over filename extension; position c3 is at character '.'
       while(*c3 != '.' && c3 > xmpfilename)
@@ -1822,7 +1821,8 @@ static dt_imgid_t _image_import_internal(const dt_filmid_t film_id,
     ;
   if(!strcasecmp(cc, ".dt")
      || !strcasecmp(cc, ".dttags")
-     || !strcasecmp(cc, ".xmp"))
+     || !strcasecmp(cc, ".xmp")
+     || !strcasecmp(cc, ".lab.xmp"))
   {
     g_free(normalized_filename);
     return NO_IMGID;
