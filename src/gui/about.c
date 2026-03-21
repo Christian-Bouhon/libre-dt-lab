@@ -36,7 +36,7 @@ void darktable_show_about_dialog()
   gtk_about_dialog_set_copyright(GTK_ABOUT_DIALOG(dialog), copyright);
   g_free(copyright);
   gtk_about_dialog_set_comments(GTK_ABOUT_DIALOG(dialog),
-                                _("Libre DT-Lab — experimental darktable fork with multi-scale contrast and scene-referred ACES workflow"));
+                                _("Libre DT-Lab — experimental darktable fork with multi-scale contrast and scene-referred basecurve workflow"));
   gtk_about_dialog_set_website(GTK_ABOUT_DIALOG(dialog), "https://github.com/Christian-Bouhon/libre-dt-lab");
   gtk_about_dialog_set_website_label(GTK_ABOUT_DIALOG(dialog), "website");
   const dt_logo_season_t season = dt_util_get_logo_season();
