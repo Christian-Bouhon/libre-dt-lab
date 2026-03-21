@@ -1649,13 +1649,25 @@ GList* dt_image_find_duplicates(const char* filename)
   static const char xmp[] = ".lab.xmp";
   const size_t xmp_len = strlen(xmp);
   // concatenate filename and sidecar extension
+  // First try .lab.xmp (Libre DT-Lab native format)
   g_strlcpy(pattern,  filename, sizeof(pattern));
   g_strlcpy(pattern + fn_len, xmp, sizeof(pattern) - fn_len);
   if(dt_util_test_image_file(pattern))
   {
-    // the default sidecar exists, is readable and is a regular file
-    // with lenght > 0, so add it to the list
+    // the .lab.xmp sidecar exists — use it
     files = g_list_prepend(files, g_strdup(pattern));
+  }
+  else
+  {
+    // fallback: try .xmp (darktable compatibility)
+    static const char xmp_compat[] = ".xmp";
+    g_strlcpy(pattern,  filename, sizeof(pattern));
+    g_strlcpy(pattern + fn_len, xmp_compat, sizeof(pattern) - fn_len);
+    if(dt_util_test_image_file(pattern))
+    {
+      // the .xmp sidecar exists — import from darktable
+      files = g_list_prepend(files, g_strdup(pattern));
+    }
   }
 
   // now collect all file_N*N.ext.xmp matches
