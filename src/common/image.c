@@ -1721,7 +1721,7 @@ static int _image_read_duplicates(const uint32_t id,
       // we need to derive the version number from the filename
 
       gchar *c3 = (gchar *)xmpfilename + strlen(xmpfilename)
-        - 5; // skip over .xmp extension; position c3 at character before the '.'
+        - 9; // skip over .lab.xmp extension; position c3 at character before the '.'
 
       // skip over filename extension; position c3 is at character '.'
       while(*c3 != '.' && c3 > xmpfilename)
