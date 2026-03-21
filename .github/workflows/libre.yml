@@ -482,7 +482,7 @@ jobs:
           # We don't want a stable release that is in the process of being prepared
           # and not yet ready for publication to be visible
           draft: ${{ startsWith(github.ref, 'refs/tags/') }}
-          name: 'Darktable nightly build ${{ env.RELEASE_DATE }}'
+          name: 'Libre DT-Lab "experimental build" ${{ env.RELEASE_DATE }}'
           # Please do not modify the body text by adding line breaks in paragraphs, as this text should display well on screens of different widths
           body: |
             This is a experimental version of the darktable raw development software. This fork serves as a development lab for exploring new approaches to the photographic workflow. It includes specific modules and modifications to existing tools that are not part of the official release.
