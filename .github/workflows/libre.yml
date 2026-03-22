@@ -322,12 +322,14 @@ jobs:
           cp ${{ env.BUILD_DIR }}/darktable.iss ./
           iscc "darktable.iss"
           mv Output/*.exe ${{ env.BUILD_DIR }}/
-      - name: Create NSIS installer
+      - name: Create portable ZIP
         if: runner.arch != 'ARM64'
+        shell: pwsh
         run: |
-          pacboy --noconfirm -S --needed nsis:p
-          cd "${BUILD_DIR}"
-          cmake --build "${BUILD_DIR}" --target package
+          $zipname = "libre-dt-lab-portable-win64.zip"
+          Compress-Archive -Path "$env:INSTALL_PREFIX\*" `
+                           -DestinationPath "$env:BUILD_DIR\$zipname"
+          Write-Host "Created: $zipname"
       - name: Get version info
         run: |
           cd ${SRC_DIR}
@@ -340,7 +342,9 @@ jobs:
       - name: Package upload
         uses: actions/upload-artifact@v7
         with:
-          path: ${{ env.BUILD_DIR }}/libre-dt-lab-*.exe
+          path: |
+            ${{ env.BUILD_DIR }}/libre-dt-lab-*.exe
+            ${{ env.BUILD_DIR }}/libre-dt-lab-*portable*.zip
           name: artifact-windows-${{ runner.arch }}
           retention-days: 2
 
