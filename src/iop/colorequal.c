@@ -282,6 +282,18 @@ typedef struct dt_iop_colorequal_gui_data_t
   gboolean on_node;
   int selected;
   float points[NODES+1][2];
+
+  // Hue read under mouse cursor (degrees, GUI space 0..360)
+  float cursor_hue;
+  // TRUE if the last hue reading is usable (picker active, sufficient chroma)
+  gboolean cursor_valid;
+
+  // Preview buffer containing UCS hue (radians) per pixel,
+  // filled by process() for the preview pipe. Enables direct reading
+  // under cursor without depending on the GTK color picker (asynchronous).
+  float *preview_hue_buf;
+  int    preview_hue_buf_width;
+  int    preview_hue_buf_height;
 } dt_iop_colorequal_gui_data_t;
 
 void init_global(dt_iop_module_so_t *self)
@@ -1086,6 +1098,27 @@ void process(dt_iop_module_t *self,
       // Copy alpha
       pix_out[3] = pix_in[3];
     }
+  }
+
+  // Cache the UCS hue (radians) in the preview buffer for mouse_moved/scrolled
+  if(g && (piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW))
+  {
+    dt_iop_colorequal_gui_data_t *gui = self->gui_data; // non-const for writing
+    dt_iop_gui_enter_critical_section(self);
+    if(gui->preview_hue_buf_width != width || gui->preview_hue_buf_height != height)
+    {
+      dt_free_align(gui->preview_hue_buf);
+      gui->preview_hue_buf = dt_alloc_align_float(npixels);
+      gui->preview_hue_buf_width  = width;
+      gui->preview_hue_buf_height = height;
+    }
+    if(gui->preview_hue_buf)
+    {
+      DT_OMP_FOR()
+      for(size_t k = 0; k < npixels; k++)
+        gui->preview_hue_buf[k] = out[k * 4]; // pix_out[0] = HSB hue (radians UCS)
+    }
+    dt_iop_gui_leave_critical_section(self);
   }
 
   if(d->use_filter && !run_fast)
@@ -2243,6 +2276,7 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
     dt_bauhaus_widget_set_quad_active(g->threshold, FALSE);
     dt_bauhaus_widget_set_quad_active(g->hue_shift, FALSE);
     g->mask_mode = 0;
+    g->cursor_valid = FALSE; // disables Gaussian mode when module loses focus
     if(buttons) dt_dev_reprocess_center(self->dev);
   }
 }
@@ -2538,6 +2572,248 @@ static void _pipe_RGB_to_Ych(dt_iop_module_t *self,
     Ych[2] = 2.f * M_PI_F + Ych[2];
 }
 
+/* mouse_moved — updates the hue read under the mouse cursor.
+ *
+ * Reads directly from the preview buffer filled by process() to get
+ * the UCS hue (radians) at the point under the cursor. No dependency
+ * on the GTK color picker (asynchronous and unpredictable).
+ *
+ * The hue stored in preview_hue_buf is in UCS radians [-π ; π]
+ * (from atan2f(V, U) in dt_UCS_LUV_to_JCH).
+ *
+ * Conversion to GUI degrees:
+ *   ucs_rad = deg2rad(gui_deg + ANGLE_SHIFT)
+ *   → gui_deg = rad2deg(ucs_rad) − ANGLE_SHIFT
+ *
+ * Returns 0 to let darktable propagate the event normally.
+ */
+int mouse_moved(dt_iop_module_t *self,
+                const float pzx,
+                const float pzy,
+                const double pressure,
+                const int which,
+                const float zoom_scale)
+{
+  dt_iop_colorequal_gui_data_t *g = self->gui_data;
+  if(!g) return 0;
+
+  // Read hue from the preview buffer
+  dt_iop_gui_enter_critical_section(self);
+  const float *buf    = g->preview_hue_buf;
+  const int    bwidth  = g->preview_hue_buf_width;
+  const int    bheight = g->preview_hue_buf_height;
+  const gboolean have_buf = (buf != NULL && bwidth > 0 && bheight > 0);
+  dt_iop_gui_leave_critical_section(self);
+
+  if(!have_buf)
+  {
+    g->cursor_valid = FALSE;
+    return 0;
+  }
+
+  // Cursor coordinates in the preview buffer
+  const int cx = CLAMP((int)(pzx * bwidth),  0, bwidth  - 1);
+  const int cy = CLAMP((int)(pzy * bheight), 0, bheight - 1);
+
+  // UCS hue in radians (may be in [-π ; π])
+  float hue_rad = buf[(size_t)cy * bwidth + cx];
+  if(hue_rad < 0.f) hue_rad += 2.f * M_PI_F;
+
+  // Convert to GUI degrees: inverse of _conventional_hue_deg_to_ucs_rad()
+  g->cursor_hue = hue_rad * (180.f / M_PI_F) - ANGLE_SHIFT;
+
+  // Wrap into [0 ; 360[
+  if(g->cursor_hue < 0.f)    g->cursor_hue += 360.f;
+  if(g->cursor_hue >= 360.f) g->cursor_hue -= 360.f;
+
+  g->cursor_valid = TRUE;
+  return 0;
+}
+
+/* mouse_leave — invalidates hue tracking when the mouse leaves the image.
+ *
+ * Without this, cursor_valid would remain TRUE with stale hue data,
+ * and the scroll wheel would continue affecting sliders even outside the image.
+ */
+int mouse_leave(dt_iop_module_t *self)
+{
+  dt_iop_colorequal_gui_data_t *g = self->gui_data;
+  if(!g) return 0;
+
+  g->cursor_valid = FALSE;
+  gtk_widget_queue_draw(GTK_WIDGET(g->area));
+
+  return 1;
+}
+
+/* _get_param_ptr — returns a direct pointer to the parameter value
+ * of node k for the active channel, along with its min/max bounds.
+ *
+ * Uses offsetof() for copy-free access to struct fields,
+ * consistent with _pack_saturation / _pack_hue / _pack_brightness.
+ *
+ * Bounds per channel:
+ *   HUE        : [-180° ; +180°]
+ *   SATURATION : [  0.0 ;   2.0]  (multiplier, 1.0 = neutral)
+ *   BRIGHTNESS : [  0.0 ;   2.0]  (multiplier, 1.0 = neutral)
+ */
+static float *_get_param_ptr(dt_iop_colorequal_params_t *p,
+                             const dt_iop_colorequal_channel_t channel,
+                             const int k,
+                             float *out_min,
+                             float *out_max)
+{
+  // Offsets in the struct — same order as the _pack_*() functions
+  static const size_t sat_off[NODES] = {
+    offsetof(dt_iop_colorequal_params_t, sat_red),
+    offsetof(dt_iop_colorequal_params_t, sat_orange),
+    offsetof(dt_iop_colorequal_params_t, sat_yellow),
+    offsetof(dt_iop_colorequal_params_t, sat_green),
+    offsetof(dt_iop_colorequal_params_t, sat_cyan),
+    offsetof(dt_iop_colorequal_params_t, sat_blue),
+    offsetof(dt_iop_colorequal_params_t, sat_lavender),
+    offsetof(dt_iop_colorequal_params_t, sat_magenta) };
+
+  static const size_t hue_off[NODES] = {
+    offsetof(dt_iop_colorequal_params_t, hue_red),
+    offsetof(dt_iop_colorequal_params_t, hue_orange),
+    offsetof(dt_iop_colorequal_params_t, hue_yellow),
+    offsetof(dt_iop_colorequal_params_t, hue_green),
+    offsetof(dt_iop_colorequal_params_t, hue_cyan),
+    offsetof(dt_iop_colorequal_params_t, hue_blue),
+    offsetof(dt_iop_colorequal_params_t, hue_lavender),
+    offsetof(dt_iop_colorequal_params_t, hue_magenta) };
+
+  static const size_t bright_off[NODES] = {
+    offsetof(dt_iop_colorequal_params_t, bright_red),
+    offsetof(dt_iop_colorequal_params_t, bright_orange),
+    offsetof(dt_iop_colorequal_params_t, bright_yellow),
+    offsetof(dt_iop_colorequal_params_t, bright_green),
+    offsetof(dt_iop_colorequal_params_t, bright_cyan),
+    offsetof(dt_iop_colorequal_params_t, bright_blue),
+    offsetof(dt_iop_colorequal_params_t, bright_lavender),
+    offsetof(dt_iop_colorequal_params_t, bright_magenta) };
+
+  char *base = (char *)p;
+  switch(channel)
+  {
+    case HUE:
+      *out_min = -180.f; *out_max = 180.f;
+      return (float *)(base + hue_off[k]);
+    case SATURATION:
+      *out_min = 0.f; *out_max = 2.f;
+      return (float *)(base + sat_off[k]);
+    case BRIGHTNESS:
+    default:
+      *out_min = 0.f; *out_max = 2.f;
+      return (float *)(base + bright_off[k]);
+  }
+}
+
+static GtkWidget *_get_slider(const dt_iop_colorequal_gui_data_t *g, const int selected)
+{
+  GtkWidget *w = NULL;
+
+  switch(g->channel)
+  {
+    case(SATURATION):
+      w = g->sat_sliders[selected];
+      break;
+    case(HUE):
+      w = g->hue_sliders[selected];
+      break;
+    case(BRIGHTNESS):
+    default:
+      w = g->bright_sliders[selected];
+      break;
+  }
+
+  gtk_widget_realize(w);
+  return w;
+}
+
+/* scrolled — IOP hook called by darktable when the scroll wheel is used
+ * WHILE THE MOUSE IS OVER THE IMAGE in the darkroom (not over the GUI panel).
+ *
+ * This function — not _area_scrolled_callback — intercepts the event
+ * before darktable sends it to the zoom handler.
+ * Returning 1 consumes the event and BLOCKS image zoom.
+ * Returning 0 lets darktable zoom normally.
+ *
+ * Logic:
+ *   - mouse_moved() reads the hue from the preview buffer
+ *   - If a valid hue is available under the cursor
+ *     → applies Gaussian weighting to the active channel's sliders
+ *     → returns 1 to block zoom
+ *   - Otherwise → returns 0, normal zoom
+ */
+int scrolled(dt_iop_module_t *self,
+             const float x,
+             const float y,
+             const int up,
+             const uint32_t state)
+{
+  dt_iop_colorequal_gui_data_t *g = self->gui_data;
+  dt_iop_colorequal_params_t   *p = self->params;
+
+  if(!g) return 0;
+
+  // Force a fresh hue reading from the color picker.
+  // mouse_moved is not always called before scrolled, so we
+  // re-trigger the read here to ensure fresh color data.
+  mouse_moved(self, x, y, 0.0, 0, 1.0f);
+
+  if(!g->cursor_valid) return 0; // no valid hue: normal zoom
+
+  // Step: 1.0 for hue (°), 0.01 for sat/bright (%)
+  // Ctrl for fine precision (÷10)
+  const float base_step = (g->channel == HUE) ? 1.0f : 0.01f;
+  const float step = dt_modifier_is(state, GDK_CONTROL_MASK) ? base_step * 0.1f : base_step;
+  // up=1 → scroll up → increase value
+  const float move = up ? +step : -step;
+
+  // Gaussian influence: sigma=35° → direct neighbor (~±45°) receives ~23%
+  const float sigma  = 35.0f;
+  const float inv2s2 = 1.0f / (2.0f * sigma * sigma);
+
+  gboolean changed = FALSE;
+
+  for(int k = 0; k < NODES; k++)
+  {
+    // Angular position of node k in GUI degrees (accounts for hue_shift)
+    const float node_ucs_rad = _get_hue_node(k, p->hue_shift);
+    float node_deg = node_ucs_rad * (180.f / M_PI_F) - ANGLE_SHIFT;
+    if(node_deg < 0.f)    node_deg += 360.f;
+    if(node_deg >= 360.f) node_deg -= 360.f;
+
+    // Minimum circular distance [0 ; 180°]
+    float dist = fabsf(g->cursor_hue - node_deg);
+    if(dist > 180.f) dist = 360.f - dist;
+
+    // Gaussian weight
+    const float weight = expf(-(dist * dist) * inv2s2);
+    if(weight < 0.01f) continue; // negligible contribution
+
+    float vmin, vmax;
+    float *val = _get_param_ptr(p, g->channel, k, &vmin, &vmax);
+    *val = CLAMP(*val + move * weight, vmin, vmax);
+
+    // Update the slider — let the callback fire for redraw
+    GtkWidget *w = _get_slider(g, k);
+    if(w) dt_bauhaus_slider_set(w, *val);
+
+    changed = TRUE;
+  }
+
+  if(changed)
+  {
+    dt_dev_add_history_item(self->dev, self, TRUE);
+    gtk_widget_queue_draw(GTK_WIDGET(g->area));
+  }
+
+  return 1; // consumes the event → BLOCKS image zoom
+}
+
 void color_picker_apply(dt_iop_module_t *self,
                         GtkWidget *picker,
                         dt_dev_pixelpipe_t *pipe)
@@ -2612,28 +2888,6 @@ static void _channel_tabs_switch_callback(GtkNotebook *notebook,
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
 
-static GtkWidget *_get_slider(const dt_iop_colorequal_gui_data_t *g, const int selected)
-{
-  GtkWidget *w = NULL;
-
-  switch(g->channel)
-  {
-    case(SATURATION):
-      w = g->sat_sliders[selected];
-      break;
-    case(HUE):
-      w = g->hue_sliders[selected];
-      break;
-    case(BRIGHTNESS):
-    default:
-      w = g->bright_sliders[selected];
-      break;
-  }
-
-  gtk_widget_realize(w);
-  return w;
-}
-
 static void _area_set_value(const dt_iop_colorequal_gui_data_t *g,
                             const float graph_height,
                             const float pos)
@@ -2696,16 +2950,124 @@ static void _area_reset_nodes(dt_iop_colorequal_gui_data_t *g)
   }
 }
 
+/* _area_scrolled_callback — scroll wheel handling on the graph.
+ *
+ * Behavior depending on color picker state:
+ *
+ * A) Picker ACTIVE (cursor_valid == TRUE) → Gaussian mode
+ *    The scroll wheel modifies all sliders of the active channel based on
+ *    their angular distance to the hue under the cursor. Weight follows a
+ *    Gaussian with sigma=35°: the closest node receives maximum movement,
+ *    neighbors receive a decreasing fraction. This ensures smooth transitions
+ *    with no dead zones.
+ *
+ * B) Picker INACTIVE (cursor_valid == FALSE) → original behavior
+ *    The scroll wheel is forwarded to the slider of the selected node in the graph.
+ *
+ * C) Alt+scroll: switch page (original behavior unchanged).
+ *
+ * Modifiers:
+ *   Ctrl  → fine step (0.001 instead of 0.01)
+ */
 static gboolean _area_scrolled_callback(GtkWidget *widget,
                                         GdkEventScroll *event,
-                                        const dt_iop_module_t *self)
+                                        dt_iop_module_t *self)
 {
-  const dt_iop_colorequal_gui_data_t *g = self->gui_data;
+  dt_iop_colorequal_gui_data_t *g = self->gui_data;
+  dt_iop_colorequal_params_t   *p = self->params;
 
-  GtkWidget *w = dt_modifier_is(event->state, GDK_MOD1_MASK)
-               ? GTK_WIDGET(g->notebook)
-               : _get_slider(g, g->selected);
-  return gtk_widget_event(w, (GdkEvent*)event);
+  // Alt+scroll: switch page (original behavior unchanged)
+  if(dt_modifier_is(event->state, GDK_MOD1_MASK))
+    return gtk_widget_event(GTK_WIDGET(g->notebook), (GdkEvent*)event);
+
+  // cursor_hue is updated by mouse_moved() when the mouse is over the image.
+  // On the graph, we use the last known value.
+
+  // If no valid hue, classic behavior:
+  // delegate to the slider of the selected node in the graph
+  if(!g->cursor_valid)
+  {
+    GtkWidget *w = _get_slider(g, g->selected);
+    return gtk_widget_event(w, (GdkEvent*)event);
+  }
+
+  // --- Gaussian mode -------------------------------------------------------
+
+  // Normalize scroll delta: +1 = up, -1 = down
+  double delta_x = 0.0, delta_y = 0.0;
+  switch(event->direction)
+  {
+    case GDK_SCROLL_UP:
+      delta_y = +1.0;
+      break;
+    case GDK_SCROLL_DOWN:
+      delta_y = -1.0;
+      break;
+    case GDK_SCROLL_SMOOTH:
+      dt_gui_get_scroll_deltas(event, &delta_x, &delta_y);
+      delta_y = -delta_y; // darktable convention: negative = up
+      break;
+    default:
+      return FALSE;
+  }
+
+  // Step: 1.0 for hue (°), 0.01 for sat/bright (%)
+  // Ctrl for fine precision (÷10)
+  const float base_step = (g->channel == HUE) ? 1.0f : 0.01f;
+  const float step = dt_modifier_is(event->state, GDK_CONTROL_MASK)
+                     ? base_step * 0.1f
+                     : base_step;
+  const float move = (float)delta_y * step;
+
+  // Gaussian influence parameters.
+  // sigma = 35°: 1st neighbor (±45°) receives ~23%, 2nd (±90°) ~1%
+  // Increase sigma for more diffuse effect, decrease for more targeted.
+  const float sigma    = 35.0f;
+  const float inv2s2   = 1.0f / (2.0f * sigma * sigma);
+
+  gboolean changed = FALSE;
+
+  for(int k = 0; k < NODES; k++)
+  {
+    // Angular position of node k in GUI degrees, accounting for hue_shift.
+    // _get_hue_node() returns UCS radians; convert back to GUI degrees
+    // by inverting _conventional_hue_deg_to_ucs_rad():
+    //   ucs_rad = deg2rad(gui_deg + ANGLE_SHIFT)  →  gui_deg = rad2deg(ucs_rad) − ANGLE_SHIFT
+    const float node_ucs_rad = _get_hue_node(k, p->hue_shift);
+    float node_deg = node_ucs_rad * (180.f / M_PI_F) - ANGLE_SHIFT;
+    // Wrap into [0 ; 360[
+    if(node_deg < 0.f)    node_deg += 360.f;
+    if(node_deg >= 360.f) node_deg -= 360.f;
+
+    // Minimum circular distance between cursor hue and this node [0 ; 180]
+    float dist = fabsf(g->cursor_hue - node_deg);
+    if(dist > 180.f) dist = 360.f - dist;
+
+    // Gaussian weight: 1.0 at center, decays to 0 at large distance
+    const float weight = expf(-(dist * dist) * inv2s2);
+
+    // Ignore negligible contributions (< 1%) to avoid micro-drift
+    if(weight < 0.01f) continue;
+
+    // Get direct pointer to the parameter and its bounds
+    float vmin, vmax;
+    float *val = _get_param_ptr(p, g->channel, k, &vmin, &vmax);
+    *val = CLAMP(*val + move * weight, vmin, vmax);
+
+    // Update the slider — let the callback fire for redraw
+    GtkWidget *w = _get_slider(g, k);
+    if(w) dt_bauhaus_slider_set(w, *val);
+
+    changed = TRUE;
+  }
+
+  if(changed)
+  {
+    dt_dev_add_history_item(self->dev, self, TRUE);
+    gtk_widget_queue_draw(GTK_WIDGET(g->area));
+  }
+
+  return TRUE;
 }
 
 static gboolean _area_motion_notify_callback(GtkWidget *widget,
@@ -2851,6 +3213,7 @@ void gui_cleanup(dt_iop_module_t *self)
   }
 
   dt_free_align(g->gamut_LUT);
+  dt_free_align(g->preview_hue_buf);
 
   // Destroy the background cache
   for(dt_iop_colorequal_channel_t chan = 0; chan < NUM_CHANNELS; chan++)
@@ -2948,6 +3311,11 @@ void gui_init(dt_iop_module_t *self)
   g->work_profile = work_profile;
   g->gradients_cached = FALSE;
   g->on_node = FALSE;
+  g->cursor_hue   = 0.f;
+  g->cursor_valid = FALSE;
+  g->preview_hue_buf = NULL;
+  g->preview_hue_buf_width  = 0;
+  g->preview_hue_buf_height = 0;
   for(dt_iop_colorequal_channel_t chan = 0; chan < NUM_CHANNELS; chan++)
   {
     g->b_data[chan] = NULL;
