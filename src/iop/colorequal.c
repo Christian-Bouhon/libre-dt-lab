@@ -262,6 +262,7 @@ typedef struct dt_iop_colorequal_gui_data_t
   GtkDrawingArea *area;
   GtkStack *stack;
   dt_gui_collapsible_section_t cs;
+  GtkWidget *display_mode; // combobox: graph / sliders / both
   float *LUT;
   dt_iop_colorequal_channel_t channel;
 
@@ -287,6 +288,10 @@ typedef struct dt_iop_colorequal_gui_data_t
   float cursor_hue;
   // TRUE if the last hue reading is usable (picker active, sufficient chroma)
   gboolean cursor_valid;
+
+  // Cursor position in preview image coordinates (for gui_post_expose)
+  float cursor_pos_x;
+  float cursor_pos_y;
 
   // Preview buffer containing UCS hue (radians) per pixel,
   // filled by process() for the preview pipe. Enables direct reading
@@ -2278,6 +2283,7 @@ void gui_focus(dt_iop_module_t *self, gboolean in)
     g->mask_mode = 0;
     g->cursor_valid = FALSE; // disables Gaussian mode when module loses focus
     if(buttons) dt_dev_reprocess_center(self->dev);
+    dt_control_queue_redraw_center();
   }
 }
 
@@ -2626,7 +2632,13 @@ int mouse_moved(dt_iop_module_t *self,
   if(g->cursor_hue < 0.f)    g->cursor_hue += 360.f;
   if(g->cursor_hue >= 360.f) g->cursor_hue -= 360.f;
 
+  // Store normalized cursor position [0..1] for gui_post_expose
+  g->cursor_pos_x = pzx;
+  g->cursor_pos_y = pzy;
+
   g->cursor_valid = TRUE;
+
+  dt_control_queue_redraw_center();
   return 0;
 }
 
@@ -2642,8 +2654,63 @@ int mouse_leave(dt_iop_module_t *self)
 
   g->cursor_valid = FALSE;
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
+  dt_control_queue_redraw_center();
 
   return 1;
+}
+
+/* gui_post_expose — draws a color indicator circle over the image
+ * showing the color under the cursor.
+ */
+void gui_post_expose(dt_iop_module_t *self,
+                     cairo_t *cr,
+                     const float width,
+                     const float height,
+                     const float pointerx,
+                     const float pointery,
+                     const float zoom_scale)
+{
+  dt_iop_colorequal_gui_data_t *g = self->gui_data;
+  if(!g || !g->cursor_valid) return;
+
+  // Read the color from the preview pipe backbuf
+  dt_develop_t *dev = self->dev;
+  dt_pthread_mutex_t *mutex = &dev->preview_pipe->backbuf_mutex;
+  uint8_t *backbuf = dev->preview_pipe->backbuf;
+  const int buf_w = dev->preview_pipe->backbuf_width;
+  const int buf_h = dev->preview_pipe->backbuf_height;
+
+  float cr_f = 0.5f, cg_f = 0.5f, cb_f = 0.5f; // fallback grey
+
+  if(backbuf && buf_w > 0 && buf_h > 0)
+  {
+    const int px = CLAMP((int)(g->cursor_pos_x * buf_w), 0, buf_w - 1);
+    const int py = CLAMP((int)(g->cursor_pos_y * buf_h), 0, buf_h - 1);
+
+    dt_pthread_mutex_lock(mutex);
+    const size_t idx = (size_t)py * buf_w * 4 + px * 4;
+    // backbuf is CAIRO_FORMAT_ARGB32: B, G, R, A byte order on little-endian
+    cb_f = backbuf[idx + 0] / 255.0f;
+    cg_f = backbuf[idx + 1] / 255.0f;
+    cr_f = backbuf[idx + 2] / 255.0f;
+    dt_pthread_mutex_unlock(mutex);
+  }
+
+  // Position in full image coordinates
+  const float cx = g->cursor_pos_x * width;
+  const float cy = g->cursor_pos_y * height;
+  const double radius = 10.0 / zoom_scale;
+  const double border = 2.0 / zoom_scale;
+
+  // Black border
+  cairo_arc(cr, cx, cy, radius + border, 0.0, 2.0 * M_PI);
+  cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.8);
+  cairo_fill(cr);
+
+  // Color fill
+  cairo_arc(cr, cx, cy, radius, 0.0, 2.0 * M_PI);
+  cairo_set_source_rgba(cr, cr_f, cg_f, cb_f, 1.0);
+  cairo_fill(cr);
 }
 
 /* _get_param_ptr — returns a direct pointer to the parameter value
@@ -2888,6 +2955,14 @@ static void _channel_tabs_switch_callback(GtkNotebook *notebook,
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
 
+static void _display_mode_callback(GtkComboBox *combo, dt_iop_module_t *self)
+{
+  if(darktable.gui->reset) return;
+  const int mode = gtk_combo_box_get_active(combo);
+  dt_conf_set_int("plugins/darkroom/colorequal/display_mode", mode);
+  gui_update(self);
+}
+
 static void _area_set_value(const dt_iop_colorequal_gui_data_t *g,
                             const float graph_height,
                             const float pos)
@@ -2984,11 +3059,36 @@ static gboolean _area_scrolled_callback(GtkWidget *widget,
   // On the graph, we use the last known value.
 
   // If no valid hue, classic behavior:
-  // delegate to the slider of the selected node in the graph
+  // adjust the selected node's slider directly
   if(!g->cursor_valid)
   {
+    double delta_x = 0.0, delta_y = 0.0;
+    switch(event->direction)
+    {
+      case GDK_SCROLL_UP:    delta_y = +1.0; break;
+      case GDK_SCROLL_DOWN:  delta_y = -1.0; break;
+      case GDK_SCROLL_SMOOTH:
+        dt_gui_get_scroll_deltas(event, &delta_x, &delta_y);
+        delta_y = -delta_y;
+        break;
+      default: return FALSE;
+    }
+
+    const float base_step = (g->channel == HUE) ? 1.0f : 0.01f;
+    const float step = dt_modifier_is(event->state, GDK_CONTROL_MASK)
+                       ? base_step * 0.1f : base_step;
+    const float move = (float)delta_y * step;
+
+    float vmin, vmax;
+    float *val = _get_param_ptr(p, g->channel, g->selected, &vmin, &vmax);
+    *val = CLAMP(*val + move, vmin, vmax);
+
     GtkWidget *w = _get_slider(g, g->selected);
-    return gtk_widget_event(w, (GdkEvent*)event);
+    if(w) dt_bauhaus_slider_set(w, *val);
+
+    dt_dev_add_history_item(self->dev, self, TRUE);
+    gtk_widget_queue_draw(GTK_WIDGET(g->area));
+    return TRUE;
   }
 
   // --- Gaussian mode -------------------------------------------------------
@@ -3105,8 +3205,10 @@ static gboolean _area_button_press_callback(GtkWidget *widget,
      || (event->button == GDK_BUTTON_PRIMARY // Ctrl+Click alias for macOS
          && dt_modifier_is(event->state, GDK_CONTROL_MASK)))
   {
-    dt_conf_set_bool("plugins/darkroom/colorequal/show_sliders",
-                     gtk_notebook_get_n_pages(g->notebook) != 4);
+    // Cycle through display modes: graph → sliders → both → graph
+    int mode = dt_conf_get_int("plugins/darkroom/colorequal/display_mode");
+    mode = (mode + 1) % 3;
+    dt_conf_set_int("plugins/darkroom/colorequal/display_mode", mode);
     gui_update(self);
   }
   else if(event->button == GDK_BUTTON_PRIMARY)
@@ -3235,33 +3337,43 @@ void gui_update(dt_iop_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->use_filter), p->use_filter);
   gui_changed(self, NULL, NULL);
 
-  const gboolean show_sliders = dt_conf_get_bool("plugins/darkroom/colorequal/show_sliders");
+  // Display mode: 0=graph, 1=sliders, 2=both
+  const int display_mode = dt_conf_get_int("plugins/darkroom/colorequal/display_mode");
+  const gboolean show_graph   = (display_mode == 0 || display_mode == 2);
+  const gboolean show_sliders = (display_mode == 1 || display_mode == 2);
+
+  ++darktable.gui->reset;
+  gtk_combo_box_set_active(GTK_COMBO_BOX(g->display_mode), display_mode);
+  --darktable.gui->reset;
 
   // reset masking
   g->mask_mode = 0;
   dt_bauhaus_widget_set_quad_active(g->param_size, FALSE);
   dt_bauhaus_widget_set_quad_active(g->threshold, FALSE);
 
-  const int nbpage = gtk_notebook_get_n_pages(g->notebook);
-  if((nbpage == 4) ^ show_sliders)
+  const gboolean on_channel_tab = (g->page_num < 3);
+
+  // Graph: only on channel tabs, and only in graph/both modes
+  gtk_widget_set_visible(GTK_WIDGET(g->area), on_channel_tab && show_graph);
+  gtk_widget_set_visible(GTK_WIDGET(g->hue_shift), on_channel_tab && show_graph);
+
+  // Sliders: only on channel tabs, and only in sliders/both modes
+  if(on_channel_tab && show_sliders)
   {
-    if(show_sliders)
-      gtk_widget_show(dt_ui_notebook_page(g->notebook, N_("options"), _("options")));
-    else
-      gtk_notebook_remove_page(g->notebook, 3);
-
-    GtkDarktableExpander *exp = DTGTK_EXPANDER(g->cs.expander);
-    gtk_widget_set_visible(dtgtk_expander_get_header(exp), !show_sliders);
-    gtk_widget_set_name(GTK_WIDGET(g->cs.container), show_sliders ? NULL : "collapsible");
-    gtk_revealer_set_reveal_child(GTK_REVEALER(exp->frame), show_sliders || exp->expanded);
+    const char numstr[] = {'0' + g->page_num, 0};
+    gtk_stack_set_visible_child_name(g->stack, numstr);
+    gtk_widget_show(GTK_WIDGET(g->stack));
   }
-
-  // display widgets depending on the selected notebook page
-  gtk_widget_set_visible(GTK_WIDGET(g->area), g->page_num < 3);
-  gtk_widget_set_visible(GTK_WIDGET(g->hue_shift), g->page_num < 3);
-
-  const char numstr[] = {'0' + (show_sliders ? g->page_num : 3), 0};
-  gtk_stack_set_visible_child_name(g->stack, numstr);
+  else if(on_channel_tab)
+  {
+    gtk_widget_hide(GTK_WIDGET(g->stack));
+  }
+  else
+  {
+    // Options tab: always show the options content
+    gtk_stack_set_visible_child_name(g->stack, "3");
+    gtk_widget_show(GTK_WIDGET(g->stack));
+  }
 }
 
 static float _action_process_colorequal(const gpointer target,
@@ -3313,6 +3425,8 @@ void gui_init(dt_iop_module_t *self)
   g->on_node = FALSE;
   g->cursor_hue   = 0.f;
   g->cursor_valid = FALSE;
+  g->cursor_pos_x = 0.f;
+  g->cursor_pos_y = 0.f;
   g->preview_hue_buf = NULL;
   g->preview_hue_buf_width  = 0;
   g->preview_hue_buf_height = 0;
@@ -3449,15 +3563,24 @@ void gui_init(dt_iop_module_t *self)
   g->bright_sliders[7] = g->bright_magenta =
     dt_bauhaus_slider_from_params(sect, "bright_magenta");
 
+  // Options tab
+  dt_ui_notebook_page(g->notebook, N_("options"), _("options and display mode"));
   GtkWidget *options = dt_gui_vbox();
   gtk_stack_add_named(g->stack, options, "3");
-  dt_gui_new_collapsible_section
-    (&g->cs,
-     "plugins/darkroom/colorequal/expand_options",
-     _("options"),
-     GTK_BOX(options),
-     DT_ACTION(self));
-  self->widget = GTK_WIDGET(g->cs.container);
+
+  // Display mode combobox
+  g->display_mode = gtk_combo_box_text_new();
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(g->display_mode), NULL, _("graph"));
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(g->display_mode), NULL, _("sliders"));
+  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(g->display_mode), NULL, _("graph + sliders"));
+  gtk_combo_box_set_active(GTK_COMBO_BOX(g->display_mode),
+                           dt_conf_get_int("plugins/darkroom/colorequal/display_mode"));
+  gtk_widget_set_tooltip_text(g->display_mode, _("select display mode"));
+  g_signal_connect(G_OBJECT(g->display_mode), "changed",
+                   G_CALLBACK(_display_mode_callback), self);
+  gtk_box_pack_start(GTK_BOX(options), g->display_mode, FALSE, FALSE, 0);
+
+  self->widget = options;
 
   g->white_level = dt_color_picker_new(self, DT_COLOR_PICKER_AREA,
                                        dt_bauhaus_slider_from_params(self, "white_level"));
