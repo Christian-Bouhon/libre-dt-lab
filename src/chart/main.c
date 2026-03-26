@@ -1678,7 +1678,7 @@ static int main_gui(dt_lut_t *self, int argc, char *argv[])
   // build the GUI
   GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   self->window = window;
-  gtk_window_set_title(GTK_WINDOW(window), "darktable LUT tool");
+  gtk_window_set_title(GTK_WINDOW(window), "Libre DT-Lab LUT tool");
   gtk_container_set_border_width(GTK_CONTAINER(window), 3);
   gtk_window_set_default_size(GTK_WINDOW(window), 800, 600);
   g_signal_connect(GTK_WINDOW(window), "destroy", G_CALLBACK(gtk_main_quit), NULL);
