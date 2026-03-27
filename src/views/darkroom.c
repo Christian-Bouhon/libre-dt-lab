@@ -133,6 +133,50 @@ static void _get_zoom_pos(dt_dev_viewport_t *port,
   }
 }
 
+/* Compute the correction (zoom_x_preview - zoom_x_full) to add to a full-pipe
+   normalized zoom position to get the equivalent preview-pipe position.
+   Mask overlay points live in preview-pipe output space while _get_zoom_pos()
+   and dt_dev_get_viewport_params() use the full pipe; applying this correction
+   makes mouse positions match mask point coordinates when crop (or similar
+   modules) rounds pixel counts differently in the two pipes. */
+static void _preview_pipe_zoom_correction(dt_develop_t *dev, float *cx, float *cy)
+{
+  *cx = *cy = 0.f;
+  if(!dev->preview_pipe || !dev->full.pipe) return;
+
+  const float full_iw = (float)dev->full.pipe->iwidth;
+  const float full_ih = (float)dev->full.pipe->iheight;
+  if(full_iw <= 0 || full_ih <= 0) return;
+
+  const float pp_wd   = (float)dev->preview_pipe->processed_width;
+  const float pp_ht   = (float)dev->preview_pipe->processed_height;
+  const float full_wd = (float)dev->full.pipe->processed_width;
+  const float full_ht = (float)dev->full.pipe->processed_height;
+  if(pp_wd <= 0 || pp_ht <= 0 || full_wd <= 0 || full_ht <= 0) return;
+
+  // Full-pipe viewport centre in normalised coords
+  float full_pts[2] = { dev->full.zoom_x, dev->full.zoom_y };
+  dt_dev_distort_transform_plus(dev, dev->full.pipe,
+                                0.0f, DT_DEV_TRANSFORM_DIR_ALL_GEOMETRY, full_pts, 1);
+  const float zoom_x_full = full_pts[0] / full_wd - 0.5f;
+  const float zoom_y_full = full_pts[1] / full_ht - 0.5f;
+
+  // Preview-pipe viewport centre in normalised coords
+  const float prev_iw = (float)dev->preview_pipe->iwidth;
+  const float prev_ih = (float)dev->preview_pipe->iheight;
+  float prev_pts[2] = {
+    dev->full.zoom_x * prev_iw / full_iw,
+    dev->full.zoom_y * prev_ih / full_ih
+  };
+  dt_dev_distort_transform_plus(dev, dev->preview_pipe,
+                                0.0f, DT_DEV_TRANSFORM_DIR_ALL_GEOMETRY, prev_pts, 1);
+  const float zoom_x_vp = prev_pts[0] / pp_wd - 0.5f;
+  const float zoom_y_vp = prev_pts[1] / pp_ht - 0.5f;
+
+  *cx = zoom_x_vp - zoom_x_full;
+  *cy = zoom_y_vp - zoom_y_full;
+}
+
 static void _get_zoom_pos_bnd(dt_dev_viewport_t *port,
                               const double x,
                               const double y,
@@ -698,6 +742,29 @@ void expose(dt_view_t *self,
   float pzx = FLT_MAX, pzy = 0.0f;
   float zoom_scale = dt_dev_get_zoom_scale(&dev->full, port->zoom, 1 << port->closeup, TRUE);
 
+  // Compute viewport center through the preview pipe. port->zoom_x is in full-pipe input
+  // space; scale to preview-pipe input space before forward-transforming. Mask overlay
+  // points live in preview-pipe output space, so the Cairo viewport must use the same
+  // coordinate origin — using the full-pipe result causes a sub-pixel divergence that
+  // becomes a visible shift at high zoom when crop changes the pipe aspect ratio.
+  const float full_iw = dev->full.pipe ? (float)dev->full.pipe->iwidth  : 1.f;
+  const float full_ih = dev->full.pipe ? (float)dev->full.pipe->iheight : 1.f;
+  const float prev_iw = dev->preview_pipe ? (float)dev->preview_pipe->iwidth  : 1.f;
+  const float prev_ih = dev->preview_pipe ? (float)dev->preview_pipe->iheight : 1.f;
+  float prev_pts[2] = {
+    port->zoom_x * prev_iw / full_iw,
+    port->zoom_y * prev_ih / full_ih
+  };
+  dt_dev_distort_transform_plus(dev, dev->preview_pipe,
+                                0.0f, DT_DEV_TRANSFORM_DIR_ALL_GEOMETRY, prev_pts, 1);
+  const float pp_wd = dev->preview_pipe->processed_width;
+  const float pp_ht = dev->preview_pipe->processed_height;
+  float zoom_x_vp = pp_wd > 0 ? prev_pts[0] / pp_wd - 0.5f : 0.f;
+  float zoom_y_vp = pp_ht > 0 ? prev_pts[1] / pp_ht - 0.5f : 0.f;
+  // apply same clamping as zoom_x/zoom_y (image fits nearly entirely in view)
+  if(boxw > 0.95f) zoom_x_vp = 0.f;
+  if(boxh > 0.95f) zoom_y_vp = 0.f;
+
   // don't draw guides and color pickers on image margins
   cairo_rectangle(cri, tb, tb, width - 2.0 * tb, height - 2.0 * tb);
 
@@ -763,6 +830,10 @@ void expose(dt_view_t *self,
     const float vp_y = (tb - 0.5f * height) / zoom_scale + 0.5f * ht + zoom_y * ht;
     cairo_rectangle(cri, vp_x, vp_y, vp_w, vp_h);
     cairo_clip(cri);
+    // Mask overlay points are in preview-pipe output space; shift the
+    // coordinate origin by the sub-pixel difference between full-pipe
+    // and preview-pipe viewport centres so overlays land on the image.
+    cairo_translate(cri, (zoom_x - zoom_x_vp) * wd, (zoom_y - zoom_y_vp) * ht);
     dt_masks_events_post_expose(dmod, cri, width, height, 0.0f, 0.0f, zoom_scale);
     cairo_restore(cri);
   }
@@ -1376,32 +1447,38 @@ static void _dev_jump_image(dt_develop_t *dev, int diff, gboolean by_key)
   }
   else if(diff > 0)
   {
-    // if we are here, that means that the current is not anymore in
-    // the list in this case, let's use the current offset image
-    new_id = dt_ui_thumbtable(darktable.gui->ui)->offset_imgid;
-    new_offset = dt_ui_thumbtable(darktable.gui->ui)->offset;
+    // past the last image in the collection - wrap around to the first
+    sqlite3_stmt *stmt2;
+    DT_DEBUG_SQLITE3_PREPARE_V2(
+      dt_database_get(darktable.db),
+      "SELECT rowid, imgid FROM memory.collected_images ORDER BY rowid ASC LIMIT 1",
+      -1,
+      &stmt2,
+      NULL);
+    if(sqlite3_step(stmt2) == SQLITE_ROW)
+    {
+      new_offset = sqlite3_column_int(stmt2, 0);
+      new_id = sqlite3_column_int(stmt2, 1);
+      dt_toast_log(_("past end of collection, looped to first image"));
+    }
+    sqlite3_finalize(stmt2);
   }
   else
   {
-    // if we are here, that means that the current is not anymore in
-    // the list in this case, let's use the image before current
-    // offset
-    new_offset = MAX(1, dt_ui_thumbtable(darktable.gui->ui)->offset - 1);
+    // past the first image in the collection - wrap around to the last
     sqlite3_stmt *stmt2;
-    gchar *query2 =
-      g_strdup_printf("SELECT imgid FROM memory.collected_images WHERE rowid=%d",
-                      new_offset);
-    DT_DEBUG_SQLITE3_PREPARE_V2(dt_database_get(darktable.db), query2, -1, &stmt2, NULL);
+    DT_DEBUG_SQLITE3_PREPARE_V2(
+      dt_database_get(darktable.db),
+      "SELECT rowid, imgid FROM memory.collected_images ORDER BY rowid DESC LIMIT 1",
+      -1,
+      &stmt2,
+      NULL);
     if(sqlite3_step(stmt2) == SQLITE_ROW)
     {
-      new_id = sqlite3_column_int(stmt2, 0);
+      new_offset = sqlite3_column_int(stmt2, 0);
+      new_id = sqlite3_column_int(stmt2, 1);
+      dt_toast_log(_("past beginning of collection, looped to last image"));
     }
-    else
-    {
-      new_id = dt_ui_thumbtable(darktable.gui->ui)->offset_imgid;
-      new_offset = dt_ui_thumbtable(darktable.gui->ui)->offset;
-    }
-    g_free(query2);
     sqlite3_finalize(stmt2);
   }
   g_free(query);
@@ -1411,7 +1488,10 @@ static void _dev_jump_image(dt_develop_t *dev, int diff, gboolean by_key)
 
   // if id seems valid, we change the image and move filmstrip
   _dev_change_image(dev, new_id);
-  dt_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), new_offset, TRUE);
+  if(dt_conf_get_bool("filmstrip/ui/auto_scroll"))
+    dt_thumbtable_set_offset(dt_ui_thumbtable(darktable.gui->ui), new_offset, TRUE);
+  else
+    dt_thumbtable_ensure_imgid_visibility(dt_ui_thumbtable(darktable.gui->ui), new_id);
 
   // if it's a change by key_press, we set mouse_over to the active image
   if(by_key) dt_control_set_mouse_over_id(new_id);
@@ -3726,7 +3806,9 @@ void mouse_moved(dt_view_t *self,
      && !dt_iop_color_picker_is_visible(dev))
   {
     _get_zoom_pos(&dev->full, x, y, &zoom_x, &zoom_y, &zoom_scale);
-    handled = dt_masks_events_mouse_moved(dev->gui_module, zoom_x, zoom_y,
+    float corr_x, corr_y;
+    _preview_pipe_zoom_correction(dev, &corr_x, &corr_y);
+    handled = dt_masks_events_mouse_moved(dev->gui_module, zoom_x + corr_x, zoom_y + corr_y,
                                           pressure, which, zoom_scale);
   }
 
@@ -3810,7 +3892,9 @@ int button_released(dt_view_t *self,
   if(dev->form_visible)
   {
     _get_zoom_pos(&dev->full, x, y, &zoom_x, &zoom_y, &zoom_scale);
-    handled = dt_masks_events_button_released(dev->gui_module, zoom_x, zoom_y,
+    float corr_x, corr_y;
+    _preview_pipe_zoom_correction(dev, &corr_x, &corr_y);
+    handled = dt_masks_events_button_released(dev->gui_module, zoom_x + corr_x, zoom_y + corr_y,
                                               which, state, zoom_scale);
     if(handled) return handled;
   }
@@ -3987,7 +4071,9 @@ int button_pressed(dt_view_t *self,
   if(dev->form_visible)
   {
     _get_zoom_pos(&dev->full, x, y, &zoom_x, &zoom_y, &zoom_scale);
-    handled = dt_masks_events_button_pressed(dev->gui_module, zoom_x, zoom_y,
+    float corr_x, corr_y;
+    _preview_pipe_zoom_correction(dev, &corr_x, &corr_y);
+    handled = dt_masks_events_button_pressed(dev->gui_module, zoom_x + corr_x, zoom_y + corr_y,
                                              pressure, which, type, state);
     if(handled) return handled;
   }
@@ -4043,7 +4129,10 @@ void scrolled(dt_view_t *self,
      && !darktable.develop->darkroom_skip_mouse_events)
   {
     _get_zoom_pos(&dev->full, x, y, &zoom_x, &zoom_y, &zoom_scale);
-    handled = dt_masks_events_mouse_scrolled(dev->gui_module, zoom_x, zoom_y, up, state);
+    float corr_x, corr_y;
+    _preview_pipe_zoom_correction(dev, &corr_x, &corr_y);
+    handled = dt_masks_events_mouse_scrolled(dev->gui_module, zoom_x + corr_x, zoom_y + corr_y,
+                                             up, state);
     if(handled) return;
   }
 

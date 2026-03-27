@@ -48,12 +48,10 @@ static dt_hash_t _opposed_hash(dt_dev_pixelpipe_iop_t *piece)
 
 static inline float _calc_linear_refavg(const float *in, const int color)
 {
-  const dt_aligned_pixel_t ins = { powf(fmaxf(0.0f, in[0]), 1.0f / HL_POWERF),
-                                   powf(fmaxf(0.0f, in[1]), 1.0f / HL_POWERF),
-                                   powf(fmaxf(0.0f, in[2]), 1.0f / HL_POWERF), 0.0f };
+  const dt_aligned_pixel_t ins = { cbrtf(fmaxf(0.0f, in[0])), cbrtf(fmaxf(0.0f, in[1])), cbrtf(fmaxf(0.0f, in[2])), 0.0f };
   const dt_aligned_pixel_t opp = { 0.5f*(ins[1]+ins[2]), 0.5f*(ins[0]+ins[2]), 0.5f*(ins[0]+ins[1]), 0.0f};
 
-  return powf(opp[color], HL_POWERF);
+  return fcube(opp[color]);
 }
 
 static inline size_t _raw_to_cmap(const size_t width, const size_t row, const size_t col)
@@ -348,8 +346,10 @@ static float *_process_opposed(dt_iop_module_t *self,
 
       dt_print_pipe(DT_DEBUG_PIPE,
           "opposed chroma", piece->pipe, self, DT_DEVICE_CPU, roi_in, roi_out,
-          "RGB %3.4f %3.4f %3.4f%s%s",
-          chrominance[0], chrominance[1], chrominance[2],
+           "%12.7f (%d)%12.7f (%d)%12.7f (%d)%s%s",
+          chrominance[0], (int)cnts[0],
+          chrominance[1], (int)cnts[1],
+          chrominance[2], (int)cnts[2],
           piece->pipe->type == DT_DEV_PIXELPIPE_FULL ? " saved" : "",
           img_oppclipped ? "" : " unclipped");
     }
@@ -549,8 +549,10 @@ static cl_int process_opposed_cl(dt_iop_module_t *self,
 
     dt_print_pipe(DT_DEBUG_PIPE,
         "opposed chroma", piece->pipe, self, piece->pipe->devid, roi_in, roi_out,
-        "RGB %3.4f %3.4f %3.4f%s%s",
-        chrominance[0], chrominance[1], chrominance[2],
+        "%12.7f (%d)%12.7f (%d)%12.7f (%d)%s%s",
+        chrominance[0], (int)cnts[0],
+        chrominance[1], (int)cnts[1],
+        chrominance[2], (int)cnts[2],
         piece->pipe->type == DT_DEV_PIXELPIPE_FULL ? " saved" : "",
         img_oppclipped ? "" : " unclipped");
   }

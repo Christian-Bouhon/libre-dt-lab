@@ -30,8 +30,8 @@ endif()
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-set(ONNXRUNTIME_VERSION "1.23.2" CACHE STRING "ONNX Runtime version to download")
-set(ONNXRUNTIME_DIRECTML_VERSION "1.23.0" CACHE STRING "DirectML NuGet package version for Windows")
+set(ONNXRUNTIME_VERSION "1.24.4" CACHE STRING "ONNX Runtime version to download")
+set(ONNXRUNTIME_DIRECTML_VERSION "1.24.4" CACHE STRING "DirectML NuGet package version for Windows")
 option(ONNXRUNTIME_OFFLINE "Disable automatic download of ONNX Runtime" OFF)
 
 set(_ORT_SRC_ROOT "${CMAKE_SOURCE_DIR}/src/external/onnxruntime")
@@ -224,14 +224,20 @@ if(NOT _ORT_HEADER OR NOT _ORT_LIBRARY)
     set(_ORT_API_URL "https://api.github.com/repos/microsoft/onnxruntime/releases/tags/v${_ORT_VER}")
     if(NOT EXISTS "${_ORT_API_JSON}")
       message(STATUS "Fetching ONNX Runtime v${_ORT_VER} release metadata from GitHub API...")
-      file(DOWNLOAD
+      set(_ORT_DOWNLOAD_ARGS
         "${_ORT_API_URL}"
         "${_ORT_API_JSON}"
         STATUS _ORT_API_STATUS
         HTTPHEADER "Accept: application/vnd.github+json"
       )
+      if(DEFINED ENV{GITHUB_TOKEN})
+        list(APPEND _ORT_DOWNLOAD_ARGS HTTPHEADER "Authorization: Bearer $ENV{GITHUB_TOKEN}")
+      endif()
+      file(DOWNLOAD ${_ORT_DOWNLOAD_ARGS})
       list(GET _ORT_API_STATUS 0 _ORT_API_CODE)
       if(NOT _ORT_API_CODE EQUAL 0)
+        list(GET _ORT_API_STATUS 1 _ORT_API_MSG)
+        message(WARNING "Failed to fetch release metadata from GitHub: ${_ORT_API_MSG}")
         file(REMOVE "${_ORT_API_JSON}")
       endif()
     endif()

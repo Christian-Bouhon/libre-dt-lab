@@ -920,9 +920,15 @@ char *version = g_strdup_printf(
 #endif
 
 #ifdef HAVE_WEBP
-               "  WebP                   -> ENABLED\n",
+               "  WebP                   -> ENABLED\n"
 #else
-               "  WebP                   -> DISABLED\n",
+               "  WebP                   -> DISABLED\n"
+#endif
+
+#ifdef HAVE_AI
+               "  AI                     -> ENABLED\n",
+#else
+               "  AI                     -> DISABLED\n",
 #endif
 
                PACKAGE_DOCS,
@@ -1568,9 +1574,6 @@ int dt_init(int argc,
   // set the interface language and prepare selection for prefs & confgen
   darktable.l10n = dt_l10n_init(init_gui);
 
-  const int last_configure_version =
-    dt_conf_get_int("performance_configuration_version_completed");
-
   gboolean has_workspace = FALSE;
 
   // we need this REALLY early so that error messages can be shown,
@@ -1653,6 +1656,8 @@ int dt_init(int argc,
   {
     dt_splash_screen_create(FALSE);
   }
+  const int last_configure_version =
+    dt_conf_get_int("performance_configuration_version_completed");
 
   // detect cpu features and decide which codepaths to enable
   dt_codepaths_init();
@@ -1713,7 +1718,7 @@ int dt_init(int argc,
       if(connection) g_object_unref(connection);
     }
     dt_splash_screen_destroy(); // dismiss splash screen before potentially showing error dialog
-    if(!image_loaded_elsewhere && init_gui) dt_database_show_error(darktable.db);
+    if(!image_loaded_elsewhere && init_gui) dt_database_show_error(darktable.db, dblabel);
 
     dt_print(DT_DEBUG_ALWAYS, "ERROR: can't acquire database lock, aborting.");
     return 1;
@@ -2595,6 +2600,16 @@ void dt_configure_runtime_performance(const int old, char *info)
   {
     g_strlcat(info, INFO_HEADER, DT_PERF_INFOSIZE);
     g_strlcat(info, _("OpenCL mandatory timeout has been updated to 1000.\n\n"), DT_PERF_INFOSIZE);
+  }
+
+  if(old == 18)
+  {
+    g_strlcat(info, INFO_HEADER, DT_PERF_INFOSIZE);
+    g_strlcat(info, _("OpenCL 'per device' settings have changed.\n\n"), DT_PERF_INFOSIZE);
+    g_strlcat(info, _("you will find 'per device' data in 'cldevice_v6_canonical-name'. content is:"), DT_PERF_INFOSIZE);
+    g_strlcat(info, "\n  ", DT_PERF_INFOSIZE);
+    g_strlcat(info, _(" 'micro_nap' 'pinned_memory' 'eventhandles' 'async' 'disabled' 'advantage' 'unified_fraction'"), DT_PERF_INFOSIZE);
+    g_strlcat(info, "\n\n", DT_PERF_INFOSIZE);
   }
 
   #undef INFO_HEADER

@@ -3551,16 +3551,19 @@ static void _widget_button_press(GtkGestureSingle *gesture,
 {
   dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
   dt_bauhaus_t *bh = darktable.bauhaus;
-  _request_focus(w);
-  gtk_widget_grab_focus(widget);
+  gboolean passthrough_from_histogram =
+    gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture)) != widget;
+
+  if(!passthrough_from_histogram)
+  {
+    _request_focus(w);
+    gtk_widget_grab_focus(widget);
+  }
 
   const float width = _widget_width(w);
   const float pos = (x - w->margin.left - w->padding.left) / width;
 
   const guint button = gtk_gesture_single_get_current_button(gesture);
-
-  gboolean passthrough_from_histogram =
-    gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture)) != widget;
 
   if(w->quad_paint
      && !passthrough_from_histogram
@@ -3735,9 +3738,12 @@ static void dt_bh_init(DtBauhausWidget *w)
 
   dt_gui_connect_motion(w, _widget_motion, _widget_enter, _widget_leave, widget);
 
-  dt_gui_connect_scroll(w, GTK_EVENT_CONTROLLER_SCROLL_BOTH_AXES
-                           | GTK_EVENT_CONTROLLER_SCROLL_DISCRETE,
-                        _widget_scroll, widget);
+  GtkEventController *scroll_controller =
+    dt_gui_connect_scroll(w, GTK_EVENT_CONTROLLER_SCROLL_BOTH_AXES
+                             | GTK_EVENT_CONTROLLER_SCROLL_DISCRETE,
+                          _widget_scroll, widget);
+  // allows for capturing propagated events from other widgets
+  gtk_event_controller_set_propagation_phase(scroll_controller, GTK_PHASE_BUBBLE);
 
   gtk_widget_set_can_focus(widget, TRUE);
   dt_gui_add_class(widget, "dt_bauhaus");

@@ -139,14 +139,29 @@ changes (where available).
   and two-finger panning. Follow-up fixes refined input source
   handling to keep panning limited to touchpad smooth-scroll input.
 
+- Enabled shortcuts for some existing buttons in duplicate manager,
+  snapshots, and AgX modules.
+
+- Enabled shortcuts to cycle through module groups, modules and
+  module instances.
+
+- Added a configuration option to toggle the filmstrip auto-center
+  behavior. Enabled shortcuts to toggle filmstrip auto-centering and
+  to explicitly recenter the filmstrip on the current image.
+
+- The radius calculated for capture sharpening is now using only the
+  central 60% of the image as lenses are mostly sharper here.
+  For xtrans sensors the radius has been slightly increased as
+  images tend to be more blurred.
+
+- The tone equalizer now visualizes an invalid curve (solver maths)
+  also for old edits.
+
 ## Performance Improvements
 
 - Increased performance for OpenCL guided filter by internal tiling.
 
 ## Other Changes
-
-- Enabled shortcuts for some existing buttons in duplicate manager,
-  snapshots, and AgX modules.
 
 - Added 2 apertures, f/0.95 and f/1.2, to the aperture section of the
   presets dialogue.
@@ -156,7 +171,8 @@ changes (where available).
 
 - Added PNG support (8/16-bit) for external raster masks.
 
-- Removed `Neo` Intel GPU from the Windows blacklist.
+- Removed `Neo` Intel and `pocl` OpenCL drivers from blacklist,
+  the `AMD-APP` driver has been added as not supported by AMD for 10yrs.
 
 - In the styles module, a new option has been added to hide the
   preview in the tooltip. Additionally, a module preference now allows
@@ -184,11 +200,37 @@ changes (where available).
 - The masks in restricted edit mode are now displayed on-canvas as
   dashed lines to ensure proper feedback.
 
+- Several improvements to AgX:
+  - Default hue preservation is now 60% in most presets, reducing
+    strong hue shifts in bright highlights.
+  - Default contrast has been increased and toe/shoulder power tuned
+    to more closely match sigmoid's defaults.
+  - Added sigmoid-like presets that closely match sigmoid's tone
+    curve.
+  - Removed the punchy presets (except for the blender-like variant,
+    whose parameters still follow Blender's settings).
+  - Improved the toe/shoulder warning tooltips for clarity.
+  - The scene-referred preset is no longer applied exclusively to HDR
+    images.
+  - Primaries selection is now visible even when "disable adjustments"
+    is checked.
+
+- For non-raw images with gamma corrected data we do the initial
+  scaling in linear mode for less artifacts.
+
 ## Bug Fixes
 
 - Properly apply the iop-order when applying a style at export
   time. This also fixes the style preview when flying over styles in
   the style module.
+
+- Drawn mask fixes:
+  - Masks do not shift position when crop is toggled on/off.
+  - Pixel-perfect node hovering and editing up to maximum (16x)
+    magnification.
+  - Fix Bezier handle misassignment in vectorized masks causing
+    distorted curves on complex shapes (AI object masks and
+    external raster masks).
 
 - If a tag category is marked as private, all tags and subcategories
   under it are also treated as private.
@@ -251,6 +293,9 @@ changes (where available).
 
 - Fixed spurious export size is reduced because of memory restrictions
   issue.
+
+- Fixed darktable on startup failing to delete left over database
+  lockfiles for non default workspaces.
 
 ## Lua
 

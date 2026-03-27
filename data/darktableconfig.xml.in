@@ -410,6 +410,13 @@
     <shortdescription>activate OpenCL support</shortdescription>
     <longdescription>if found, use OpenCL runtime on your system to speed up processing by using your graphics card(s).\ncan be switched on and off at any time.</longdescription>
   </dtconfig>
+  <dtconfig prefs="processing" section="opencl" capability="opencl" restart="true">
+    <name>opencl_fast</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>OpenCL fast mode</shortdescription>
+    <longdescription>if set the OpenCL compiler uses aggressive optimizing for better performance with reduced precision so more differences between CPU and OpenCL are expected.</longdescription>
+  </dtconfig>
   <dtconfig prefs="processing" section="opencl" capability="opencl">
     <name>opencl_scheduling_profile</name>
     <type>
@@ -2492,12 +2499,12 @@
     <shortdescription>show scrollbars for central view</shortdescription>
     <longdescription>defines whether scrollbars should be displayed</longdescription>
   </dtconfig>
-  <dtconfig>
+  <dtconfig prefs="misc" section="interface">
     <name>filmstrip/ui/auto_scroll</name>
     <type>bool</type>
     <default>true</default>
-    <shortdescription>auto-scroll filmstrip to selected image</shortdescription>
-    <longdescription>when enabled, the filmstrip automatically scrolls to center the newly selected image</longdescription>
+    <shortdescription>auto-scroll filmstrip to center on selected image</shortdescription>
+    <longdescription>when enabled, the filmstrip in culling mode and in the darkroom automatically scrolls to center on the selected image</longdescription>
   </dtconfig>
   <dtconfig prefs="lighttable" section="general">
      <name>lighttable/ui/milliseconds</name>
@@ -3523,6 +3530,13 @@
     <longdescription>corner threshold for AI mask vectorization. 0 = all sharp corners (most points), 1.0 = balanced, 1.3 = maximum smoothing (fewest points).</longdescription>
   </dtconfig>
   <dtconfig>
+    <name>plugins/darkroom/masks/object/feather</name>
+    <type min="0.0005" max="1.0">float</type>
+    <default>0.0005</default>
+    <shortdescription>AI mask feather</shortdescription>
+    <longdescription>feather (border softness) applied to the resulting path mask. 0 = hard edge, higher values create a softer transition.</longdescription>
+  </dtconfig>
+  <dtconfig>
     <name>plugins/darkroom/masks/object/refine_passes</name>
     <type min="1" max="5">int</type>
     <default>1</default>
@@ -3544,11 +3558,25 @@
     <longdescription>radius of structuring element for morphological open+close cleanup. removes small protrusions and fills small holes in the mask. 0 = disabled, 1-3 = typical values.</longdescription>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/masks/object/edge_refine</name>
-    <type min="0.0" max="0.5">float</type>
-    <default>0.2</default>
-    <shortdescription>AI mask edge refinement</shortdescription>
-    <longdescription>strength of edge-aware threshold boost. near strong image edges the binarization threshold is raised, snapping the mask boundary to object edges. 0 = disabled, 0.1-0.3 = typical values.</longdescription>
+    <name>plugins/darkroom/masks/object/guided_radius</name>
+    <type min="0" max="20">int</type>
+    <default>5</default>
+    <shortdescription>AI mask guided filter radius</shortdescription>
+    <longdescription>radius of the guided filter used to snap the mask boundary to image edges. larger values produce smoother boundaries. 0 = disabled.</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/masks/object/guided_eps</name>
+    <type min="0.001" max="1.0">float</type>
+    <default>0.01</default>
+    <shortdescription>AI mask guided filter edge sensitivity</shortdescription>
+    <longdescription>edge sensitivity for the guided filter. smaller values preserve finer edges. 0.001 = very sharp, 0.1 = soft, 1.0 = nearly no edge preservation.</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/masks/object/render_size</name>
+    <type min="1024">int</type>
+    <default>1024</default>
+    <shortdescription>AI mask render resolution</shortdescription>
+    <longdescription>target resolution (longest side in pixels) for rendering the image before AI mask encoding. higher values improve edge accuracy but increase processing time. the AI encoder always works at 1024px internally.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/masks/object/brush_size</name>
@@ -3556,6 +3584,13 @@
     <default>0.03</default>
     <shortdescription>AI mask brush size</shortdescription>
     <longdescription>brush radius as a fraction of the shorter image dimension. used for the brush tool in the AI object mask to paint over the target object.</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/masks/object/persist_model</name>
+    <type>bool</type>
+    <default>TRUE</default>
+    <shortdescription>keep AI mask model loaded</shortdescription>
+    <longdescription>keep the AI segmentation model loaded in memory between mask creation sessions within the same darkroom view. reduces latency when creating multiple masks but uses more memory</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/ashift/near_delta</name>

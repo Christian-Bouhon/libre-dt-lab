@@ -230,8 +230,6 @@ typedef struct dt_iop_demosaic_global_data_t
   int kernel_rcd_step_4_2;
   int kernel_rcd_step_5_1;
   int kernel_rcd_step_5_2;
-  int kernel_rcd_border_redblue;
-  int kernel_rcd_border_green;
   int kernel_demosaic_box3;
   int kernel_write_blended_dual;
   int gaussian_9x9_mul;
@@ -853,7 +851,7 @@ void process(dt_iop_module_t *self,
         if(method == DT_IOP_DEMOSAIC_FDC)
           xtrans_fdc_interpolate(t_out, t_in, width, t_rows, xtrans, exif_iso);
         else if(method == DT_IOP_DEMOSAIC_MARKESTEIJN || method == DT_IOP_DEMOSAIC_MARKESTEIJN_3)
-          xtrans_markesteijn_interpolate(t_out, t_in, width, t_rows, xtrans, passes);
+          xtrans_markesteijn_interpolate(t_out, t_in, width, t_rows, xtrans, passes, filters);
         else
           vng_interpolate(t_out, t_in, width, t_rows, filters, xtrans, FALSE);
       }
@@ -873,7 +871,7 @@ void process(dt_iop_module_t *self,
         else if(method == DT_IOP_DEMOSAIC_LMMSE)
           lmmse_demosaic(t_out, t_in, width, t_rows, filters, d->lmmse_refine, procmax);
         else if(method != DT_IOP_DEMOSAIC_AMAZE)
-          demosaic_ppg(t_out, t_in, width, t_rows, filters, d->median_thrs);
+          demosaic_ppg(t_out, t_in, width, t_rows, filters, d->median_thrs, 100000);
         else
           amaze_demosaic(t_in, t_out, width, t_rows, filters, procmin);
       }
@@ -1281,8 +1279,6 @@ void init_global(dt_iop_module_so_t *self)
   gd->kernel_rcd_step_4_2 = dt_opencl_create_kernel(rcd, "rcd_step_4_2");
   gd->kernel_rcd_step_5_1 = dt_opencl_create_kernel(rcd, "rcd_step_5_1");
   gd->kernel_rcd_step_5_2 = dt_opencl_create_kernel(rcd, "rcd_step_5_2");
-  gd->kernel_rcd_border_redblue = dt_opencl_create_kernel(rcd, "rcd_border_redblue");
-  gd->kernel_rcd_border_green = dt_opencl_create_kernel(rcd, "rcd_border_green");
   gd->kernel_demosaic_box3 = dt_opencl_create_kernel(rcd, "demosaic_box3");
   gd->kernel_write_blended_dual  = dt_opencl_create_kernel(rcd, "write_blended_dual");
 
@@ -1348,8 +1344,6 @@ void cleanup_global(dt_iop_module_so_t *self)
   dt_opencl_free_kernel(gd->kernel_rcd_step_4_2);
   dt_opencl_free_kernel(gd->kernel_rcd_step_5_1);
   dt_opencl_free_kernel(gd->kernel_rcd_step_5_2);
-  dt_opencl_free_kernel(gd->kernel_rcd_border_redblue);
-  dt_opencl_free_kernel(gd->kernel_rcd_border_green);
   dt_opencl_free_kernel(gd->kernel_demosaic_box3);
   dt_opencl_free_kernel(gd->kernel_write_blended_dual);
   dt_opencl_free_kernel(gd->gaussian_9x9_mul);
@@ -1746,7 +1740,7 @@ void gui_init(dt_iop_module_t *self)
   const int xtranspos = dt_bauhaus_combobox_get_from_value(g->demosaic_method_bayer, DT_DEMOSAIC_XTRANS);
 
   for(int i=0;i<8;i++) dt_bauhaus_combobox_remove_at(g->demosaic_method_bayer, xtranspos);
-  gtk_widget_set_tooltip_text(g->demosaic_method_bayer, _("Bayer sensor demosaicing method, PPG and RCD are fast, AMaZE and LMMSE are slow.\nLMMSE is suited best for high ISO images.\ndual demosaicers increase processing time by blending a VNG variant in a second pass."));
+  gtk_widget_set_tooltip_text(g->demosaic_method_bayer, _("Bayer sensor demosaicing method, PPG and RCD are fast, AMaZE and LMMSE are slow.\nLMMSE is suited best for high ISO images.\nVNG4 is good in rare cases avoiding maze patterns.\ndual demosaicers increase processing time by blending a VNG variant in a second pass."));
 
   g->demosaic_method_xtrans = dt_bauhaus_combobox_from_params(self, "demosaicing_method");
   for(int i=0;i<xtranspos;i++) dt_bauhaus_combobox_remove_at(g->demosaic_method_xtrans, 0);

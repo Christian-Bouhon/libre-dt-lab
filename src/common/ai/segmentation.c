@@ -17,8 +17,12 @@
 */
 
 #include "common/ai/segmentation.h"
+#include "common/ai_models.h"
 #include "ai/backend.h"
+#include "common/database.h"
 #include "common/darktable.h"
+#include "common/file_location.h"
+#include "common/grealpath.h"
 #include <inttypes.h>
 #include <math.h>
 #include <string.h>
@@ -84,6 +88,9 @@ struct dt_seg_context_t
   int encoded_height;
   float scale; // SAM_INPUT_SIZE / max(w, h)
   gboolean image_encoded;
+
+  char *model_id;      // model identifier (for cache validation)
+  char *model_version; // model version (for cache validation)
 };
 
 /* --- preprocessing --- */
@@ -227,9 +234,31 @@ dt_seg_context_t *dt_seg_load(dt_ai_environment_t *env, const char *model_id)
     return NULL;
   }
 
+  // check model version compatibility
+  const char *version = dt_ai_model_get_version(model_id);
+  const char *min_ver = dt_ai_model_get_min_version(model_id);
+  if(min_ver)
+  {
+    int ver_major = 0, min_major = 0;
+    sscanf(version, "%d", &ver_major);
+    sscanf(min_ver, "%d", &min_major);
+    if(ver_major < min_major)
+    {
+      dt_print(DT_DEBUG_ALWAYS,
+               "[segmentation] model %s v%s incompatible "
+               "(requires v%s) - please update model",
+               model_id, version, min_ver);
+      dt_ai_unload_model(encoder);
+      dt_ai_unload_model(decoder);
+      return NULL;
+    }
+  }
+
   dt_seg_context_t *ctx = g_new0(dt_seg_context_t, 1);
   ctx->encoder = encoder;
   ctx->decoder = decoder;
+  ctx->model_id = g_strdup(model_id);
+  ctx->model_version = g_strdup(version);
 
   // query encoder output count and shapes from model metadata
   ctx->n_enc_outputs = dt_ai_get_output_count(encoder);
@@ -551,14 +580,20 @@ void dt_seg_warmup_decoder(dt_seg_context_t *ctx)
     {
       int64_t iou_shape[2] = {1, nm};
       int64_t lr_shape[4] = {1, nm, pm_dim, pm_dim};
+      const int dec_outputs = dt_ai_get_output_count(ctx->decoder);
 
       outputs[0] = (dt_ai_tensor_t){
         .data = masks, .type = DT_AI_FLOAT, .shape = masks_shape, .ndim = 4};
       outputs[1] = (dt_ai_tensor_t){
         .data = iou_buf, .type = DT_AI_FLOAT, .shape = iou_shape, .ndim = 2};
-      outputs[2] = (dt_ai_tensor_t){
-        .data = low_res, .type = DT_AI_FLOAT, .shape = lr_shape, .ndim = 4};
-      n_out = 3;
+      n_out = 2;
+      // low_res_masks output is optional (absent in 256x256 decoders)
+      if(dec_outputs >= 3)
+      {
+        outputs[2] = (dt_ai_tensor_t){
+          .data = low_res, .type = DT_AI_FLOAT, .shape = lr_shape, .ndim = 4};
+        n_out = 3;
+      }
     }
     else
     {
@@ -607,41 +642,48 @@ dt_seg_encode_image(dt_seg_context_t *ctx,
        .shape = input_shape,
        .ndim  = 4};
 
-  // allocate output buffers for all encoder outputs
+  // allocate output buffers for encoder outputs.
+  // when shapes have dynamic dims (value <= 0), pass NULL data so
+  // dt_ai_run lets ORT allocate and copies back the results
   float *enc_bufs[MAX_ENCODER_OUTPUTS] = {NULL};
-  size_t enc_buf_sizes[MAX_ENCODER_OUTPUTS] = {0};
+  gboolean has_dynamic = FALSE;
 
   for(int i = 0; i < ctx->n_enc_outputs; i++)
   {
     size_t sz = 1;
+    gboolean dynamic = FALSE;
     for(int d = 0; d < ctx->enc_ndims[i]; d++)
     {
       if(ctx->enc_shapes[i][d] <= 0)
       {
-        dt_print(DT_DEBUG_AI,
-                 "[segmentation] encoder output[%d] has non-positive dim[%d]=%" PRId64,
-                 i, d, ctx->enc_shapes[i][d]);
+        dynamic = TRUE;
+        has_dynamic = TRUE;
+        break;
+      }
+      sz *= (size_t)ctx->enc_shapes[i][d];
+    }
+    if(!dynamic)
+    {
+      enc_bufs[i] = g_try_malloc(sz * sizeof(float));
+      if(!enc_bufs[i])
+      {
         for(int j = 0; j < i; j++) g_free(enc_bufs[j]);
         g_free(preprocessed);
         return FALSE;
       }
-      sz *= (size_t)ctx->enc_shapes[i][d];
-    }
-    enc_buf_sizes[i] = sz;
-    enc_bufs[i] = g_try_malloc(sz * sizeof(float));
-    if(!enc_bufs[i])
-    {
-      for(int j = 0; j < i; j++) g_free(enc_bufs[j]);
-      g_free(preprocessed);
-      return FALSE;
     }
   }
+
+  if(has_dynamic)
+    dt_print(DT_DEBUG_AI,
+             "[segmentation] encoder has dynamic output shapes, "
+             "using ORT-allocated outputs");
 
   dt_ai_tensor_t outputs[MAX_ENCODER_OUTPUTS];
   for(int i = 0; i < ctx->n_enc_outputs; i++)
   {
     outputs[i] = (dt_ai_tensor_t){
-      .data  = enc_bufs[i],
+      .data  = enc_bufs[i], // NULL for dynamic outputs
       .type  = DT_AI_FLOAT,
       .shape = ctx->enc_shapes[i],
       .ndim  = ctx->enc_ndims[i]};
@@ -659,11 +701,17 @@ dt_seg_encode_image(dt_seg_context_t *ctx,
   if(ret != 0)
   {
     dt_print(DT_DEBUG_AI, "[segmentation] encoder failed: %d (%.1fs)", ret, enc_elapsed);
-    for(int i = 0; i < ctx->n_enc_outputs; i++) g_free(enc_bufs[i]);
+    for(int i = 0; i < ctx->n_enc_outputs; i++)
+    {
+      if(outputs[i].data != enc_bufs[i])
+        g_free(outputs[i].data);
+      g_free(enc_bufs[i]);
+    }
     return FALSE;
   }
 
-  // cache results
+  // cache results - use data from outputs[] which may have been
+  // allocated by the backend for dynamic-shape outputs
   for(int i = 0; i < MAX_ENCODER_OUTPUTS; i++)
   {
     g_free(ctx->enc_data[i]);
@@ -672,8 +720,18 @@ dt_seg_encode_image(dt_seg_context_t *ctx,
   }
   for(int i = 0; i < ctx->n_enc_outputs; i++)
   {
-    ctx->enc_data[i] = enc_bufs[i];
-    ctx->enc_sizes[i] = enc_buf_sizes[i];
+    if(outputs[i].data != enc_bufs[i])
+      g_free(enc_bufs[i]);
+    ctx->enc_data[i] = (float *)outputs[i].data;
+    // recompute size from actual resolved shape
+    size_t sz = 1;
+    for(int d = 0; d < outputs[i].ndim; d++)
+      sz *= (size_t)outputs[i].shape[d];
+    ctx->enc_sizes[i] = sz;
+    // update stored shapes with actual values
+    ctx->enc_ndims[i] = outputs[i].ndim;
+    memcpy(ctx->enc_shapes[i], outputs[i].shape,
+           outputs[i].ndim * sizeof(int64_t));
   }
 
   ctx->encoded_width = width;
@@ -796,27 +854,33 @@ float *dt_seg_compute_mask(dt_seg_context_t *ctx,
 
   if(is_sam)
   {
-    // SAM: 3 outputs -- masks [1,N,H,W], iou [1,N], low_res [1,N,pm_dim,pm_dim]
-    const size_t low_res_per = (size_t)pm_dim * pm_dim;
-    low_res = g_try_malloc((size_t)nm * low_res_per * sizeof(float));
-    if(!low_res)
-    {
-      g_free(point_coords);
-      g_free(point_labels);
-      g_free(masks);
-      return NULL;
-    }
-
+    // SAM: masks [1,N,H,W] + iou [1,N], optionally low_res [1,N,pm,pm]
     int64_t iou_shape[2] = {1, nm};
-    int64_t low_res_shape[4] = {1, nm, pm_dim, pm_dim};
+    const int dec_out_count = dt_ai_get_output_count(ctx->decoder);
 
     dec_outputs[0] = (dt_ai_tensor_t){
       .data = masks, .type = DT_AI_FLOAT, .shape = masks_shape, .ndim = 4};
     dec_outputs[1] = (dt_ai_tensor_t){
       .data = iou_pred, .type = DT_AI_FLOAT, .shape = iou_shape, .ndim = 2};
-    dec_outputs[2] = (dt_ai_tensor_t){
-      .data = low_res, .type = DT_AI_FLOAT, .shape = low_res_shape, .ndim = 4};
-    n_dec_out = 3;
+    n_dec_out = 2;
+
+    // low_res_masks output is optional (absent in 256x256 decoders)
+    if(dec_out_count >= 3)
+    {
+      const size_t low_res_per = (size_t)pm_dim * pm_dim;
+      low_res = g_try_malloc((size_t)nm * low_res_per * sizeof(float));
+      if(!low_res)
+      {
+        g_free(point_coords);
+        g_free(point_labels);
+        g_free(masks);
+        return NULL;
+      }
+      int64_t low_res_shape[4] = {1, nm, pm_dim, pm_dim};
+      dec_outputs[2] = (dt_ai_tensor_t){
+        .data = low_res, .type = DT_AI_FLOAT, .shape = low_res_shape, .ndim = 4};
+      n_dec_out = 3;
+    }
   }
   else
   {
@@ -868,11 +932,21 @@ float *dt_seg_compute_mask(dt_seg_context_t *ctx,
              "[segmentation] mask computed (%.3fs), best=%d/%d IoU=%.3f",
              dec_elapsed, best, nm, iou_pred[best]);
 
-    // cache the best low-res mask for iterative refinement
-    const size_t low_res_per = (size_t)pm_dim * pm_dim;
-    memcpy(ctx->prev_mask, low_res + (size_t)best * low_res_per,
-           low_res_per * sizeof(float));
-    g_free(low_res);
+    // cache the best mask for iterative refinement
+    if(low_res)
+    {
+      // use dedicated low_res output (1024x1024 decoder)
+      const size_t low_res_per = (size_t)pm_dim * pm_dim;
+      memcpy(ctx->prev_mask, low_res + (size_t)best * low_res_per,
+             low_res_per * sizeof(float));
+      g_free(low_res);
+    }
+    else
+    {
+      // masks output is already at prev_mask resolution (256x256 decoder)
+      memcpy(ctx->prev_mask, masks + (size_t)best * per_mask,
+             per_mask * sizeof(float));
+    }
   }
   else
   {
@@ -956,6 +1030,352 @@ void dt_seg_reset_encoding(dt_seg_context_t *ctx)
            (size_t)ctx->prev_mask_dim * ctx->prev_mask_dim * sizeof(float));
 }
 
+/* --- disk cache for encoder embeddings --- */
+
+// file format: magic + version + metadata + encoder outputs + RGB
+#define SEG_CACHE_MAGIC 0x44545347  // "DTSG"
+#define SEG_CACHE_VERSION 1
+#define SEG_CACHE_SUBDIR "objmasks"
+
+// build the per-database cache directory path.
+// returns FALSE when disk caching is unavailable
+// (no database or in-memory mode)
+static gboolean _get_cache_dir(char *out, size_t size)
+{
+  out[0] = '\0';
+
+  // skip disk cache when running with --library :memory:
+  const gchar *dbpath = darktable.db
+    ? dt_database_get_path(darktable.db)
+    : NULL;
+
+  if(dbpath && strcmp(dbpath, ":memory:") != 0)
+  {
+    char cachedir[PATH_MAX] = {0};
+    dt_loc_get_user_cache_dir(cachedir, sizeof(cachedir));
+
+    // hash the database path so different --configdir instances
+    // get separate cache directories (same pattern as mipmaps)
+    gchar *abspath = g_realpath(dbpath);
+    if(abspath == NULL) abspath = g_strdup(dbpath);
+    GChecksum *chk = g_checksum_new(G_CHECKSUM_SHA1);
+    g_checksum_update(chk, (guchar *)abspath, strlen(abspath));
+    const gchar *hash = g_checksum_get_string(chk);
+
+    snprintf(out, size, "%s/%s-%s.d", cachedir, SEG_CACHE_SUBDIR, hash);
+
+    g_checksum_free(chk);
+    g_free(abspath);
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
+gboolean dt_seg_disk_cache_save(dt_seg_context_t *ctx,
+                                const dt_imgid_t imgid,
+                                const dt_hash_t distort_hash,
+                                const uint8_t *rgb,
+                                const int rgb_w,
+                                const int rgb_h)
+{
+  if(!ctx || !ctx->image_encoded)
+    return FALSE;
+
+  char dir[PATH_MAX] = {0};
+  if(!_get_cache_dir(dir, sizeof(dir)))
+    return FALSE;
+  g_mkdir_with_parents(dir, 0755);
+
+  char path[PATH_MAX] = {0};
+  snprintf(path, sizeof(path), "%s/%d.seg", dir, imgid);
+
+  FILE *fp = g_fopen(path, "wb");
+  if(!fp)
+  {
+    dt_print(DT_DEBUG_AI,
+             "[segmentation] disk cache: cannot open %s for writing",
+             path);
+    return FALSE;
+  }
+
+  gboolean ok = TRUE;
+  const uint32_t magic = SEG_CACHE_MAGIC;
+  const uint32_t version = SEG_CACHE_VERSION;
+  const int32_t n_out = ctx->n_enc_outputs;
+  // model id and version (length-prefixed strings)
+  const uint32_t mid_len = ctx->model_id ? (uint32_t)strlen(ctx->model_id) : 0;
+  const uint32_t mver_len = ctx->model_version
+    ? (uint32_t)strlen(ctx->model_version) : 0;
+
+  // header
+  ok = ok && fwrite(&magic, 4, 1, fp) == 1;
+  ok = ok && fwrite(&version, 4, 1, fp) == 1;
+  ok = ok && fwrite(&imgid, 4, 1, fp) == 1;
+  ok = ok && fwrite(&distort_hash, 8, 1, fp) == 1;
+  ok = ok && fwrite(&mid_len, 4, 1, fp) == 1;
+  if(mid_len > 0)
+    ok = ok && fwrite(ctx->model_id, 1, mid_len, fp) == mid_len;
+  ok = ok && fwrite(&mver_len, 4, 1, fp) == 1;
+  if(mver_len > 0)
+    ok = ok && fwrite(ctx->model_version, 1, mver_len, fp) == mver_len;
+  ok = ok && fwrite(&ctx->encoded_width, 4, 1, fp) == 1;
+  ok = ok && fwrite(&ctx->encoded_height, 4, 1, fp) == 1;
+  ok = ok && fwrite(&ctx->scale, 4, 1, fp) == 1;
+  ok = ok && fwrite(&n_out, 4, 1, fp) == 1;
+
+  // encoder outputs
+  for(int i = 0; i < n_out && ok; i++)
+  {
+    ok = ok && fwrite(&ctx->enc_ndims[i], 4, 1, fp) == 1;
+    ok = ok && fwrite(ctx->enc_shapes[i],
+                      sizeof(int64_t), ctx->enc_ndims[i], fp)
+                 == (size_t)ctx->enc_ndims[i];
+    const uint64_t data_sz = ctx->enc_sizes[i];
+    ok = ok && fwrite(&data_sz, 8, 1, fp) == 1;
+    if(data_sz > 0 && ctx->enc_data[i])
+      ok = ok && fwrite(ctx->enc_data[i],
+                        sizeof(float), data_sz, fp) == data_sz;
+  }
+
+  // RGB footer
+  const int32_t rw = rgb ? rgb_w : 0;
+  const int32_t rh = rgb ? rgb_h : 0;
+  ok = ok && fwrite(&rw, 4, 1, fp) == 1;
+  ok = ok && fwrite(&rh, 4, 1, fp) == 1;
+  if(rw > 0 && rh > 0 && rgb)
+  {
+    const size_t rgb_sz = (size_t)rw * rh * 3;
+    ok = ok && fwrite(rgb, 1, rgb_sz, fp) == rgb_sz;
+  }
+
+  fclose(fp);
+
+  if(!ok)
+  {
+    g_unlink(path);
+    dt_print(DT_DEBUG_AI,
+             "[segmentation] disk cache: write error for imgid %d",
+             imgid);
+    return FALSE;
+  }
+
+  dt_print(DT_DEBUG_AI,
+           "[segmentation] disk cache: saved imgid %d (%dx%d)",
+           imgid, ctx->encoded_width, ctx->encoded_height);
+
+  return TRUE;
+}
+
+gboolean dt_seg_disk_cache_load(dt_seg_context_t *ctx,
+                                const dt_imgid_t imgid,
+                                const dt_hash_t distort_hash,
+                                uint8_t **out_rgb,
+                                int *out_rgb_w,
+                                int *out_rgb_h)
+{
+  if(!ctx) return FALSE;
+
+  char dir[PATH_MAX] = {0};
+  if(!_get_cache_dir(dir, sizeof(dir)))
+    return FALSE;
+
+  char path[PATH_MAX] = {0};
+  snprintf(path, sizeof(path), "%s/%d.seg", dir, imgid);
+
+  FILE *fp = g_fopen(path, "rb");
+  if(!fp) return FALSE;
+
+  gboolean ok = TRUE;
+  uint32_t magic = 0, version = 0;
+  dt_hash_t file_distort_hash = 0;
+  int32_t file_imgid = 0, enc_w = 0, enc_h = 0, n_out = 0;
+  float scale = 0.0f;
+
+  // read header
+  ok = ok && fread(&magic, 4, 1, fp) == 1;
+  ok = ok && fread(&version, 4, 1, fp) == 1;
+  ok = ok && fread(&file_imgid, 4, 1, fp) == 1;
+  ok = ok && fread(&file_distort_hash, 8, 1, fp) == 1;
+  // read model id
+  uint32_t mid_len = 0;
+  ok = ok && fread(&mid_len, 4, 1, fp) == 1;
+  char file_model_id[256] = {0};
+  if(ok && mid_len > 0 && mid_len < sizeof(file_model_id))
+    ok = ok && fread(file_model_id, 1, mid_len, fp) == mid_len;
+  else if(mid_len >= sizeof(file_model_id))
+    ok = FALSE;
+  // read model version
+  uint32_t mver_len = 0;
+  ok = ok && fread(&mver_len, 4, 1, fp) == 1;
+  char file_model_ver[64] = {0};
+  if(ok && mver_len > 0 && mver_len < sizeof(file_model_ver))
+    ok = ok && fread(file_model_ver, 1, mver_len, fp) == mver_len;
+  else if(mver_len >= sizeof(file_model_ver))
+    ok = FALSE;
+  ok = ok && fread(&enc_w, 4, 1, fp) == 1;
+  ok = ok && fread(&enc_h, 4, 1, fp) == 1;
+  ok = ok && fread(&scale, 4, 1, fp) == 1;
+  ok = ok && fread(&n_out, 4, 1, fp) == 1;
+
+  const char *cur_ver = ctx->model_version ? ctx->model_version : "0.0";
+  if(!ok || magic != SEG_CACHE_MAGIC
+     || version != SEG_CACHE_VERSION
+     || file_imgid != imgid
+     || file_distort_hash != distort_hash
+     || !ctx->model_id
+     || strcmp(file_model_id, ctx->model_id) != 0
+     || strcmp(file_model_ver, cur_ver) != 0)
+  {
+    fclose(fp);
+    return FALSE;
+  }
+
+  // validate output count matches loaded model
+  if(n_out != ctx->n_enc_outputs || n_out <= 0
+     || n_out > MAX_ENCODER_OUTPUTS)
+  {
+    fclose(fp);
+    dt_print(DT_DEBUG_AI,
+             "[segmentation] disk cache: output count mismatch "
+             "(file=%d, model=%d)",
+             n_out, ctx->n_enc_outputs);
+    return FALSE;
+  }
+
+  // read encoder outputs into temporary buffers
+  float *tmp_data[MAX_ENCODER_OUTPUTS] = {NULL};
+  size_t tmp_sizes[MAX_ENCODER_OUTPUTS] = {0};
+  int tmp_ndims[MAX_ENCODER_OUTPUTS] = {0};
+  int64_t tmp_shapes[MAX_ENCODER_OUTPUTS][MAX_TENSOR_DIMS];
+  memset(tmp_shapes, 0, sizeof(tmp_shapes));
+
+  for(int i = 0; i < n_out && ok; i++)
+  {
+    ok = ok && fread(&tmp_ndims[i], 4, 1, fp) == 1;
+    if(!ok || tmp_ndims[i] <= 0
+       || tmp_ndims[i] > MAX_TENSOR_DIMS)
+    {
+      ok = FALSE;
+      break;
+    }
+    ok = ok && fread(tmp_shapes[i], sizeof(int64_t),
+                     tmp_ndims[i], fp) == (size_t)tmp_ndims[i];
+
+    uint64_t data_sz = 0;
+    ok = ok && fread(&data_sz, 8, 1, fp) == 1;
+
+    // validate shapes match the model
+    if(ok && tmp_ndims[i] != ctx->enc_ndims[i])
+    {
+      ok = FALSE;
+      dt_print(DT_DEBUG_AI,
+               "[segmentation] disk cache: ndim mismatch for "
+               "output %d (file=%d, model=%d)",
+               i, tmp_ndims[i], ctx->enc_ndims[i]);
+      break;
+    }
+    for(int d = 0; d < tmp_ndims[i] && ok; d++)
+    {
+      // skip validation for dynamic dims - the model may report
+      // dynamic shapes at load time that resolve only after inference
+      if(ctx->enc_shapes[i][d] <= 0 || tmp_shapes[i][d] <= 0)
+        continue;
+      if(tmp_shapes[i][d] != ctx->enc_shapes[i][d])
+      {
+        ok = FALSE;
+        dt_print(DT_DEBUG_AI,
+                 "[segmentation] disk cache: shape mismatch for "
+                 "output %d dim %d (file=%" PRId64 ", model=%" PRId64 ")",
+                 i, d, tmp_shapes[i][d], ctx->enc_shapes[i][d]);
+      }
+    }
+
+    if(ok && data_sz > 0)
+    {
+      tmp_data[i] = g_try_malloc(data_sz * sizeof(float));
+      if(!tmp_data[i])
+      {
+        ok = FALSE;
+        break;
+      }
+      tmp_sizes[i] = (size_t)data_sz;
+      ok = ok && fread(tmp_data[i], sizeof(float),
+                       data_sz, fp) == data_sz;
+    }
+  }
+
+  // read RGB footer
+  int32_t rw = 0, rh = 0;
+  uint8_t *rgb = NULL;
+  if(ok)
+  {
+    ok = ok && fread(&rw, 4, 1, fp) == 1;
+    ok = ok && fread(&rh, 4, 1, fp) == 1;
+    if(ok && rw > 0 && rh > 0)
+    {
+      const size_t rgb_sz = (size_t)rw * rh * 3;
+      rgb = g_try_malloc(rgb_sz);
+      if(rgb)
+        ok = ok && fread(rgb, 1, rgb_sz, fp) == rgb_sz;
+      else
+        ok = FALSE;
+    }
+  }
+
+  fclose(fp);
+
+  if(!ok)
+  {
+    for(int i = 0; i < n_out; i++) g_free(tmp_data[i]);
+    g_free(rgb);
+    dt_print(DT_DEBUG_AI,
+             "[segmentation] disk cache: read error for imgid %d",
+             imgid);
+    return FALSE;
+  }
+
+  // success -- install into context
+  for(int i = 0; i < MAX_ENCODER_OUTPUTS; i++)
+  {
+    g_free(ctx->enc_data[i]);
+    ctx->enc_data[i] = NULL;
+    ctx->enc_sizes[i] = 0;
+  }
+  for(int i = 0; i < n_out; i++)
+  {
+    ctx->enc_data[i] = tmp_data[i];
+    ctx->enc_sizes[i] = tmp_sizes[i];
+    // update shapes from cache -- the model may have dynamic dims
+    // that are only resolved after inference
+    ctx->enc_ndims[i] = tmp_ndims[i];
+    memcpy(ctx->enc_shapes[i], tmp_shapes[i],
+           tmp_ndims[i] * sizeof(int64_t));
+  }
+  ctx->encoded_width = enc_w;
+  ctx->encoded_height = enc_h;
+  ctx->scale = scale;
+  ctx->image_encoded = TRUE;
+  ctx->has_prev_mask = FALSE;
+  if(ctx->prev_mask)
+    memset(ctx->prev_mask, 0,
+           (size_t)ctx->prev_mask_dim * ctx->prev_mask_dim * sizeof(float));
+
+  if(out_rgb) *out_rgb = rgb; else g_free(rgb);
+  if(out_rgb_w) *out_rgb_w = rw;
+  if(out_rgb_h) *out_rgb_h = rh;
+
+  dt_print(DT_DEBUG_AI,
+           "[segmentation] disk cache: loaded imgid %d (%dx%d, rgb=%dx%d)",
+           imgid, enc_w, enc_h, rw, rh);
+  return TRUE;
+}
+
+const char *dt_seg_get_model_id(const dt_seg_context_t *ctx)
+{
+  return ctx ? ctx->model_id : NULL;
+}
+
 void dt_seg_free(dt_seg_context_t *ctx)
 {
   if(!ctx)
@@ -968,6 +1388,8 @@ void dt_seg_free(dt_seg_context_t *ctx)
   for(int i = 0; i < MAX_ENCODER_OUTPUTS; i++)
     g_free(ctx->enc_data[i]);
   g_free(ctx->prev_mask);
+  g_free(ctx->model_id);
+  g_free(ctx->model_version);
   g_free(ctx);
 }
 
