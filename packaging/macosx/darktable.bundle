@@ -8,11 +8,11 @@
     <gtk>gtk+-3.0</gtk>
   </meta>
   <plist>${project}/Info.plist</plist>
-  <main-binary>${prefix:dt}/bin/darktable</main-binary>
-  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/darktable-chart</binary>
-  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/darktable-cli</binary>
-  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/darktable-cltest</binary>
-  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/darktable-generate-cache</binary>
+  <main-binary>${prefix:dt}/bin/libre-dt-lab</main-binary>
+  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/libre-dt-lab-chart</binary>
+  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/libre-dt-lab-cli</binary>
+  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/libre-dt-lab-cltest</binary>
+  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/libre-dt-lab-generate-cache</binary>
   <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/darktable-rs-identify</binary>
   <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/libexec/darktable/tools/darktable-curve-tool</binary>
   <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/libexec/darktable/tools/darktable-noiseprofile</binary>

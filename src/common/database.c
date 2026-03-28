@@ -3934,7 +3934,7 @@ static gboolean pid_is_alive(int pid)
     long unsigned int n_filename = sizeof(wfilename);
     int ret = QueryFullProcessImageNameW(h, 0, wfilename, &n_filename);
     char *filename = g_utf16_to_utf8(wfilename, -1, NULL, NULL, NULL);
-    if(ret && n_filename > 0 && filename && g_str_has_suffix(filename, "darktable.exe"))
+    if(ret && n_filename > 0 && filename && g_str_has_suffix(filename, "libre-dt-lab.exe"))
       pid_is_alive = TRUE;
     g_free(filename);
     CloseHandle(h);
@@ -3954,7 +3954,7 @@ static gboolean pid_is_alive(int pid)
 
     if(g_file_get_contents("", &contents, &length, NULL))
     {
-      if(strstr(contents, "darktable") == NULL)
+      if(strstr(contents, "libre-dt-lab") == NULL)
       {
         pid_is_alive = FALSE;
       }

@@ -1117,24 +1117,24 @@ endif(BUILD_TESTING)
 #
 # build darktable executable
 #
-add_executable(darktable ${SUBSYSTEM_MACOSX} ${SUBSYSTEM_WIN32} main.c ${RESOURCE_OBJECT})
-set_target_properties(darktable PROPERTIES LINKER_LANGUAGE C)
+add_executable(libre-dt-lab ${SUBSYSTEM_MACOSX} ${SUBSYSTEM_WIN32} main.c ${RESOURCE_OBJECT})
+set_target_properties(libre-dt-lab PROPERTIES LINKER_LANGUAGE C)
 if(APPLE)
   set_target_properties(lib_darktable PROPERTIES LINK_FLAGS "-framework Carbon -framework AppKit -framework Security")
 endif(APPLE)
-target_link_libraries(darktable lib_darktable)
+target_link_libraries(libre-dt-lab lib_darktable)
 
 if (WIN32)
-  set_target_properties(darktable PROPERTIES LINK_FLAGS "-mconsole -mwindows -Wl,-subsystem,console")
-  _detach_debuginfo (darktable bin)
+  set_target_properties(libre-dt-lab PROPERTIES LINK_FLAGS "-mconsole -mwindows -Wl,-subsystem,console")
+  _detach_debuginfo (libre-dt-lab bin)
   _detach_debuginfo (lib_darktable bin)
 else()
-    set_target_properties(darktable
+    set_target_properties(libre-dt-lab
                           PROPERTIES
                           INSTALL_RPATH ${RPATH_ORIGIN}/${REL_BIN_TO_LIBDIR})
 endif(WIN32)
 
-install(TARGETS darktable DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT DTApplication)
+install(TARGETS libre-dt-lab DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT DTApplication)
 
 InstallDependencyFiles()
 

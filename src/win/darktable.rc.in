@@ -20,13 +20,13 @@ BEGIN
   BEGIN
     BLOCK "040904b0"
     BEGIN
-      VALUE "CompanyName",      "The darktable team"
-      VALUE "FileDescription",  "darktable photo workflow software"
+      VALUE "CompanyName",      "The Libre DT-Lab team"
+      VALUE "FileDescription",  "Libre DT-Lab photo workflow software"
       VALUE "FileVersion",      "${PROJECT_VERSION}"
-      VALUE "InternalName",     "darktable"
+      VALUE "InternalName",     "libre-dt-lab"
       VALUE "LegalCopyright",   "Copyright \xa9 2009-" LAST_COMMIT_YEAR
-      VALUE "OriginalFilename", "darktable.exe"
-      VALUE "ProductName",      "darktable"
+      VALUE "OriginalFilename", "libre-dt-lab.exe"
+      VALUE "ProductName",      "Libre DT-Lab"
       VALUE "ProductVersion",   "${PROJECT_VERSION}"
     END
   END
