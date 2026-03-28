@@ -3059,36 +3059,11 @@ static gboolean _area_scrolled_callback(GtkWidget *widget,
   // On the graph, we use the last known value.
 
   // If no valid hue, classic behavior:
-  // adjust the selected node's slider directly
+  // adjust the selected node's in the graph.
   if(!g->cursor_valid)
   {
-    double delta_x = 0.0, delta_y = 0.0;
-    switch(event->direction)
-    {
-      case GDK_SCROLL_UP:    delta_y = +1.0; break;
-      case GDK_SCROLL_DOWN:  delta_y = -1.0; break;
-      case GDK_SCROLL_SMOOTH:
-        dt_gui_get_scroll_deltas(event, &delta_x, &delta_y);
-        delta_y = -delta_y;
-        break;
-      default: return FALSE;
-    }
-
-    const float base_step = (g->channel == HUE) ? 1.0f : 0.01f;
-    const float step = dt_modifier_is(event->state, GDK_CONTROL_MASK)
-                       ? base_step * 0.1f : base_step;
-    const float move = (float)delta_y * step;
-
-    float vmin, vmax;
-    float *val = _get_param_ptr(p, g->channel, g->selected, &vmin, &vmax);
-    *val = CLAMP(*val + move, vmin, vmax);
-
     GtkWidget *w = _get_slider(g, g->selected);
-    if(w) dt_bauhaus_slider_set(w, *val);
-
-    dt_dev_add_history_item(self->dev, self, TRUE);
-    gtk_widget_queue_draw(GTK_WIDGET(g->area));
-    return TRUE;
+    return gtk_widget_event(w, (GdkEvent*)event);
   }
 
   // --- Gaussian mode -------------------------------------------------------
