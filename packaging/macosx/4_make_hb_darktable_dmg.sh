@@ -69,11 +69,11 @@ device=$(hdiutil attach -readwrite -noverify -autoopen "pack.temp.dmg" |
     egrep '^/dev/' | sed 1q | awk '{print $1}')
 
 echo '
- set {product_name} to words of (do shell script "printf \"%s\", '${PROGN}'")
- set background to alias ("Volumes:"&product_name&":.background:macos_install_background.png")
+ set volumeName to "'${PROGN}'"
+ set background to alias ("Volumes:"&volumeName&":.background:macos_install_background.png")
 
  tell application "Finder"
-    tell disk "'${PROGN}'"
+    tell disk volumeName
         set current view of container window to icon view
         set toolbar visible of container window to false
         set statusbar visible of container window to false
@@ -82,7 +82,7 @@ echo '
         set arrangement of theViewOptions to not arranged
         set icon size of theViewOptions to 72
         set background picture of theViewOptions to background
-        set position of item "'${PROGN}'" of container window to {100, 150}
+        set position of item volumeName of container window to {100, 150}
         set position of item "Applications" of container window to {400, 150}
         update without registering applications
     end tell
