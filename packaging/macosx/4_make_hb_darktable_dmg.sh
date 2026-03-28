@@ -8,7 +8,7 @@ set -e -o pipefail
 trap 'echo "${BASH_SOURCE[0]}{${FUNCNAME[0]}}:${LINENO}: Error: command \`${BASH_COMMAND}\` failed with exit code $?"' ERR
 
 # Define application name
-PROGN=darktable
+PROGN=libre-dt-lab
 
 # Go to directory of script
 scriptDir=$(dirname "$0")

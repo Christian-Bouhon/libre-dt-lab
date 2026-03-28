@@ -18,7 +18,7 @@ cd "$scriptDir"/
 # Define base variables
 buildDir="../../build/macosx"
 dtPackageDir="$buildDir"/package
-dtAppName="darktable"
+dtAppName="libre-dt-lab"
 dtWorkingDir="$dtPackageDir"/"$dtAppName".app
 dtResourcesDir="$dtWorkingDir"/Contents/Resources
 dtExecDir="$dtWorkingDir"/Contents/MacOS
@@ -83,12 +83,12 @@ function reset_exec_path {
     # Get shared libraries used of current executable
     oToolLDependencies=$(otool -L "$1" 2>/dev/null | grep compatibility | cut -d\( -f1 | sed 's/^[[:blank:]]*//;s/[[:blank:]]*$//' | uniq)
 
-    # Handle libdarktable.dylib
-    if [[ "$oToolLDependencies" == *"@rpath/libdarktable.dylib"* && "$1" != *"libdarktable.dylib"* ]]; then
+    # Handle liblibre-dt-lab.dylib (renamed from libdarktable.dylib)
+    if [[ "$oToolLDependencies" == *"@rpath/liblibre-dt-lab.dylib"* && "$1" != *"liblibre-dt-lab.dylib"* ]]; then
         # Only need to reset binaries that live outside of lib/darktable
         oToolLoader=$(otool -l "$1" 2>/dev/null | grep '@loader_path' | cut -d\( -f1 | sed 's/^[[:blank:]]*path[[:blank:]]*//;s/[[:blank:]]*$//' )
         if [[ "$oToolLoader" == "@loader_path/../lib/darktable" ]]; then
-            echo "Resetting loader path for libdarktable.dylib of $libraryOrigFile"
+            echo "Resetting loader path for liblibre-dt-lab.dylib of $libraryOrigFile"
             install_name_tool -rpath @loader_path/../lib/darktable @loader_path/../Resources/lib/darktable "$1" || true
         fi
     fi
@@ -146,7 +146,7 @@ function reset_exec_path {
     if [[ -n "$oToolRpaths" ]]; then
         for oToolRpath in $oToolRpaths; do
             oToolRpathNew=$(echo $oToolRpath | sed "s#@rpath/##")
-            if [[ "$oToolRpathNew" != "libdarktable.dylib" ]]; then
+            if [[ "$oToolRpathNew" != "liblibre-dt-lab.dylib" ]]; then
                 install_name_tool -change "$oToolRpath" "@executable_path/../Resources/lib/$oToolRpathNew" "$1" || true
             fi
         done

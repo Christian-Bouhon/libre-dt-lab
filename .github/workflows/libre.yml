@@ -14,8 +14,8 @@ permissions:
 
 jobs:
   AppImage:
-    if: github.repository == 'darktable-org/darktable' || github.repository == 'Christian-Bouhon/libre-dt-lab' || github.event_name == 'workflow_dispatch'
-    name: Nightly darktable AppImage
+    if: github.repository == 'Christian-Bouhon/libre-dt-lab' || github.event_name == 'workflow_dispatch'
+    name: Nightly libre-dt-lab AppImage
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -188,8 +188,8 @@ jobs:
           retention-days: 1
 
   Windows:
-    if: github.repository == 'darktable-org/darktable' || github.repository == 'Christian-Bouhon/libre-dt-lab' || github.event_name == 'workflow_dispatch'
-    name: Nightly darktable Windows
+    if: github.repository == 'Christian-Bouhon/libre-dt-lab' || github.event_name == 'workflow_dispatch'
+    name: Nightly libre-dt-lab Windows
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
@@ -313,7 +313,7 @@ jobs:
           # Create multi-resolution .ico file expected by the .iss script for use as setup file icon.
           # Use MSYS2 ImageMagick as pre-installed IM is not working on the WoA runner.
           pacboy --noconfirm -S --needed imagemagick:p
-          magick "${SRC_DIR}"/data/pixmaps/256x256/darktable.png -define icon:auto-resize="256,128,64,48,32,16" "${INSTALL_PREFIX}"/dt_logo_multiresolution.ico
+          magick "${SRC_DIR}"/data/pixmaps/256x256/libre-dt-lab.png -define icon:auto-resize="256,128,64,48,32,16" "${INSTALL_PREFIX}"/dt_logo_multiresolution.ico
       - name: Create Inno Setup installer
         shell: pwsh
         run: |
@@ -349,8 +349,8 @@ jobs:
           retention-days: 2
 
   macOS:
-    if: github.repository == 'darktable-org/darktable' || github.repository == 'Christian-Bouhon/libre-dt-lab' || github.event_name == 'workflow_dispatch'
-    name: Nightly darktable macOS
+    if: github.repository == 'Christian-Bouhon/libre-dt-lab' || github.event_name == 'workflow_dispatch'
+    name: Nightly libre-dt-lab macOS
     runs-on: ${{ matrix.build.os }}
     strategy:
       fail-fast: true
@@ -443,16 +443,16 @@ jobs:
     runs-on: ubuntu-latest
     needs: [AppImage, Windows, macOS]
     steps:
-      - name: Checkout master to update 'nightly' tag
-        if: github.ref_name == 'master' # will be true only for nightly builds
+      - name: Checkout main to update 'nightly' tag
+        if: github.ref_name == 'main' || github.ref_name == 'essai'
         uses: actions/checkout@v6
         with:
-          ref: master
+          ref: main
           submodules: false
           path: src
           fetch-depth: 1
       - name: Force move 'nightly' tag
-        if: github.ref_name == 'master' # will be true only for nightly builds
+        if: github.ref_name == 'main' || github.ref_name == 'essai'
         run: |
           pushd src
           # Delete and recreate nightly tag instead of just force retargeting.
