@@ -17,10 +17,10 @@ If(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
 endif(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
 
 if(DEFINED PROJECT_VERSION)
-  project(darktable VERSION ${PROJECT_VERSION} LANGUAGES CXX C)
+  project(libre-dt-lab VERSION ${PROJECT_VERSION} LANGUAGES CXX C)
 else()
   # Actual version string will be generated from git later
-  project(darktable VERSION 0 LANGUAGES CXX C)
+  project(libre-dt-lab VERSION 0 LANGUAGES CXX C)
 endif()
 
 # Allow forcing the C/CPP compiler that is actually used during the compilation

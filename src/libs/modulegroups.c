@@ -1497,6 +1497,12 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
         AM("agx/look/saturation");	                                                                          \
         AM("agx/look/preserve hue");	                                                                          \
       }														  \
+      else if(wf_basecurve)                                                                                       \
+      {                                                                                                           \
+        AM("basecurve/highlight gain");                                                                           \
+        AM("basecurve/shadow lift");                                                                              \
+        AM("basecurve/color look");                                                                               \
+      }                                                                                                           \
       AM("channelmixerrgb/temperature");                                                                          \
       AM("channelmixerrgb/chroma");                                                                               \
       AM("channelmixerrgb/hue");                                                                                  \
@@ -1554,6 +1560,8 @@ void init_presets(dt_lib_module_t *self)
     dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (sigmoid)");
   const gboolean wf_agx =
     dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (AgX)");
+  const gboolean wf_basecurve =
+    dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (basecurve)");
   const gboolean wf_none =
     dt_conf_is_equal("plugins/darkroom/workflow", "none");
 
@@ -1647,6 +1655,7 @@ void init_presets(dt_lib_module_t *self)
   AM("censorize");
   AM("blurs");
   AM("diffuse");
+  AM("contrast");
 
   dt_lib_presets_add(_("modules: all"),
                      self->plugin_name, self->version(), tx, strlen(tx), TRUE, 0);
@@ -1753,6 +1762,8 @@ void init_presets(dt_lib_module_t *self)
     AM("sigmoid");
   if(wf_agx || wf_none)
     AM("agx");
+  if(wf_basecurve || wf_none)
+    AM("basecurve");
   AM("toneequal");
   AM("crop");
   AM("ashift");
@@ -1794,6 +1805,7 @@ void init_presets(dt_lib_module_t *self)
   AM("censorize");
   AM("blurs");
   AM("diffuse");
+  AM("contrast");
 
   dt_lib_presets_add(_("workflow: scene-referred"),
                      self->plugin_name, self->version(), tx, strlen(tx), TRUE, 0);
@@ -1853,6 +1865,8 @@ static gchar *_presets_get_minimal(dt_lib_module_t *self)
                                                "scene-referred (sigmoid)");
   const gboolean wf_agx = dt_conf_is_equal("plugins/darkroom/workflow",
                                                "scene-referred (AgX)");
+  const gboolean wf_basecurve = dt_conf_is_equal("plugins/darkroom/workflow",
+                                               "scene-referred (basecurve)");
 
   // all modules
   gchar *tx = NULL;
@@ -1870,6 +1884,8 @@ static gchar *_presets_get_minimal(dt_lib_module_t *self)
       AM("sigmoid");
     else if(wf_agx)
       AM("agx");
+    else if(wf_basecurve)
+      AM("basecurve");
   }
   else
     AM("basecurve");

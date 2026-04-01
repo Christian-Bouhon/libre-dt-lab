@@ -399,7 +399,7 @@ gboolean dt_image_safe_remove(const dt_imgid_t imgid)
   {
     // finally check if we have a .xmp for the local copy. If no
     // modification done on the local copy it is safe to remove.
-    g_strlcat(pathname, ".xmp", sizeof(pathname));
+    g_strlcat(pathname, ".lab.xmp", sizeof(pathname));
     return !g_file_test(pathname, G_FILE_TEST_EXISTS);
   }
 }
@@ -1299,7 +1299,7 @@ static int32_t _image_get_possible_version(const dt_imgid_t imgid,
     g_strlcpy(versionpath, imgpath, sizeof(versionpath));
     dt_image_path_append_version_no_db(version, versionpath, sizeof(versionpath));
     const size_t len = strlen(versionpath);
-    g_snprintf(versionpath + len, sizeof(versionpath) - len, "%s", ".xmp");
+    g_snprintf(versionpath + len, sizeof(versionpath) - len, "%s", ".lab.xmp");
     if(!(g_file_test(versionpath, G_FILE_TEST_EXISTS) && g_file_test(versionpath, G_FILE_TEST_IS_REGULAR)))
     {
       safe_max_version = version;
@@ -1646,16 +1646,29 @@ GList* dt_image_find_duplicates(const char* filename)
   GList* files = NULL;
 
   // check for file.ext.xmp
-  static const char xmp[] = ".xmp";
+  static const char xmp[] = ".lab.xmp";
   const size_t xmp_len = strlen(xmp);
   // concatenate filename and sidecar extension
+  // xmp_compat for darktable fallback — declared here to avoid static-in-block issue
+  const char xmp_compat[] = ".xmp";
+  // First try .lab.xmp (Libre DT-Lab native format)
   g_strlcpy(pattern,  filename, sizeof(pattern));
   g_strlcpy(pattern + fn_len, xmp, sizeof(pattern) - fn_len);
   if(dt_util_test_image_file(pattern))
   {
-    // the default sidecar exists, is readable and is a regular file
-    // with lenght > 0, so add it to the list
+    // the .lab.xmp sidecar exists — use it
     files = g_list_prepend(files, g_strdup(pattern));
+  }
+  else
+  {
+    // fallback: try .xmp (darktable compatibility)
+    g_strlcpy(pattern,  filename, sizeof(pattern));
+    g_strlcpy(pattern + fn_len, xmp_compat, sizeof(pattern) - fn_len);
+    if(dt_util_test_image_file(pattern))
+    {
+      // the .xmp sidecar exists — import from darktable
+      files = g_list_prepend(files, g_strdup(pattern));
+    }
   }
 
   // now collect all file_N*N.ext.xmp matches
@@ -1702,26 +1715,24 @@ static int _image_read_duplicates(const uint32_t id,
 
   // we store the xmp filename without version part in pattern to
   // speed up string comparison later
-  g_snprintf(pattern, sizeof(pattern), "%s.xmp", filename);
-
+  g_snprintf(pattern, sizeof(pattern), "%s.lab.xmp", filename);
+  gchar pattern_compat[PATH_MAX] = { 0 };
+  g_snprintf(pattern_compat, sizeof(pattern_compat), "%s.xmp", filename);
   for(GList *file_iter = files; file_iter; file_iter = g_list_next(file_iter))
   {
     const gchar *xmpfilename = file_iter->data;
     int version = -1;
-
-    // we need to get the version number of the sidecar filename
-    if(!strncmp(xmpfilename, pattern, sizeof(pattern)))
+    const gboolean is_lab_xmp = g_str_has_suffix(xmpfilename, ".lab.xmp");
+    const int ext_skip = is_lab_xmp ? 9 : 5;
+    if(!strncmp(xmpfilename, pattern, sizeof(pattern))
+       || !strncmp(xmpfilename, pattern_compat, sizeof(pattern_compat)))
     {
-      // this is an xmp file without version number which corresponds
-      // to version 0.
       version = 0;
     }
     else
     {
-      // we need to derive the version number from the filename
-
       gchar *c3 = (gchar *)xmpfilename + strlen(xmpfilename)
-        - 5; // skip over .xmp extension; position c3 at character before the '.'
+        - ext_skip;
 
       // skip over filename extension; position c3 is at character '.'
       while(*c3 != '.' && c3 > xmpfilename)
@@ -1810,7 +1821,8 @@ static dt_imgid_t _image_import_internal(const dt_filmid_t film_id,
     ;
   if(!strcasecmp(cc, ".dt")
      || !strcasecmp(cc, ".dttags")
-     || !strcasecmp(cc, ".xmp"))
+     || !strcasecmp(cc, ".xmp")
+     || !strcasecmp(cc, ".lab.xmp"))
   {
     g_free(normalized_filename);
     return NO_IMGID;
@@ -2026,7 +2038,7 @@ static dt_imgid_t _image_import_internal(const dt_filmid_t film_id,
     char dtfilename[PATH_MAX] = { 0 };
     g_strlcpy(dtfilename, normalized_filename, sizeof(dtfilename));
     // dt_image_path_append_version(id, dtfilename, sizeof(dtfilename));
-    g_strlcat(dtfilename, ".xmp", sizeof(dtfilename));
+    g_strlcat(dtfilename, ".lab.xmp", sizeof(dtfilename));
 
     res = dt_exif_xmp_read(img, dtfilename, FALSE);
   }
@@ -2364,8 +2376,8 @@ gboolean dt_image_rename(const dt_imgid_t imgid,
         g_strlcpy(newxmp, newimg, sizeof(newxmp));
         dt_image_path_append_version(id, oldxmp, sizeof(oldxmp));
         dt_image_path_append_version(id, newxmp, sizeof(newxmp));
-        g_strlcat(oldxmp, ".xmp", sizeof(oldxmp));
-        g_strlcat(newxmp, ".xmp", sizeof(newxmp));
+        g_strlcat(oldxmp, ".lab.xmp", sizeof(oldxmp));
+        g_strlcat(newxmp, ".lab.xmp", sizeof(newxmp));
 
         GFile *goldxmp = g_file_new_for_path(oldxmp);
         GFile *gnewxmp = g_file_new_for_path(newxmp);
@@ -2890,7 +2902,7 @@ gboolean dt_image_local_copy_reset(const dt_imgid_t imgid)
   from_cache = TRUE;
   dt_image_full_path(imgid, locppath, sizeof(locppath), &from_cache);
   dt_image_path_append_version(imgid, locppath, sizeof(locppath));
-  g_strlcat(locppath, ".xmp", sizeof(locppath));
+  g_strlcat(locppath, ".lab.xmp", sizeof(locppath));
 
   // a local copy exists, but the original is not accessible
 
@@ -2927,7 +2939,7 @@ gboolean dt_image_local_copy_reset(const dt_imgid_t imgid)
 
     // delete xmp if any
     dt_image_path_append_version(imgid, locppath, sizeof(locppath));
-    g_strlcat(locppath, ".xmp", sizeof(locppath));
+    g_strlcat(locppath, ".lab.xmp", sizeof(locppath));
     dest = g_file_new_for_path(locppath);
 
     if(g_file_test(locppath, G_FILE_TEST_EXISTS)) g_file_delete(dest, NULL, NULL);
@@ -2987,7 +2999,7 @@ gboolean dt_image_write_sidecar_file(const dt_imgid_t imgid)
   gboolean error = FALSE;
 
   dt_image_path_append_version(imgid, filename, sizeof(filename));
-  g_strlcat(filename, ".xmp", sizeof(filename));
+  g_strlcat(filename, ".lab.xmp", sizeof(filename));
 
   // the sidecar is written only if required
   if((xmp_mode == DT_WRITE_XMP_ALWAYS)

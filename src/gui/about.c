@@ -36,15 +36,15 @@ void darktable_show_about_dialog()
   gtk_about_dialog_set_copyright(GTK_ABOUT_DIALOG(dialog), copyright);
   g_free(copyright);
   gtk_about_dialog_set_comments(GTK_ABOUT_DIALOG(dialog),
-                                _("organize and develop images from digital cameras"));
-  gtk_about_dialog_set_website(GTK_ABOUT_DIALOG(dialog), "https://www.darktable.org/");
+                                _("Libre DT-Lab — experimental darktable fork with multi-scale contrast and scene-referred basecurve workflow"));
+  gtk_about_dialog_set_website(GTK_ABOUT_DIALOG(dialog), "https://github.com/Christian-Bouhon/libre-dt-lab");
   gtk_about_dialog_set_website_label(GTK_ABOUT_DIALOG(dialog), "website");
   const dt_logo_season_t season = dt_util_get_logo_season();
   char *icon;
   if(season != DT_LOGO_SEASON_NONE)
-    icon = g_strdup_printf("darktable-%d", (int)season);
+    icon = g_strdup_printf("libre-dt-lab-%d", (int)season);
   else
-    icon = g_strdup("darktable");
+    icon = g_strdup("libre-dt-lab");
   gtk_about_dialog_set_logo_icon_name(GTK_ABOUT_DIALOG(dialog), icon);
   g_free(icon);
 

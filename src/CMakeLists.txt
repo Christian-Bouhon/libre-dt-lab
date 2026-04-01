@@ -1045,7 +1045,7 @@ if(WIN32)
   # Export all symbols on Windows so modules can access library functions
   set_target_properties(lib_darktable PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
 endif(WIN32)
-set_target_properties(lib_darktable PROPERTIES OUTPUT_NAME darktable)
+set_target_properties(lib_darktable PROPERTIES OUTPUT_NAME libre-dt-lab)
 set_target_properties(lib_darktable PROPERTIES LINKER_LANGUAGE C)
 
 #
