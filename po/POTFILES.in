@@ -96,9 +96,9 @@ build/lib/darktable/plugins/introspection_vibrance.c
 build/lib/darktable/plugins/introspection_vignette.c
 build/lib/darktable/plugins/introspection_watermark.c
 build/lib/darktable/plugins/introspection_zonesystem.c
-build/share/darktable/org.darktable.darktable.desktop.in
-data/org.darktable.darktable.appdata.xml.in
-data/org.darktable.darktable.desktop.in
+build/share/darktable/org.libre-dt-lab.libre-dt-lab.desktop.in
+data/org.libredtlab.libredtlab.appdata.xml.in
+data/org.libre-dt-lab.libre-dt-lab.desktop.in
 src/bauhaus/bauhaus.c
 src/chart/main.c
 src/cli/main.c

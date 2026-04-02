@@ -272,14 +272,14 @@ message(STATUS "Looking for external programs")
 find_program(perl_BIN perl REQUIRED)
 message(STATUS "Found perl")
 
-# we need intltool-merge for org.darktable.darktable.desktop
+# we need intltool-merge for org.libre-dt-lab.libre-dt-lab.desktop
 find_program(intltool_merge_BIN intltool-merge REQUIRED)
 message(STATUS "Found intltool-merge")
 
-# we need desktop-file-validate to check org.darktable.darktable.desktop
+# we need desktop-file-validate to check org.libre-dt-lab.libre-dt-lab.desktop
 find_program(desktop_file_validate_BIN desktop-file-validate)
 if(${desktop_file_validate_BIN} STREQUAL "desktop_file_validate_BIN-NOTFOUND")
-  message(STATUS "Missing desktop-file-validate, problems in org.darktable.darktable.desktop might go unnoticed")
+  message(STATUS "Missing desktop-file-validate, problems in org.libre-dt-lab.libre-dt-lab.desktop might go unnoticed")
   set(VALIDATE_DESKTOP_FILE 0)
 else(${desktop_file_validate_BIN} STREQUAL "desktop_file_validate_BIN-NOTFOUND")
   message(STATUS "Found desktop-file-validate")

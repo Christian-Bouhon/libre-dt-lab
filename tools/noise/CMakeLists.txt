@@ -5,6 +5,7 @@ if ((NOT WIN32) OR BUILD_MSYS2_INSTALL)
     include_directories(${GMODULE_INCLUDE_DIRS})
 
     add_executable(darktable-noiseprofile noiseprofile.c)
+    set_target_properties(darktable-noiseprofile PROPERTIES OUTPUT_NAME libre-dt-lab-noiseprofile)
     target_link_libraries(darktable-noiseprofile m)
 
     install(TARGETS

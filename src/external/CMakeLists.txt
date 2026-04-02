@@ -35,7 +35,7 @@ set(BUILD_FUZZERS OFF CACHE BOOL "" FORCE)
 set(WITH_OPENMP ${USE_OPENMP} CACHE BOOL "" FORCE)
 
 set(RAWSPEED_PATH "${CMAKE_CURRENT_SOURCE_DIR}/rawspeed")
-set(RAWSPEED_BINARY_PREFIX "darktable")
+set(RAWSPEED_BINARY_PREFIX "libre-dt-lab")
 
 if(NOT(EXISTS "${RAWSPEED_PATH}" AND IS_DIRECTORY "${RAWSPEED_PATH}" AND EXISTS "${RAWSPEED_PATH}/CMakeLists.txt"))
   message(FATAL_ERROR "RawSpeed submodule not found. You probably want to run:\n$ git submodule init\nand then\n$ git submodule update")

@@ -1,7 +1,7 @@
 include_directories(${DARKTABLE_BINDIR})
 add_executable(darktable-cltest main.c)
 
-set_target_properties(darktable-cltest PROPERTIES LINKER_LANGUAGE C)
+set_target_properties(darktable-cltest PROPERTIES LINKER_LANGUAGE C OUTPUT_NAME libre-dt-lab-cltest)
 target_link_libraries(darktable-cltest lib_darktable)
 
 if (WIN32)

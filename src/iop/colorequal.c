@@ -3553,7 +3553,9 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->display_mode, _("select display mode"));
   g_signal_connect(G_OBJECT(g->display_mode), "changed",
                    G_CALLBACK(_display_mode_callback), self);
-  gtk_box_pack_start(GTK_BOX(options), g->display_mode, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(options),
+                     dt_gui_hbox(dt_ui_label_new(_("display mode")), 
+                     g->display_mode), FALSE, FALSE, 0);
 
   self->widget = options;
 

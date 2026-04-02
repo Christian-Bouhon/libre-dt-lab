@@ -1,7 +1,7 @@
 include_directories(${DARKTABLE_BINDIR})
 add_executable(darktable-generate-cache main.c)
 
-set_target_properties(darktable-generate-cache PROPERTIES LINKER_LANGUAGE C)
+set_target_properties(darktable-generate-cache PROPERTIES LINKER_LANGUAGE C OUTPUT_NAME libre-dt-lab-generate-cache)
 target_link_libraries(darktable-generate-cache lib_darktable whereami)
 
 if (WIN32)

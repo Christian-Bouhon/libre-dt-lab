@@ -35,7 +35,7 @@ export DESTDIR=../AppDir
 # in the Exec field (relying on the OS's path lookup functionality).
 # When we'll do the same, this hack can be removed.
 cd build
-sed -i 's/\/usr\/bin\///' ../AppDir/usr/share/applications/org.darktable.darktable.desktop
+sed -i 's/\/usr\/bin\///' ../AppDir/usr/share/applications/org.libre-dt-lab.libre-dt-lab.desktop
 
 # The caller of the script should run `sudo lensfun-update-data` before making
 # AppImage, for the nightly builds we did this in the GitHub Action.
@@ -94,9 +94,9 @@ export DISABLE_COPYRIGHT_FILES_DEPLOYMENT=1
 
 # Instruct LDAI (LinuxDeploy AppImage plugin) to embed AppImage update information
 if [ "$DARKTABLE_APPIMAGE_UPDATE" == "release" ]; then
-  export LDAI_UPDATE_INFORMATION="gh-releases-zsync|darktable-org|darktable|latest|Darktable-*-$ARCH.AppImage.zsync"
+  export LDAI_UPDATE_INFORMATION="gh-releases-zsync|Christian-Bouhon|libre-dt-lab|latest|Libre-dt-lab-*-$ARCH.AppImage.zsync"
 elif [ "$DARKTABLE_APPIMAGE_UPDATE" != "no" ]; then
-  export LDAI_UPDATE_INFORMATION="gh-releases-zsync|darktable-org|darktable|nightly|Darktable-*-$ARCH.AppImage.zsync"
+  export LDAI_UPDATE_INFORMATION="gh-releases-zsync|Christian-Bouhon|libre-dt-lab|nightly|Libre-dt-lab-*-$ARCH.AppImage.zsync"
 fi
 
 # '--deploy-deps-only' are needed to tell linuxdeploy where to collect deps of

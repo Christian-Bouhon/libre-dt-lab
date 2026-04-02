@@ -1,4 +1,4 @@
-name: Essai PKG
+name: Libre PKG
 
 on:
   schedule:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - essai
+      - libre
 
 permissions:
   contents: read
@@ -15,7 +15,7 @@ permissions:
 jobs:
   AppImage:
     if: github.repository == 'darktable-org/darktable' || github.repository == 'Christian-Bouhon/libre-dt-lab' || github.event_name == 'workflow_dispatch'
-    name: Essai darktable AppImage
+    name: Libre darktable AppImage
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -166,7 +166,6 @@ jobs:
           git clone -b ${{ github.ref_name }} https://github.com/${{ github.repository }} src
           pushd src
           git submodule init
-          git config submodule.src/tests/integration.update none
           git submodule update
           popd
       - name: Update Lensfun data
@@ -179,17 +178,25 @@ jobs:
       - name: Rename artifacts
         run: |
           cd src/build
-          for f in Darktable-*; do mv "$f" "${f/Darktable-/libre-dt-lab-}"; done
+          for f in *.AppImage; do 
+            if [ -f "$f" ]; then 
+              newname=$(echo "$f" | sed -E 's/Libre_DT-Lab/libre-dt-lab/gi; s/Libre-dt-lab/libre-dt-lab/gi; s/Libredt-lab/libre-dt-lab/gi; s/Darktable/libre-dt-lab/gi; s/_/-/g')
+              if [ "$f" != "$newname" ]; then
+                mv "$f" "$newname"
+              fi
+            fi
+          done
+          ls -la *.AppImage 2>/dev/null || true
       - name: Package upload
         uses: actions/upload-artifact@v7
         with:
-          path: ${{ github.workspace }}/src/build/libre-dt-lab-*.AppImage*
+          path: ${{ github.workspace }}/src/build/*.AppImage*
           name: artifact-appimage-${{ runner.arch }}
           retention-days: 1
 
   Windows:
     if: github.repository == 'darktable-org/darktable' || github.repository == 'Christian-Bouhon/libre-dt-lab' || github.event_name == 'workflow_dispatch'
-    name: Essai darktable Windows
+    name: Libre darktable Windows
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
@@ -231,6 +238,7 @@ jobs:
           pacboy: >-
             cc:p
             cmake:p
+            libarchive:p
             libxslt:p
             ninja:p
             python-jsonschema:p
@@ -297,7 +305,6 @@ jobs:
           git clone -b ${{ github.ref_name }} https://github.com/${{ github.repository }} src
           pushd src
           git submodule init
-          git config submodule.src/tests/integration.update none
           git submodule update
           popd
       - name: Update Lensfun data
@@ -313,14 +320,14 @@ jobs:
           # Create multi-resolution .ico file expected by the .iss script for use as setup file icon.
           # Use MSYS2 ImageMagick as pre-installed IM is not working on the WoA runner.
           pacboy --noconfirm -S --needed imagemagick:p
-          magick "${SRC_DIR}"/data/pixmaps/256x256/darktable.png -define icon:auto-resize="256,128,64,48,32,16" "${INSTALL_PREFIX}"/dt_logo_multiresolution.ico
+          magick "${SRC_DIR}"/data/pixmaps/256x256/libre-dt-lab.png -define icon:auto-resize="256,128,64,48,32,16" "${INSTALL_PREFIX}"/dt_logo_multiresolution.ico
       - name: Create Inno Setup installer
         shell: pwsh
         run: |
           choco upgrade innosetup --no-progress
           cd ${{ env.INSTALL_PREFIX }}
-          cp ${{ env.BUILD_DIR }}/darktable.iss ./
-          iscc "darktable.iss"
+          cp ${{ env.BUILD_DIR }}/libre-dt-lab.iss ./
+          iscc "libre-dt-lab.iss"
           mv Output/*.exe ${{ env.BUILD_DIR }}/
       - name: Create portable ZIP
         if: runner.arch != 'ARM64'
@@ -335,10 +342,6 @@ jobs:
           cd ${SRC_DIR}
           echo "VERSION=$(git describe --tags --match release-* | sed 's/^release-//;s/-/+/;s/-/~/;s/rc/~rc/')" >> $GITHUB_ENV
           ([[ ${MSYSTEM_CARCH} == x86_64 ]] && echo "SYSTEM=win64" || echo "SYSTEM=woa64") >> $GITHUB_ENV
-      - name: Rename artifacts
-        run: |
-          cd "${BUILD_DIR}"
-          for f in darktable-*.exe; do mv "$f" "${f/darktable-/libre-dt-lab-}"; done
       - name: Package upload
         uses: actions/upload-artifact@v7
         with:
@@ -350,7 +353,7 @@ jobs:
 
   macOS:
     if: github.repository == 'darktable-org/darktable' || github.repository == 'Christian-Bouhon/libre-dt-lab' || github.event_name == 'workflow_dispatch'
-    name: Essai darktable macOS
+    name: Libre darktable macOS
     runs-on: ${{ matrix.build.os }}
     strategy:
       fail-fast: true
@@ -385,6 +388,7 @@ jobs:
           # fetch the entire history to correctly generate the version for the disk image filename
           git clone -b ${{ github.ref_name }} https://github.com/${{ github.repository }} src
           pushd src
+          git fetch --tags
           git submodule init
           git config submodule.src/tests/integration.update none
           git submodule update
@@ -413,51 +417,43 @@ jobs:
           ./src/.ci/ci-script.sh;
       - name: Build macOS package
         run: |
-          ./src/packaging/macosx/3_make_hb_darktable_package.sh
+          ./src/packaging/macosx/3_make_hb_libre-dt-lab_package.sh
       - name: Create DMG file
         run: |
-          ./src/packaging/macosx/4_make_hb_darktable_dmg.sh
-      - name: Get version info
-        run: |
-          cd ${SRC_DIR}
-          echo "VERSION=$(git describe --tags --match release-* | sed 's/^release-//;s/-/+/;s/-/~/;s/rc/~rc/')" >> $GITHUB_ENV
-          echo "ARCHITECTURE=$(uname -m)" >> $GITHUB_ENV
-      - name: Rename artifacts
-        run: |
-          mv "${{ env.INSTALL_PREFIX }}/darktable-${{ env.VERSION }}-${{ env.ARCHITECTURE }}.dmg" "${{ env.INSTALL_PREFIX }}/libre-dt-lab-${{ env.VERSION }}-${{ env.ARCHITECTURE }}.dmg"
+          ./src/packaging/macosx/4_make_hb_libre-dt-lab_dmg.sh
       - name: Package upload
         uses: actions/upload-artifact@v7
         with:
-          path: ${{ env.INSTALL_PREFIX }}/libre-dt-lab-${{ env.VERSION }}-${{ env.ARCHITECTURE }}.dmg
+          path: ${{ env.INSTALL_PREFIX }}/libre-dt-lab-*.dmg
           name: artifact-macos-${{ runner.arch }}
           retention-days: 2
 
   upload_to_release:
     permissions:
-      # We need write permission to update the Essai tag
+      # We need write permission to update the Libre tag
       contents: write
     runs-on: ubuntu-latest
     needs: [AppImage, Windows, macOS]
     steps:
-      - name: Checkout master to update 'Essai' tag
-        if: github.ref_name == 'master' # will be true only for Essai builds
+      - name: Checkout master to update 'Libre' tag
+        if: github.ref_name == 'master' # will be true only for Libre builds
         uses: actions/checkout@v6
         with:
           ref: master
           submodules: false
           path: src
           fetch-depth: 1
-      - name: Force move 'Essai' tag
-        if: github.ref_name == 'master' # will be true only for Essai builds
+      - name: Force move 'Libre' tag
+        if: github.ref_name == 'master' # will be true only for Libre builds
         run: |
           pushd src
-          # Delete and recreate Essai tag instead of just force retargeting.
+          # Delete and recreate Libre tag instead of just force retargeting.
           # This updates the tag creation date. Without this, the github-shown
           # release date will be stuck on the date the tag was created.
-          git tag -d Essai || true
-          git push origin --delete Essai
-          git tag Essai
-          git push origin Essai
+          git tag -d Libre || true
+          git push origin --delete Libre
+          git tag Libre
+          git push origin Libre
           popd
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -475,9 +471,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          allowUpdates: true     # required to allow Essai release updates
-          removeArtifacts: true  # we don't want to pile up old artifacts in the Essai release
-          tag: Essai
+          allowUpdates: true     # required to allow Libre release updates
+          removeArtifacts: true  # we don't want to pile up old artifacts in the Libre release
+          tag: Libre
           prerelease: true
           # We don't want a stable release that is in the process of being prepared
           # and not yet ready for publication to be visible

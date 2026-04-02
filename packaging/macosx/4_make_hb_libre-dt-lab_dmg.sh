@@ -11,7 +11,7 @@ trap 'echo "${BASH_SOURCE[0]}{${FUNCNAME[0]}}:${LINENO}: Error: command \`${BASH
 export PATH="/usr/bin:/bin:$PATH"
 
 # Define application name
-PROGN=darktable
+PROGN=libre-dt-lab
 
 # Go to directory of script
 scriptDir=$(dirname "$0")
@@ -71,12 +71,14 @@ fi
 device=$(hdiutil attach -readwrite -noverify -autoopen "pack.temp.dmg" |
     egrep '^/dev/' | sed 1q | awk '{print $1}')
 
+# Use quoted product name to handle hyphens in AppleScript
 echo '
- set {product_name} to words of (do shell script "printf \"%s\", '${PROGN}'")
- set background to alias ("Volumes:"&product_name&":.background:macos_install_background.png")
+ set product_name to "'${PROGN}'"
+ set background_path to "Volumes:" & product_name & ":.background:macos_install_background.png"
+ set background to alias background_path
 
  tell application "Finder"
-    tell disk "'${PROGN}'"
+    tell disk product_name
         set current view of container window to icon view
         set toolbar visible of container window to false
         set statusbar visible of container window to false
@@ -85,7 +87,7 @@ echo '
         set arrangement of theViewOptions to not arranged
         set icon size of theViewOptions to 72
         set background picture of theViewOptions to background
-        set position of item "'${PROGN}'" of container window to {100, 150}
+        set position of item product_name of container window to {100, 150}
         set position of item "Applications" of container window to {400, 150}
         update without registering applications
     end tell
@@ -96,7 +98,8 @@ echo '
 chmod -Rf go-w /Volumes/"${PROGN}"
 sync
 hdiutil detach ${device}
-DMG="${PROGN}-$(git describe --tags --match release-* | sed 's/^release-//;s/-/+/;s/-/~/;s/rc/~rc/')-$(uname -m)"
+VERSION=$(git describe --tags --match release-* 2>/dev/null | sed 's/^release-//;s/-/+/;s/-/~/;s/rc/~rc/') || VERSION=$(git rev-parse --short HEAD)
+DMG="${PROGN}-${VERSION}-$(uname -m)"
 hdiutil convert "pack.temp.dmg" -format UDZO -imagekey zlib-level=9 -o "${DMG}"
 
 #cleanup
@@ -106,5 +109,5 @@ rm -rf package/.background
 
 # Sign dmg image when a certificate has been provided
 if [ -n "$CODECERT" ]; then
-    codesign --deep --verbose --force --options runtime -i "org.darktable" -s "${CODECERT}" "${DMG}".dmg
+    codesign --deep --verbose --force --options runtime -i "org.libre-dt-lab" -s "${CODECERT}" "${DMG}".dmg
 fi

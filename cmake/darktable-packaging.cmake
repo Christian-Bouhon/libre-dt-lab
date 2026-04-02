@@ -11,7 +11,7 @@ set(CPACK_SOURCE_IGNORE_FILES
     "/.deps/"
     "/.build/"
 )
-set(CPACK_PACKAGE_EXECUTABLES darktable)
+set(CPACK_PACKAGE_EXECUTABLES libre-dt-lab)
 set(CPACK_SOURCE_GENERATOR "TGZ")
 set(CPACK_GENERATOR "TGZ")
 SET(CPACK_SOURCE_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}")
@@ -52,16 +52,16 @@ if(WIN32)
     set(ARCH_STRING "woa64")
   endif()
 
-  # add darktable association with all supported image file types for Inno Setup
+  # add Libre DT-Lab association with all supported image file types for Inno Setup
   foreach(EXTENSION ${DT_SUPPORTED_EXTENSIONS})
-    SET(CMAKE_ADD_DARKTABLE_TO_OPENWITHLIST "${CMAKE_ADD_DARKTABLE_TO_OPENWITHLIST}
-      Root:HKA; Subkey: \"Software\\Classes\\.${EXTENSION}\\OpenWithList\\darktable.exe\"; Flags: uninsdeletekey
+    SET(CMAKE_ADD_LIBRE_DT_LAB_TO_OPENWITHLIST "${CMAKE_ADD_LIBRE_DT_LAB_TO_OPENWITHLIST}
+      Root:HKA; Subkey: \"Software\\Classes\\.${EXTENSION}\\OpenWithList\\libre-dt-lab.exe\"; Flags: uninsdeletekey
     ")
   endforeach(EXTENSION)
 
   configure_file(
-    ${CMAKE_SOURCE_DIR}/packaging/windows/darktable.iss.in
-    ${CMAKE_BINARY_DIR}/darktable.iss
+    ${CMAKE_SOURCE_DIR}/packaging/windows/libre-dt-lab.iss.in
+    ${CMAKE_BINARY_DIR}/libre-dt-lab.iss
   )
 
   if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64")
@@ -72,7 +72,7 @@ if(WIN32)
   else()
     set(CPACK_GENERATOR "NSIS")
     set(CPACK_SYSTEM_NAME win64-NSIS-deprecated)
-    set(CPACK_PACKAGE_EXECUTABLES "darktable" "darktable")
+    set(CPACK_PACKAGE_EXECUTABLES "libre-dt-lab" "Libre DT-Lab")
     set(CPACK_PACKAGE_INSTALL_DIRECTORY "${CMAKE_PROJECT_NAME}")
     # There is a bug in NSIS that does not handle full unix paths properly. Make
     # sure there is at least one set of four (4) backlasshes.
@@ -80,7 +80,7 @@ if(WIN32)
     SET(CPACK_NSIS_MUI_ICON "${CMAKE_CURRENT_SOURCE_DIR}/data/pixmaps/dt_logo_128x128.ico")
     SET(CPACK_NSIS_MUI_UNIICON "${CMAKE_CURRENT_SOURCE_DIR}/data/pixmaps/dt_logo_128x128.ico")
     SET(CPACK_NSIS_INSTALLED_ICON_NAME "bin\\\\${CMAKE_PROJECT_NAME}.exe")
-    SET(CPACK_NSIS_DISPLAY_NAME "darktable")
+    SET(CPACK_NSIS_DISPLAY_NAME "Libre DT-Lab")
     SET(CPACK_NSIS_HELP_LINK "https://www.darktable.org/install/")
     SET(CPACK_NSIS_URL_INFO_ABOUT "https://www.darktable.org/")
     SET(CPACK_NSIS_MODIFY_PATH OFF)
@@ -88,25 +88,25 @@ if(WIN32)
 
     set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
 
-    # register dt in the Windows registry. this is needed for GIMP to find dt.
+    # register Libre DT-Lab in the Windows registry. this is needed for GIMP to find it.
     SET(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
-        WriteRegStr HKLM 'SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\App Paths\\\\darktable.exe' '' '$INSTDIR\\\\bin\\\\darktable.exe'
-        WriteRegStr HKLM 'SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\App Paths\\\\darktable-cli.exe' '' '$INSTDIR\\\\bin\\\\darktable-cli.exe'
-        WriteRegStr HKLM 'SOFTWARE\\\\Classes\\\\Applications\\\\darktable.exe\\\\shell\\\\open\\\\command' '' '\\\"$INSTDIR\\\\bin\\\\darktable.exe\\\" \\\"%1\\\"'
+        WriteRegStr HKLM 'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\libre-dt-lab.exe' '' '$INSTDIR\\bin\\libre-dt-lab.exe'
+        WriteRegStr HKLM 'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\libre-dt-lab-cli.exe' '' '$INSTDIR\\bin\\libre-dt-lab-cli.exe'
+        WriteRegStr HKLM 'SOFTWARE\\Classes\\Applications\\libre-dt-lab.exe\\shell\\open\\command' '' '\\\"$INSTDIR\\bin\\libre-dt-lab.exe\\\" \\\"%1\\\"'
     ")
     SET(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS "
-        DeleteRegKey HKLM 'SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\App Paths\\\\darktable.exe'
-        DeleteRegKey HKLM 'SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\App Paths\\\\darktable-cli.exe'
-        DeleteRegKey HKLM 'SOFTWARE\\\\Classes\\\\Applications\\\\darktable.exe'
+        DeleteRegKey HKLM 'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\libre-dt-lab.exe'
+        DeleteRegKey HKLM 'SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\libre-dt-lab-cli.exe'
+        DeleteRegKey HKLM 'SOFTWARE\\Classes\\Applications\\libre-dt-lab.exe'
     ")
 
-    # also associate dt with all the supported image file types
+    # also associate Libre DT-Lab with all the supported image file types
     foreach(EXTENSION ${DT_SUPPORTED_EXTENSIONS})
       SET(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "${CPACK_NSIS_EXTRA_INSTALL_COMMANDS}
-        WriteRegStr HKLM 'SOFTWARE\\\\Classes\\\\.${EXTENSION}\\\\OpenWithList\\\\darktable.exe' '' ''
+        WriteRegStr HKLM 'SOFTWARE\\Classes\\.${EXTENSION}\\OpenWithList\\libre-dt-lab.exe' '' ''
       ")
       SET(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS "${CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS}
-        DeleteRegKey HKLM 'SOFTWARE\\\\Classes\\\\.${EXTENSION}\\\\OpenWithList\\\\darktable.exe'
+        DeleteRegKey HKLM 'SOFTWARE\\Classes\\.${EXTENSION}\\OpenWithList\\libre-dt-lab.exe'
       ")
     endforeach(EXTENSION)
   endif()

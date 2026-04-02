@@ -8,14 +8,14 @@
     <gtk>gtk+-3.0</gtk>
   </meta>
   <plist>${project}/Info.plist</plist>
-  <main-binary>${prefix:dt}/bin/darktable</main-binary>
-  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/darktable-chart</binary>
-  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/darktable-cli</binary>
-  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/darktable-cltest</binary>
-  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/darktable-generate-cache</binary>
-  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/darktable-rs-identify</binary>
-  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/libexec/darktable/tools/darktable-curve-tool</binary>
-  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/libexec/darktable/tools/darktable-noiseprofile</binary>
+  <main-binary>${prefix:dt}/bin/libre-dt-lab</main-binary>
+  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/libre-dt-lab-chart</binary>
+  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/libre-dt-lab-cli</binary>
+  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/libre-dt-lab-cltest</binary>
+  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/libre-dt-lab-generate-cache</binary>
+  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/bin/libre-dt-lab-rs-identify</binary>
+  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/libexec/darktable/tools/libre-dt-lab-curve-tool</binary>
+  <binary dest="${bundle}/Contents/MacOS/">${prefix:dt}/libexec/darktable/tools/libre-dt-lab-noiseprofile</binary>
   <binary>${prefix:dt}/lib/darktable</binary>
   <binary dest="${bundle}/Contents/Resources/lib/libgphoto2_port">${prefix}/lib/libgphoto2_port/${pkg:libgphoto2_port:VERSION}</binary>
   <binary dest="${bundle}/Contents/Resources/lib/libgphoto2">${prefix}/lib/libgphoto2/${pkg:libgphoto2:VERSION}</binary>
@@ -29,7 +29,7 @@
   <translations name="gtk30">${prefix}/share/locale</translations>
   <translations name="gtk-mac-integration">${prefix}/share/locale</translations>
   <translations name="iso_639-2">${prefix}/share/locale</translations>
-  <translations name="darktable">${prefix:dt}/share/locale</translations>
+  <translations name="libre-dt-lab">${prefix:dt}/share/locale</translations>
   <data>${prefix:dt}/share/darktable</data>
   <data>${prefix}/share/glib-2.0/schemas/org.gtk.Settings.*.gschema.xml</data>
   <data dest="${bundle}/Contents/Resources/share/lensfun">${project}/lensfun/updates</data>

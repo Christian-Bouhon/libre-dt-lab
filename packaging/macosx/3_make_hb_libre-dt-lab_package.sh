@@ -21,11 +21,11 @@ cd "$scriptDir"/
 # Define base variables
 buildDir="../../build/macosx"
 dtPackageDir="$buildDir"/package
-dtAppName="darktable"
+dtAppName="libre-dt-lab"
 dtWorkingDir="$dtPackageDir"/"$dtAppName".app
 dtResourcesDir="$dtWorkingDir"/Contents/Resources
 dtExecDir="$dtWorkingDir"/Contents/MacOS
-dtExecutables=$(echo "$dtExecDir"/darktable{,-chart,-cli,-cltest,-generate-cache,-rs-identify,-curve-tool,-noiseprofile})
+dtExecutables=$(echo "$dtExecDir"/libre-dt-lab{,-chart,-cli,-cltest,-generate-cache,-rs-identify,-curve-tool,-noiseprofile})
 homebrewHome=$(brew --prefix)
 
 
@@ -86,13 +86,13 @@ function reset_exec_path {
     # Get shared libraries used of current executable
     oToolLDependencies=$(otool -L "$1" 2>/dev/null | grep compatibility | cut -d\( -f1 | sed 's/^[[:blank:]]*//;s/[[:blank:]]*$//' | uniq)
 
-    # Handle libdarktable.dylib
-    if [[ "$oToolLDependencies" == *"@rpath/libdarktable.dylib"* && "$1" != *"libdarktable.dylib"* ]]; then
-        # Only need to reset binaries that live outside of lib/darktable
+    # Handle liblibre-dt-lab.dylib
+    if [[ "$oToolLDependencies" == *"@rpath/liblibre-dt-lab.dylib"* && "$1" != *"liblibre-dt-lab.dylib"* ]]; then
+        # Only need to reset binaries that live outside of lib/libre-dt-lab
         oToolLoader=$(otool -l "$1" 2>/dev/null | grep '@loader_path' | cut -d\( -f1 | sed 's/^[[:blank:]]*path[[:blank:]]*//;s/[[:blank:]]*$//' )
-        if [[ "$oToolLoader" == "@loader_path/../lib/darktable" ]]; then
-            echo "Resetting loader path for libdarktable.dylib of $libraryOrigFile"
-            install_name_tool -rpath @loader_path/../lib/darktable @loader_path/../Resources/lib/darktable "$1" || true
+        if [[ "$oToolLoader" == "@loader_path/../lib/libre-dt-lab" ]]; then
+            echo "Resetting loader path for liblibre-dt-lab.dylib of $libraryOrigFile"
+            install_name_tool -rpath @loader_path/../lib/libre-dt-lab @loader_path/../Resources/lib/libre-dt-lab "$1" || true
         fi
     fi
 
@@ -149,7 +149,7 @@ function reset_exec_path {
     if [[ -n "$oToolRpaths" ]]; then
         for oToolRpath in $oToolRpaths; do
             oToolRpathNew=$(echo $oToolRpath | sed "s#@rpath/##")
-            if [[ "$oToolRpathNew" != "libdarktable.dylib" ]]; then
+            if [[ "$oToolRpathNew" != "liblibre-dt-lab.dylib" ]]; then
                 install_name_tool -change "$oToolRpath" "@executable_path/../Resources/lib/$oToolRpathNew" "$1" || true
             fi
         done
@@ -209,26 +209,28 @@ echo "APPL$dtAppName" >>"$dtWorkingDir"/Contents/PkgInfo
 cp Icons.icns "$dtResourcesDir"/
 
 # Set version information
-sed -i '' 's|{VERSION}|'$(git describe --tags --long --match '*[0-9.][0-9.][0-9]' | cut -d- -f2 | sed 's/^\([0-9]*\.[0-9]*\)$/\1.0/')'|' "$dtWorkingDir"/Contents/Info.plist
-sed -i '' 's|{COMMITS}|'$(git describe --tags --long --match '*[0-9.][0-9.][0-9]' | cut -d- -f3)'|' "$dtWorkingDir"/Contents/Info.plist
+VERSION=$(git describe --tags --long --match '*[0-9.][0-9.][0-9]' 2>/dev/null | cut -d- -f2) || VERSION=$(git rev-parse --short HEAD)
+COMMITS=$(git describe --tags --long --match '*[0-9.][0-9.][0-9]' 2>/dev/null | cut -d- -f3) || COMMITS="0"
+sed -i '' 's|{VERSION}|'$VERSION'|' "$dtWorkingDir"/Contents/Info.plist
+sed -i '' 's|{COMMITS}|'$COMMITS'|' "$dtWorkingDir"/Contents/Info.plist
 
 # Generate settings.ini
 echo "[Settings]
 gtk-icon-theme-name = Adwaita
 " >"$dtResourcesDir"/etc/gtk-3.0/settings.ini
 
-# Add darktable executables
-cp "$buildDir"/bin/darktable{,-chart,-cli,-cltest,-generate-cache,-rs-identify} "$dtExecDir"/
+# Add libre-dt-lab executables
+cp "$buildDir"/bin/libre-dt-lab{,-chart,-cli,-cltest,-generate-cache,-rs-identify} "$dtExecDir"/
 
-# Add darktable tools if existent
+# Add libre-dt-lab tools if existent
 if [[ -d "$buildDir"/libexec/darktable/tools ]]; then
     cp "$buildDir"/libexec/darktable/tools/* "$dtExecDir"/
 fi
 
-# Add darktable directories
+# Add libre-dt-lab directories
 cp -R "$buildDir"/{lib,share} "$dtResourcesDir"/
 
-# Install homebrew dependencies of darktable executables
+# Install homebrew dependencies of libre-dt-lab executables
 for dtExecutable in $dtExecutables; do
     if [[ -f "$dtExecutable" ]]; then
         install_dependencies "$dtExecutable"
@@ -328,10 +330,10 @@ cp -L "$homebrewHome"/share/themes/Mac/gtk-3.0/gtk-keys.css "$dtResourcesDir"/sh
 # Sign app bundle
 if [ -n "$CODECERT" ]; then
     # Use certificate if one has been provided
-    find ${dtWorkingDir}/Contents/Resources/lib -type f -exec codesign --verbose --force --options runtime -i "org.darktable" -s "${CODECERT}" \{} \;
-    codesign --deep --verbose --force --options runtime -i "org.darktable" -s "${CODECERT}" ${dtWorkingDir}
+    find ${dtWorkingDir}/Contents/Resources/lib -type f -exec codesign --verbose --force --options runtime -i "org.libre-dt-lab" -s "${CODECERT}" \{} \;
+    codesign --deep --verbose --force --options runtime -i "org.libre-dt-lab" -s "${CODECERT}" ${dtWorkingDir}
 else
     # Use ad-hoc signing and preserve metadata
-    find ${dtWorkingDir}/Contents/Resources/lib -type f -exec codesign --verbose --force --preserve-metadata=entitlements,requirements,flags,runtime -i "org.darktable" -s - \{} \;
-    codesign --deep --verbose --force --preserve-metadata=entitlements,requirements,flags,runtime -i "org.darktable" -s - ${dtWorkingDir}
+    find ${dtWorkingDir}/Contents/Resources/lib -type f -exec codesign --verbose --force --preserve-metadata=entitlements,requirements,flags,runtime -i "org.libre-dt-lab" -s - \{} \;
+    codesign --deep --verbose --force --preserve-metadata=entitlements,requirements,flags,runtime -i "org.libre-dt-lab" -s - ${dtWorkingDir}
 fi

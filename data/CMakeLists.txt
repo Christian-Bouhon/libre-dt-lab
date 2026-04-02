@@ -69,50 +69,50 @@ if(NOT WIN32)
   if("fits" IN_LIST DT_SUPPORTED_EXTENSIONS)
     list(APPEND DESKTOP_MIME_TYPES image/fits)
   endif()
-  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/org.darktable.darktable.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/org.darktable.darktable.desktop.in)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/org.libre-dt-lab.libre-dt-lab.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop.in)
   file(GLOB PO_FILES "${CMAKE_CURRENT_SOURCE_DIR}/../po/*.po")
   add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/org.darktable.darktable.desktop
-    COMMAND sh -c "${intltool_merge_BIN} --desktop-style \"${CMAKE_CURRENT_SOURCE_DIR}/../po\" \"${CMAKE_CURRENT_BINARY_DIR}/org.darktable.darktable.desktop.in\" \"${CMAKE_CURRENT_BINARY_DIR}/org.darktable.darktable.desktop\""
-    MAIN_DEPENDENCY ${CMAKE_CURRENT_BINARY_DIR}/org.darktable.darktable.desktop.in
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop
+    COMMAND sh -c "${intltool_merge_BIN} --desktop-style \"${CMAKE_CURRENT_SOURCE_DIR}/../po\" \"${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop.in\" \"${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop\""
+    MAIN_DEPENDENCY ${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop.in
     DEPENDS ${PO_FILES}
     )
-  add_custom_target(darktable.desktop_file ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/org.darktable.darktable.desktop)
+  add_custom_target(libre-dt-lab.desktop_file ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop)
   if(${VALIDATE_DESKTOP_FILE})
     add_custom_target(
-      validate_darktable_desktop ALL
-      COMMAND ${desktop_file_validate_BIN} --warn-kde ${CMAKE_CURRENT_BINARY_DIR}/org.darktable.darktable.desktop
-      DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/org.darktable.darktable.desktop
+      validate_libre-dt-lab_desktop ALL
+      COMMAND ${desktop_file_validate_BIN} --warn-kde ${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop
+      DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/
-      COMMENT "Checking validity of org.darktable.darktable.desktop"
+      COMMENT "Checking validity of org.libre-dt-lab.libre-dt-lab.desktop"
       )
-    add_dependencies(darktable.desktop_file validate_darktable_desktop)
+    add_dependencies(libre-dt-lab.desktop_file validate_libre-dt-lab_desktop)
   endif()
-  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/org.darktable.darktable.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications COMPONENT DTApplication)
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications COMPONENT DTApplication)
 
   if(${VALIDATE_APPDATA_FILE})
     add_custom_command(
-      OUTPUT ${DARKTABLE_SHAREDIR}/metainfo/org.darktable.darktable.appdata.xml
-      SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/org.darktable.darktable.appdata.xml.in
+      OUTPUT ${DARKTABLE_SHAREDIR}/metainfo/org.libredtlab.libredtlab.appdata.xml
+      SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/org.libredtlab.libredtlab.appdata.xml.in
       COMMAND ${CMAKE_COMMAND} -E make_directory ${DARKTABLE_SHAREDIR}/metainfo
-      COMMAND sh -c "${intltool_merge_BIN} --xml-style \"${CMAKE_CURRENT_SOURCE_DIR}/../po\" \"${CMAKE_CURRENT_SOURCE_DIR}/org.darktable.darktable.appdata.xml.in\" \"${DARKTABLE_SHAREDIR}/metainfo/org.darktable.darktable.appdata.xml\""
-      COMMAND ${appstream_util_BIN} validate --nonet ${DARKTABLE_SHAREDIR}/metainfo/org.darktable.darktable.appdata.xml
-      MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/org.darktable.darktable.appdata.xml.in
+      COMMAND sh -c "${intltool_merge_BIN} --xml-style \"${CMAKE_CURRENT_SOURCE_DIR}/../po\" \"${CMAKE_CURRENT_SOURCE_DIR}/org.libredtlab.libredtlab.appdata.xml.in\" \"${DARKTABLE_SHAREDIR}/metainfo/org.libredtlab.libredtlab.appdata.xml\""
+      COMMAND ${appstream_util_BIN} validate --nonet ${DARKTABLE_SHAREDIR}/metainfo/org.libredtlab.libredtlab.appdata.xml
+      MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/org.libredtlab.libredtlab.appdata.xml.in
       DEPENDS ${PO_FILES}
     )
   else()
     add_custom_command(
-      OUTPUT ${DARKTABLE_SHAREDIR}/metainfo/org.darktable.darktable.appdata.xml
+      OUTPUT ${DARKTABLE_SHAREDIR}/metainfo/org.libredtlab.libredtlab.appdata.xml
       COMMAND ${CMAKE_COMMAND} -E make_directory ${DARKTABLE_SHAREDIR}/metainfo
-      COMMAND sh -c "${intltool_merge_BIN} --xml-style \"${CMAKE_CURRENT_SOURCE_DIR}/../po\" \"${CMAKE_CURRENT_SOURCE_DIR}/org.darktable.darktable.appdata.xml.in\" \"${DARKTABLE_SHAREDIR}/metainfo/org.darktable.darktable.appdata.xml\""
-      MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/org.darktable.darktable.appdata.xml.in
+      COMMAND sh -c "${intltool_merge_BIN} --xml-style \"${CMAKE_CURRENT_SOURCE_DIR}/../po\" \"${CMAKE_CURRENT_SOURCE_DIR}/org.libredtlab.libredtlab.appdata.xml.in\" \"${DARKTABLE_SHAREDIR}/metainfo/org.libredtlab.libredtlab.appdata.xml\""
+      MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/org.libredtlab.libredtlab.appdata.xml.in
       DEPENDS ${PO_FILES}
     )
   endif()
 
-  add_custom_target(darktable.appdata_file ALL DEPENDS ${DARKTABLE_SHAREDIR}/metainfo/org.darktable.darktable.appdata.xml)
+  add_custom_target(libre-dt-lab.appdata_file ALL DEPENDS ${DARKTABLE_SHAREDIR}/metainfo/org.libredtlab.libredtlab.appdata.xml)
 
-  install(FILES ${DARKTABLE_SHAREDIR}/metainfo/org.darktable.darktable.appdata.xml DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/metainfo COMPONENT DTApplication)
+  install(FILES ${DARKTABLE_SHAREDIR}/metainfo/org.libredtlab.libredtlab.appdata.xml DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/metainfo COMPONENT DTApplication)
 endif(NOT WIN32)
 
 #

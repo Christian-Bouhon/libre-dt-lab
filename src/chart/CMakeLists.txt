@@ -9,8 +9,8 @@ add_executable(darktable-chart
                tonecurve.c)
 
 target_include_directories(darktable-chart
-                           PRIVATE
-                              ${CMAKE_CURRENT_BINARY_DIR}/..)
+                            PRIVATE
+                               ${CMAKE_CURRENT_BINARY_DIR}/..)
 
 target_compile_options(darktable-chart
                        PRIVATE
@@ -24,12 +24,13 @@ target_link_libraries(darktable-chart
                         lib_darktable
                         m)
 if (WIN32)
-  set_target_properties(darktable-chart PROPERTIES LINK_FLAGS "-mwindows -Wl,-subsystem,windows")
+  set_target_properties(darktable-chart PROPERTIES LINK_FLAGS "-mwindows -Wl,-subsystem,windows" OUTPUT_NAME libre-dt-lab-chart)
   _detach_debuginfo (darktable-chart bin)
 else()
     set_target_properties(darktable-chart
                           PROPERTIES
-                          INSTALL_RPATH ${RPATH_ORIGIN}/${REL_BIN_TO_LIBDIR})
+                          INSTALL_RPATH ${RPATH_ORIGIN}/${REL_BIN_TO_LIBDIR}
+                          OUTPUT_NAME libre-dt-lab-chart)
 endif(WIN32)
 
 install(TARGETS darktable-chart DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT DTApplication)

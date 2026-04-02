@@ -27,10 +27,10 @@ if [[ ! -z $APPIMAGE ]] ; then
   elif [[ -e "$HERE/usr/bin/$BINARY_NAME" ]] ; then
     EXECFILE="$HERE/usr/bin/$BINARY_NAME"
   else
-    EXECFILE="$HERE/usr/bin/darktable"
+    EXECFILE="$HERE/usr/bin/libre-dt-lab"
   fi
 else
-  EXECFILE="$HERE/usr/bin/darktable"
+  EXECFILE="$HERE/usr/bin/libre-dt-lab"
 fi
 
 exec "$EXECFILE" "$@"

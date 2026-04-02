@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Copyright (C) 2009-2025 darktable developers.
+<!-- Copyright (C) 2009-2025 Libre DT-Lab developers.
 -->
 <component type="desktop">
-  <id>org.darktable.darktable</id>
-  <name>darktable</name>
-  <launchable type="desktop-id">org.darktable.darktable.desktop</launchable>
+  <id>org.libredtlab.libredtlab</id>
+  <name>Libre DT-Lab</name>
+  <launchable type="desktop-id">org.libredtlab.libredtlab.desktop</launchable>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0+</project_license>
   <_summary>Organize and develop images from digital cameras</_summary>
-  <translation type="gettext">darktable</translation>
+  <translation type="gettext">libre-dt-lab</translation>
   <description>
     <_p>
-      darktable manages your camera raw files and images in a database, lets you
+      Libre DT-Lab manages your camera raw files and images in a database, lets you
       view them through lighttable mode and develop/enhance them in darkroom mode.
     </_p>
     <_p>
@@ -19,7 +19,7 @@
       tethering, print and a slideshow.
     </_p>
     <_p>
-      darktable supports most modern cameras' raw formats, and does all
+      Libre DT-Lab supports most modern cameras' raw formats, and does all
       of its processing at very high precision.
     </_p>
   </description>
@@ -79,11 +79,11 @@
     <release date="2019-03-07" version="2.6.1"/>
     <release date="2018-12-24" version="2.6.0"/>
   </releases>
-  <developer id="org.darktable">
-    <name>darktable developers</name>
+  <developer id="org.libredtlab">
+    <name>Libre DT-Lab developers</name>
   </developer>
-  <url type="homepage">https://www.darktable.org/</url>
-  <url type="bugtracker">https://github.com/darktable-org/darktable/issues</url>
-  <url type="help">https://www.darktable.org/resources/</url>
-  <update_contact>darktable-dev@lists.darktable.org</update_contact>
+  <url type="homepage">https://github.com/Christian-Bouhon/libre-dt-lab</url>
+  <url type="bugtracker">https://github.com/Christian-Bouhon/libre-dt-lab/issues</url>
+  <url type="help">https://github.com/Christian-Bouhon/libre-dt-lab</url>
+  <update_contact>christian.bouhon@gmail.com</update_contact>
 </component>

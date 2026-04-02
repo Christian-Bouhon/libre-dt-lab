@@ -1,15 +1,15 @@
 
-#define MyAppName "darktable"
+#define MyAppName "libre-dt-lab"
 #define MyAppVersion "${PROJECT_VERSION}"
 #define MyAppVersionLength Len(MyAppVersion)
 
 #define CurrentYear GetDateTimeString('yyyy', '', '')
-#define MyAppCopyright "Copyright © 2009-" + CurrentYear + " darktable developers"
+#define MyAppCopyright "Copyright © 2009-" + CurrentYear + " Libre DT-Lab developers"
 
-#define MyAppPublisher "darktable team"
-#define MyAppURL "https://darktable.org/"
-#define MyAppExeName "darktable.exe"
-#define MyAppCliExeName "darktable-cli.exe"
+#define MyAppPublisher "Libre DT-Lab"
+#define MyAppURL "https://github.com/Christian-Bouhon/libre-dt-lab"
+#define MyAppExeName "libre-dt-lab.exe"
+#define MyAppCliExeName "libre-dt-lab-cli.exe"
 
 [Setup]
 ; The value of AppId uniquely identifies the application. Some users install
@@ -34,7 +34,7 @@ DefaultDirName={autopf}\{#MyAppName}{code:SuffixIfNotRelease}
 
 UninstallDisplayIcon={app}\bin\{#MyAppExeName}
 
-WizardSmallImageFile=${CMAKE_SOURCE_DIR}\data\pixmaps\256x256\darktable.png
+WizardSmallImageFile=${CMAKE_SOURCE_DIR}\data\pixmaps\256x256\libre-dt-lab.png
 
 ; This file is not in the source tree, it is expected to be created in
 ; the installer build environment before compiling this script as:
@@ -59,7 +59,7 @@ AllowNoIcons=yes
 ; Please do not set the LicenseFile directive, as it effectively sets a step
 ; to accept the EULA. The darktable license is GPL, and GPL is not an EULA.
 ; Users are not required to agree to anything to merely use GPLed software.
-; LicenseFile=share\doc\darktable\LICENSE
+; LicenseFile=share\doc\libre-dt-lab\LICENSE
 
 ; Uncomment the following line to run in non administrative install mode
 ; (install for current user only).
@@ -67,12 +67,12 @@ AllowNoIcons=yes
 
 PrivilegesRequiredOverridesAllowed=dialog
 
-OutputBaseFilename=darktable-{#MyAppVersion}-${ARCH_STRING}
+OutputBaseFilename=libre-dt-lab-{#MyAppVersion}-${ARCH_STRING}
 
 ; When this directive is set, the compiler will create a manifest file
 ; detailing information about the files compiled into Setup.
 ; May be useful for debugging, not needed for production builds.
-; OutputManifestFile=darktable-manifest.txt
+; OutputManifestFile=libre-dt-lab-manifest.txt
 
 ; See https://github.com/teeks99/inno-test/ for which compression parameters
 ; should be set and to what values, and which are better not to touch.
@@ -116,10 +116,10 @@ Source: "AUTHORS";  DestDir: "{app}"; DestName: "AUTHORS.txt"; Flags: ignorevers
 Source: "LICENSE";  DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 
 [Registry]
-Root: HKA; Subkey: "SOFTWARE\Classes\Directory\shell\ImportFolderIntoDarktable"; \
+Root: HKA; Subkey: "SOFTWARE\Classes\Directory\shell\ImportFolderIntoLibreDtLab"; \
   ValueType: string; Flags: uninsdeletekey; \
-  ValueData: "Import folder into darktable"
-Root: HKA; Subkey: "SOFTWARE\Classes\Directory\shell\ImportFolderIntoDarktable\command"; \
+  ValueData: "Import folder into Libre DT-Lab"
+Root: HKA; Subkey: "SOFTWARE\Classes\Directory\shell\ImportFolderIntoLibreDtLab\command"; \
   ValueType: string; Flags: uninsdeletekey; \
   ValueData: """{app}\bin\{#MyAppExeName}"" ""%1"""
 
@@ -128,7 +128,7 @@ Root: HKA; Subkey: "Software\Classes\Applications\{#MyAppExeName}\shell\open\com
   ValueType: string; Flags: uninsdeletevalue; \
   ValueData: """{app}\bin\{#MyAppExeName}"" ""%1"""
 
-${CMAKE_ADD_DARKTABLE_TO_OPENWITHLIST}
+${CMAKE_ADD_LIBRE_DT_LAB_TO_OPENWITHLIST}
 
 Root: HKA; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{#MyAppExeName}"; \
   ValueType: string; \
@@ -160,8 +160,8 @@ Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; \
   Filename: "{app}\bin\{#MyAppName}"; WorkingDir: "{app}"; Tasks: quicklaunchicon
 
 [Run]
-Filename: "https://docs.darktable.org/usermanual/development/"; \
-  Description: "Open darktable user manual"; \
+Filename: "https://github.com/Christian-Bouhon/libre-dt-lab"; \
+  Description: "Open Libre DT-Lab homepage"; \
   Flags: postinstall shellexec runasoriginaluser
 
 Filename: "{app}\bin\{#MyAppExeName}"; \
@@ -191,7 +191,7 @@ begin
 end;
 
 
-#define NSIS_UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\darktable"
+#define NSIS_UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\libre-dt-lab"
 
 function InitializeSetup(): Boolean;
 var
@@ -206,9 +206,9 @@ begin
   UninstallParams := '';
   IsNSIS := False;
 
-  // If we installing a dev snapshot, just don't check for NSIS darktable
+  // If we installing a dev snapshot, just don't check for NSIS Libre DT-Lab
   // installed, as we have a different default installation directory.
-  // There is also no need to check for NSIS darktable if we are installing
+  // There is also no need to check for NSIS Libre DT-Lab if we are installing
   // for a currently logged-in user only, as this mode was not supported
   // by our old NSIS installer.
   if IsAdminInstallMode and ({#MyAppVersionLength} <= 7) then begin
@@ -233,7 +233,7 @@ begin
   then begin
     UninstallPath := RemoveQuotes(UninstallPath);
     RegQueryStringValue(HKA, UninstallKey, 'DisplayVersion', InstalledVersion);
-    if SuppressibleMsgBox('Installation of darktable ' + InstalledVersion +
+    if SuppressibleMsgBox('Installation of Libre DT-Lab ' + InstalledVersion +
                           ' is detected. Do you want to uninstall it' +
                           ' before installing the new version?',
                           mbConfirmation, MB_YESNO, IDYES) = IDNO

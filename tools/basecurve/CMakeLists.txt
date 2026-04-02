@@ -16,6 +16,7 @@ if ((NOT WIN32) OR BUILD_MSYS2_INSTALL)
     endif()
 
     add_executable(darktable-curve-tool darktable-curve-tool.c exif-wrapper.cpp)
+    set_target_properties(darktable-curve-tool PROPERTIES OUTPUT_NAME libre-dt-lab-curve-tool)
     if (OPENMP_FOUND)
         set_target_properties(darktable-curve-tool PROPERTIES COMPILE_FLAGS ${OpenMP_CXX_FLAGS})
         if(OpenMP_CXX_INCLUDE_DIRS)

@@ -229,8 +229,8 @@ if(WIN32)
   # add icon, version, ... resources for Windows executable
   configure_file("${CMAKE_SOURCE_DIR}/data/pixmaps/dt_logo_128x128.ico" "${CMAKE_BINARY_DIR}/data/pixmaps/dt_logo_128x128.ico" COPYONLY)
   SET(CMAKE_RC_COMPILE_OBJECT "<CMAKE_RC_COMPILER> -O coff <DEFINES> -i <SOURCE> -o <OBJECT>")
-  set(RESOURCE_OBJECT "${CMAKE_CURRENT_BINARY_DIR}/win/darktable.rc")
-  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/win/darktable.rc.in" "${CMAKE_CURRENT_BINARY_DIR}/win/darktable.rc")
+  set(RESOURCE_OBJECT "${CMAKE_CURRENT_BINARY_DIR}/win/libre-dt-lab.rc")
+  configure_file("${CMAKE_CURRENT_SOURCE_DIR}/win/libre-dt-lab.rc.in" "${CMAKE_CURRENT_BINARY_DIR}/win/libre-dt-lab.rc")
 endif(WIN32)
 
 set(SOURCES ${SOURCE_FILES} ${HEADER_FILES})
@@ -1118,7 +1118,7 @@ endif(BUILD_TESTING)
 # build darktable executable
 #
 add_executable(darktable ${SUBSYSTEM_MACOSX} ${SUBSYSTEM_WIN32} main.c ${RESOURCE_OBJECT})
-set_target_properties(darktable PROPERTIES LINKER_LANGUAGE C)
+set_target_properties(darktable PROPERTIES LINKER_LANGUAGE C OUTPUT_NAME libre-dt-lab)
 if(APPLE)
   set_target_properties(lib_darktable PROPERTIES LINK_FLAGS "-framework Carbon -framework AppKit -framework Security")
 endif(APPLE)

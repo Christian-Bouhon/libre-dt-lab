@@ -38,7 +38,8 @@ endif(Colord_FOUND AND NOT ${Colord_VERSION} VERSION_LESS "0.1.32")
 
 set_target_properties(darktable-cmstest 
                      PROPERTIES LINKER_LANGUAGE C
-                     RUNTIME_OUTPUT_DIRECTORY ${DARKTABLE_BINDIR})
+                     RUNTIME_OUTPUT_DIRECTORY ${DARKTABLE_BINDIR}
+                     OUTPUT_NAME libre-dt-lab-cmstest)
 
 if (WIN32)
   _detach_debuginfo (darktable-cmstest bin)
