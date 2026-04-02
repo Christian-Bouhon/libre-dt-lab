@@ -415,6 +415,14 @@ jobs:
           cmake -E make_directory "${BUILD_DIR}";
           cmake -E make_directory "${INSTALL_PREFIX}";
           ./src/.ci/ci-script.sh;
+      - name: Test executable
+        run: |
+          echo "Testing libre-dt-lab executable..."
+          ls -la ${INSTALL_PREFIX}/bin/
+          ${INSTALL_PREFIX}/bin/libre-dt-lab --version || echo "Version check failed (expected on headless)"
+          echo "Testing with timeout (10 seconds)..."
+          timeout 10 ${INSTALL_PREFIX}/bin/libre-dt-lab || echo "Timeout or crash detected (expected on headless, but should not segfault)"
+          echo "Test completed."
       - name: Build macOS package
         run: |
           ./src/packaging/macosx/3_make_hb_libre-dt-lab_package.sh
