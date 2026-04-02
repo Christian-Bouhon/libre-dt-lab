@@ -3554,7 +3554,7 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->display_mode), "changed",
                    G_CALLBACK(_display_mode_callback), self);
   gtk_box_pack_start(GTK_BOX(options),
-                     dt_gui_hbox(dt_ui_label_new(_("display mode")), 
+                     dt_gui_hbox(dt_gui_expand(dt_ui_label_new(_("display mode"))), 
                      g->display_mode), FALSE, FALSE, 0);
 
   self->widget = options;

@@ -88,11 +88,11 @@ function reset_exec_path {
 
     # Handle liblibre-dt-lab.dylib
     if [[ "$oToolLDependencies" == *"@rpath/liblibre-dt-lab.dylib"* && "$1" != *"liblibre-dt-lab.dylib"* ]]; then
-        # Only need to reset binaries that live outside of lib/libre-dt-lab
+        # Only need to reset binaries that live outside of lib/darktable
         oToolLoader=$(otool -l "$1" 2>/dev/null | grep '@loader_path' | cut -d\( -f1 | sed 's/^[[:blank:]]*path[[:blank:]]*//;s/[[:blank:]]*$//' )
-        if [[ "$oToolLoader" == "@loader_path/../lib/libre-dt-lab" ]]; then
+        if [[ "$oToolLoader" == "@loader_path/../lib/darktable" ]]; then
             echo "Resetting loader path for liblibre-dt-lab.dylib of $libraryOrigFile"
-            install_name_tool -rpath @loader_path/../lib/libre-dt-lab @loader_path/../Resources/lib/libre-dt-lab "$1" || true
+            install_name_tool -rpath @loader_path/../lib/darktable @loader_path/../Resources/lib/darktable "$1" || true
         fi
     fi
 
@@ -330,10 +330,13 @@ cp -L "$homebrewHome"/share/themes/Mac/gtk-3.0/gtk-keys.css "$dtResourcesDir"/sh
 # Sign app bundle
 if [ -n "$CODECERT" ]; then
     # Use certificate if one has been provided
-    find ${dtWorkingDir}/Contents/Resources/lib -type f -exec codesign --verbose --force --options runtime -i "org.libre-dt-lab" -s "${CODECERT}" \{} \;
-    codesign --deep --verbose --force --options runtime -i "org.libre-dt-lab" -s "${CODECERT}" ${dtWorkingDir}
+    find ${dtWorkingDir}/Contents/Resources/lib -type f -exec codesign --verbose --force --options runtime -s "${CODECERT}" \{} \;
+    codesign --deep --verbose --force --options runtime -s "${CODECERT}" ${dtWorkingDir}
 else
-    # Use ad-hoc signing and preserve metadata
-    find ${dtWorkingDir}/Contents/Resources/lib -type f -exec codesign --verbose --force --preserve-metadata=entitlements,requirements,flags,runtime -i "org.libre-dt-lab" -s - \{} \;
-    codesign --deep --verbose --force --preserve-metadata=entitlements,requirements,flags,runtime -i "org.libre-dt-lab" -s - ${dtWorkingDir}
+    # Use ad-hoc signing without identifier to avoid issues
+    find ${dtWorkingDir}/Contents/Resources/lib -type f -exec codesign --force --preserve-metadata=entitlements,requirements,flags,runtime -s - \{} \;
+    codesign --deep --force --preserve-metadata=entitlements,requirements,flags,runtime -s - ${dtWorkingDir}
 fi
+
+# Ensure executable permissions
+chmod +x ${dtExecDir}/libre-dt-lab
