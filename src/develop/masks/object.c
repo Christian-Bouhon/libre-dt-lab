@@ -287,7 +287,8 @@ static gpointer _encode_thread_func(gpointer data)
 
   if(!buf.buf || !buf.width || !buf.height)
   {
-    dt_print(DT_DEBUG_AI, "[object mask] failed to get image buffer for encoding");
+    dt_print(DT_DEBUG_AI,
+             "[object mask] failed to get image buffer for encoding");
     dt_dev_cleanup(&dev);
     g_atomic_int_set(&d->encode_state, ENCODE_ERROR);
     return NULL;
@@ -297,23 +298,27 @@ static gpointer _encode_thread_func(gpointer data)
   const int ht = dev.image_storage.height;
 
   dt_dev_pixelpipe_t pipe;
-  if(!dt_dev_pixelpipe_init_export(&pipe, wd, ht, IMAGEIO_RGB | IMAGEIO_INT8, FALSE))
+  if(!dt_dev_pixelpipe_init_export(&pipe, wd, ht, IMAGEIO_RGB | IMAGEIO_INT8,
+                                   FALSE))
   {
-    dt_print(DT_DEBUG_AI, "[object mask] failed to init export pipe for encoding");
+    dt_print(DT_DEBUG_AI,
+             "[object mask] failed to init export pipe for encoding");
     dt_mipmap_cache_release(&buf);
     dt_dev_cleanup(&dev);
     g_atomic_int_set(&d->encode_state, ENCODE_ERROR);
     return NULL;
   }
 
-  dt_dev_pixelpipe_set_icc(&pipe, DT_COLORSPACE_SRGB, NULL, DT_INTENT_PERCEPTUAL);
+  dt_dev_pixelpipe_set_icc(&pipe, DT_COLORSPACE_SRGB, NULL,
+                           DT_INTENT_PERCEPTUAL);
   dt_dev_pixelpipe_set_input(&pipe, &dev, (float *)buf.buf,
                              buf.width, buf.height, buf.iscale);
   dt_dev_pixelpipe_create_nodes(&pipe, &dev);
   dt_dev_pixelpipe_synch_all(&pipe, &dev);
 
   dt_dev_pixelpipe_get_dimensions(&pipe, &dev, pipe.iwidth, pipe.iheight,
-                                  &pipe.processed_width, &pipe.processed_height);
+                                  &pipe.processed_width,
+                                  &pipe.processed_height);
 
   const int render_target = dt_conf_key_exists(CONF_OBJECT_RENDER_SIZE_KEY)
     ? MAX(dt_conf_get_int(CONF_OBJECT_RENDER_SIZE_KEY), 1024)
@@ -392,7 +397,8 @@ static gpointer _encode_thread_func(gpointer data)
   // if accelerated encoding failed, fall back to CPU
   if(!ok)
   {
-    dt_print(DT_DEBUG_AI, "[object mask] encoding failed, retrying with CPU provider");
+    dt_print(DT_DEBUG_AI,
+             "[object mask] encoding failed, retrying with CPU provider");
     dt_seg_free(d->seg);
     dt_ai_env_set_provider(d->env, DT_AI_PROVIDER_CPU);
     char *model_id = dt_ai_models_get_active_for_task("mask");
@@ -432,11 +438,16 @@ static gpointer _encode_thread_func(gpointer data)
   return NULL;
 }
 
-// keep only the connected component containing the seed pixel (seed_x, seed_y),
-// if the seed is outside any foreground region, keep the largest component instead,
-// operates in-place: non-selected foreground pixels are zeroed
-static void _keep_seed_component(float *mask, int w, int h, float threshold,
-                                  int seed_x, int seed_y)
+// keep only the connected component containing the seed pixel
+// (seed_x, seed_y), if the seed is outside any foreground region,
+// keep the largest component instead, operates in-place: non-selected
+// foreground pixels are zeroed
+static void _keep_seed_component(float *mask,
+                                 const int w,
+                                 const int h,
+                                 const float threshold,
+                                 const int seed_x,
+                                 const int seed_y)
 {
   const int npix = w * h;
   int16_t *labels = g_try_malloc0((size_t)npix * sizeof(int16_t));
@@ -526,7 +537,11 @@ static void _keep_seed_component(float *mask, int w, int h, float threshold,
 
 // morphological erode: output pixel is 1 only if all pixels in the
 // square structuring element of given radius are 1
-static void _morph_erode(const uint8_t *src, uint8_t *dst, int w, int h, int radius)
+static void _morph_erode(const uint8_t *src,
+                         uint8_t *dst,
+                         const int w,
+                         const int h,
+                         const int radius)
 {
   for(int y = 0; y < h; y++)
   {
@@ -547,7 +562,11 @@ static void _morph_erode(const uint8_t *src, uint8_t *dst, int w, int h, int rad
 
 // morphological dilate: output pixel is 1 if any pixel in the
 // square structuring element of given radius is 1
-static void _morph_dilate(const uint8_t *src, uint8_t *dst, int w, int h, int radius)
+static void _morph_dilate(const uint8_t *src,
+                          uint8_t *dst,
+                          const int w,
+                          const int h,
+                          const int radius)
 {
   for(int y = 0; y < h; y++)
   {
@@ -569,7 +588,11 @@ static void _morph_dilate(const uint8_t *src, uint8_t *dst, int w, int h, int ra
 // morphological open+close on a float mask,
 // open (erode->dilate) removes small protrusions/bridges,
 // close (dilate->erode) fills small holes/gaps
-static void _morph_open_close(float *mask, int w, int h, float threshold, int radius)
+static void _morph_open_close(float *mask,
+                              const int w,
+                              const int h,
+                              const float threshold,
+                              const int radius)
 {
   if(radius <= 0) return;
 
@@ -713,7 +736,8 @@ static void _run_decoder(dt_masks_form_gui_t *gui)
 
   for(int pass = 0; pass < n_passes; pass++)
   {
-    float *new_mask = dt_seg_compute_mask(d->seg, points, n_prompt_points, &mw, &mh);
+    float *new_mask = dt_seg_compute_mask(d->seg, points,
+                                          n_prompt_points, &mw, &mh);
     if(!new_mask)
       break;
     g_free(mask);
@@ -726,11 +750,14 @@ static void _run_decoder(dt_masks_form_gui_t *gui)
     // remove disconnected blobs: keep only the component at the seed point
     seed_x = CLAMP(seed_x, 0, mw - 1);
     seed_y = CLAMP(seed_y, 0, mh - 1);
-    const float threshold = CLAMP(dt_conf_get_float(CONF_OBJECT_THRESHOLD_KEY), 0.3f, 0.9f);
+    const float threshold = CLAMP(dt_conf_get_float(CONF_OBJECT_THRESHOLD_KEY),
+                                  0.3f, 0.9f);
 
     // guided filter edge refinement: snap mask boundary to image edges
-    const int gf_radius = CLAMP(dt_conf_get_int(CONF_OBJECT_GUIDED_RADIUS_KEY), 0, 20);
-    const float gf_eps = CLAMP(dt_conf_get_float(CONF_OBJECT_GUIDED_EPS_KEY), 0.001f, 1.0f);
+    const int gf_radius = CLAMP(dt_conf_get_int(CONF_OBJECT_GUIDED_RADIUS_KEY),
+                                0, 20);
+    const float gf_eps = CLAMP(dt_conf_get_float(CONF_OBJECT_GUIDED_EPS_KEY),
+                               0.001f, 1.0f);
     if(gf_radius > 0 && d->encode_rgb)
       _guided_filter_refine(mask, mw, mh,
                             d->encode_rgb, d->encode_rgb_w, d->encode_rgb_h,
@@ -789,12 +816,114 @@ static void _update_preview(_object_data_t *d)
   }
 }
 
+// save the raster mask as an RGB PNG to the raster mask root folder
+// (compatible with the external raster masks module)
+static void _save_raster_mask(const float *mask,
+                              const int w,
+                              const int h,
+                              const float threshold)
+{
+  if(!mask || w <= 0 || h <= 0) return;
+
+  const dt_imgid_t imgid = darktable.develop->image_storage.id;
+  if(!dt_is_valid_imgid(imgid)) return;
+
+  // get the raster mask root folder from preferences
+  gchar *root = dt_conf_get_string("plugins/darkroom/segments/def_path");
+  if(!root || !*root)
+  {
+    g_free(root);
+    dt_control_log(_("set raster mask root folder in preferences"));
+    return;
+  }
+
+  // ensure the directory exists
+  if(g_mkdir_with_parents(root, 0755) != 0)
+  {
+    dt_print(DT_DEBUG_AI, "[object mask] cannot create folder: %s", root);
+    dt_control_log(_("cannot create raster mask folder"));
+    g_free(root);
+    return;
+  }
+
+  // get image filename without directory and extension
+  char imgpath[PATH_MAX] = { 0 };
+  dt_image_full_path(imgid, imgpath, sizeof(imgpath), NULL);
+  gchar *basename = g_path_get_basename(imgpath);
+  char *dot = g_strrstr(basename, ".");
+  if(dot) *dot = '\0';
+
+  // build output path, append _1, _2, ... if file already exists
+  gchar *mask_name = g_strdup_printf("%s_mask.png", basename);
+  gchar *outpath = g_build_filename(root, mask_name, NULL);
+  g_free(mask_name);
+
+  for(int seq = 1;
+      g_file_test(outpath, G_FILE_TEST_EXISTS) && seq < 1000;
+      seq++)
+  {
+    g_free(outpath);
+    mask_name = g_strdup_printf("%s_mask_%d.png", basename, seq);
+    outpath = g_build_filename(root, mask_name, NULL);
+    g_free(mask_name);
+  }
+
+  g_free(basename);
+  g_free(root);
+
+  // create RGB buffer (rasterfile module expects 3-channel PNG)
+  const int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, w);
+  uint8_t *buf = g_try_malloc0((size_t)stride * h);
+  if(!buf)
+  {
+    g_free(outpath);
+    return;
+  }
+
+  for(int y = 0; y < h; y++)
+  {
+    uint8_t *row = buf + y * stride;
+    for(int x = 0; x < w; x++)
+    {
+      const uint8_t v = (mask[y * w + x] > threshold) ? 255 : 0;
+      // cairo RGB24 is native-endian BGRX in memory
+      row[x * 4 + 0] = v; // B
+      row[x * 4 + 1] = v; // G
+      row[x * 4 + 2] = v; // R
+      row[x * 4 + 3] = 0; // unused
+    }
+  }
+
+  cairo_surface_t *surface
+    = cairo_image_surface_create_for_data(buf, CAIRO_FORMAT_RGB24,
+                                          w, h, stride);
+  if(surface)
+  {
+    const cairo_status_t st = cairo_surface_write_to_png(surface, outpath);
+    cairo_surface_destroy(surface);
+    if(st == CAIRO_STATUS_SUCCESS)
+    {
+      dt_print(DT_DEBUG_AI, "[object mask] raster mask saved: %s", outpath);
+      dt_control_log(_("raster mask saved"));
+    }
+    else
+    {
+      dt_print(DT_DEBUG_AI, "[object mask] failed to write: %s", outpath);
+      dt_control_log(_("failed to save raster mask"));
+    }
+  }
+  g_free(buf);
+  g_free(outpath);
+}
+
 // transform mask-space forms to input-normalized coords and register them,
 // takes ownership of `forms` and `signs` lists (forms are appended to dev->forms)
 static dt_masks_form_t *
 _register_vectorized_forms(dt_iop_module_t *module,
-                           GList *forms, GList *signs,
-                           int mask_w, int mask_h)
+                           GList *forms,
+                           GList *signs,
+                           const int mask_w,
+                           const int mask_h)
 {
   (void)module;
 
@@ -914,7 +1043,8 @@ _register_vectorized_forms(dt_iop_module_t *module,
     }
   }
 
-  // register the group (history item added by caller after blend mask assignment)
+  // register the group (history item added by caller after blend mask
+  // assignment)
   dev->forms = g_list_append(dev->forms, grp);
 
   g_list_free(forms);
@@ -944,8 +1074,9 @@ _finalize_from_preview(dt_iop_module_t *module, dt_masks_form_gui_t *gui)
 
 // finalize: vectorize the mask and register as a group of path forms,
 // fallback when no preview forms are available
-static dt_masks_form_t *
-_finalize_mask(dt_iop_module_t *module, dt_masks_form_t *form, dt_masks_form_gui_t *gui)
+static dt_masks_form_t *_finalize_mask(dt_iop_module_t *module,
+                                       dt_masks_form_t *form,
+                                       dt_masks_form_gui_t *gui)
 {
   (void)form;
   _object_data_t *d = _get_data(gui);
@@ -963,8 +1094,8 @@ _finalize_mask(dt_iop_module_t *module, dt_masks_form_t *form, dt_masks_form_gui
   const int cleanup = dt_conf_get_int(CONF_OBJECT_CLEANUP_KEY);
   const float smoothing = dt_conf_get_float(CONF_OBJECT_SMOOTHING_KEY);
   GList *signs = NULL;
-  GList *forms
-    = ras2forms(inv_mask, d->mask_w, d->mask_h, NULL, cleanup, (double)smoothing, &signs);
+  GList *forms = ras2forms(inv_mask, d->mask_w, d->mask_h, NULL,
+                           cleanup, (double)smoothing, &signs);
   g_free(inv_mask);
 
   return _register_vectorized_forms(module, forms, signs, d->mask_w, d->mask_h);
@@ -972,42 +1103,15 @@ _finalize_mask(dt_iop_module_t *module, dt_masks_form_t *form, dt_masks_form_gui
 
 // --- mask event handlers ---
 
-static void _object_get_distance(
-  const float x,
-  const float y,
-  const float as,
-  dt_masks_form_gui_t *gui,
-  const int index,
-  const int num_points,
-  gboolean *inside,
-  gboolean *inside_border,
-  int *near,
-  gboolean *inside_source,
-  float *dist)
-{
-  (void)x;
-  (void)y;
-  (void)as;
-  (void)gui;
-  (void)index;
-  (void)num_points;
-  (void)inside;
-  (void)inside_border;
-  (void)near;
-  (void)inside_source;
-  (void)dist;
-}
-
-static int _object_events_mouse_scrolled(
-  dt_iop_module_t *module,
-  const float pzx,
-  const float pzy,
-  const gboolean up,
-  const uint32_t state,
-  dt_masks_form_t *form,
-  const dt_imgid_t parentid,
-  dt_masks_form_gui_t *gui,
-  const int index)
+static int _object_events_mouse_scrolled(dt_iop_module_t *module,
+                                         const float pzx,
+                                         const float pzy,
+                                         const gboolean up,
+                                         const uint32_t state,
+                                         dt_masks_form_t *form,
+                                         const dt_imgid_t parentid,
+                                         dt_masks_form_gui_t *gui,
+                                         const int index)
 {
   _object_data_t *d = _get_data(gui);
 
@@ -1017,7 +1121,8 @@ static int _object_events_mouse_scrolled(
     if(dt_modifier_is(state, 0))
     {
       // plain scroll: adjust smoothing (potrace alphamax)
-      d->preview_smoothing = CLAMP(d->preview_smoothing + (up ? 0.05f : -0.05f), 0.0f, 1.3f);
+      d->preview_smoothing = CLAMP(d->preview_smoothing + (up ? 0.05f : -0.05f),
+                                   0.0f, 1.3f);
       dt_conf_set_float(CONF_OBJECT_SMOOTHING_KEY, d->preview_smoothing);
       _update_preview(d);
       dt_toast_log(_("smoothing: %3.2f"), d->preview_smoothing);
@@ -1079,18 +1184,17 @@ static void _clear_selection(dt_masks_form_gui_t *gui)
   dt_control_queue_redraw_center();
 }
 
-static int _object_events_button_pressed(
-  dt_iop_module_t *module,
-  float pzx,
-  float pzy,
-  const double pressure,
-  const int which,
-  const int type,
-  const uint32_t state,
-  dt_masks_form_t *form,
-  const dt_imgid_t parentid,
-  dt_masks_form_gui_t *gui,
-  const int index)
+static int _object_events_button_pressed(dt_iop_module_t *module,
+                                         float pzx,
+                                         float pzy,
+                                         const double pressure,
+                                         const int which,
+                                         const int type,
+                                         const uint32_t state,
+                                         dt_masks_form_t *form,
+                                         const dt_imgid_t parentid,
+                                         dt_masks_form_gui_t *gui,
+                                         const int index)
 {
   (void)pressure;
   (void)parentid;
@@ -1139,6 +1243,15 @@ static int _object_events_button_pressed(
     if(d && g_atomic_int_get(&d->encode_state) == ENCODE_RUNNING)
       return 1;
 
+    // shift+right-click: save raster mask before vectorization
+    if(d && d->has_selection && d->mask
+       && dt_modifier_is(state, GDK_SHIFT_MASK))
+    {
+      const float thresh = CLAMP(
+        dt_conf_get_float(CONF_OBJECT_THRESHOLD_KEY), 0.3f, 0.9f);
+      _save_raster_mask(d->mask, d->mask_w, d->mask_h, thresh);
+    }
+
     // right-click: finalize mask (prefer cached preview forms)
     dt_masks_form_t *new_grp = NULL;
     if(d && d->preview_forms)
@@ -1158,7 +1271,8 @@ static int _object_events_button_pressed(
         {
           mod_grp = dt_masks_create(DT_MASKS_GROUP);
           gchar *module_label = dt_history_item_get_name(module);
-          snprintf(mod_grp->name, sizeof(mod_grp->name), _("group '%s'"), module_label);
+          snprintf(mod_grp->name, sizeof(mod_grp->name),
+                   _("group '%s'"), module_label);
           g_free(module_label);
           dev->forms = g_list_append(dev->forms, mod_grp);
           module->blend_params->mask_id = mod_grp->formid;
@@ -1187,8 +1301,8 @@ static int _object_events_button_pressed(
 
     // exit creation mode and select the new group,
     // dt_masks_set_edit_mode requires a non-NULL module (it returns
-    // immediately otherwise), so clear the form directly when
-    // module is NULL (standalone mask creation)
+    // immediately otherwise), so clear the form directly when module
+    // is NULL (standalone mask creation)
     if(module)
     {
       dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
@@ -1205,16 +1319,15 @@ static int _object_events_button_pressed(
   return 0;
 }
 
-static int _object_events_button_released(
-  dt_iop_module_t *module,
-  const float pzx,
-  const float pzy,
-  const int which,
-  const uint32_t state,
-  dt_masks_form_t *form,
-  const dt_imgid_t parentid,
-  dt_masks_form_gui_t *gui,
-  const int index)
+static int _object_events_button_released(dt_iop_module_t *module,
+                                          const float pzx,
+                                          const float pzy,
+                                          const int which,
+                                          const uint32_t state,
+                                          dt_masks_form_t *form,
+                                          const dt_imgid_t parentid,
+                                          dt_masks_form_gui_t *gui,
+                                          const int index)
 {
   (void)module;
   (void)pzx;
@@ -1237,11 +1350,13 @@ static int _object_events_button_released(
   if(!gui->guipoints)
     return 1;
   if(!gui->guipoints_payload)
-    gui->guipoints_payload = dt_masks_dynbuf_init(100000, "object guipoints_payload");
+    gui->guipoints_payload = dt_masks_dynbuf_init(100000,
+                                                  "object guipoints_payload");
   if(!gui->guipoints_payload)
     return 1;
 
-  // click: foreground point, shift+click: background point (only after first selection)
+  // click: foreground point, shift+click: background point (only
+  // after first selection)
   const float label = (d->has_selection && dt_modifier_is(state, GDK_SHIFT_MASK))
     ? 0.0f : 1.0f;
   dt_masks_dynbuf_add_2(gui->guipoints, d->drag_start_x, d->drag_start_y);
@@ -1264,17 +1379,16 @@ static int _object_events_button_released(
   return 1;
 }
 
-static int _object_events_mouse_moved(
-  dt_iop_module_t *module,
-  const float pzx,
-  const float pzy,
-  const double pressure,
-  const int which,
-  const float zoom_scale,
-  dt_masks_form_t *form,
-  const dt_imgid_t parentid,
-  dt_masks_form_gui_t *gui,
-  const int index)
+static int _object_events_mouse_moved(dt_iop_module_t *module,
+                                      const float pzx,
+                                      const float pzy,
+                                      const double pressure,
+                                      const int which,
+                                      const float zoom_scale,
+                                      dt_masks_form_t *form,
+                                      const dt_imgid_t parentid,
+                                      dt_masks_form_gui_t *gui,
+                                      const int index)
 {
   (void)module;
   (void)pressure;
@@ -1309,12 +1423,11 @@ static gboolean _modifier_poll(gpointer data)
   return G_SOURCE_CONTINUE;
 }
 
-static void _object_events_post_expose(
-  cairo_t *cr,
-  const float zoom_scale,
-  dt_masks_form_gui_t *gui,
-  const int index,
-  const int num_points)
+static void _object_events_post_expose(cairo_t *cr,
+                                       const float zoom_scale,
+                                       dt_masks_form_gui_t *gui,
+                                       const int index,
+                                       const int num_points)
 {
   (void)index;
   (void)num_points;
@@ -1500,8 +1613,8 @@ static void _object_events_post_expose(
         }
       }
 
-      cairo_surface_t *surface
-        = cairo_image_surface_create_for_data(buf, CAIRO_FORMAT_ARGB32, mw, mh, stride);
+      cairo_surface_t *surface = cairo_image_surface_create_for_data
+        (buf, CAIRO_FORMAT_ARGB32, mw, mh, stride);
 
       if(surface)
       {
@@ -1569,8 +1682,8 @@ static void _object_events_post_expose(
   // mouse_moved event fires.
   GtkWidget *cw = dt_ui_center(darktable.gui->ui);
   GdkWindow *win = gtk_widget_get_window(cw);
-  GdkDevice *pointer
-    = gdk_seat_get_pointer(gdk_display_get_default_seat(gdk_display_get_default()));
+  GdkDevice *pointer = gdk_seat_get_pointer
+    (gdk_display_get_default_seat(gdk_display_get_default()));
   GdkModifierType mod = 0;
   int dev_x = 0, dev_y = 0;
   if(win && pointer)
@@ -1653,123 +1766,8 @@ static void _object_events_post_expose(
 
 // --- stub functions (object is transient -- result is path masks) ---
 
-static int _object_get_points(
-  dt_develop_t *dev,
-  const float x,
-  const float y,
-  const float radius,
-  const float radius2,
-  const float rotation,
-  float **points,
-  int *points_count)
-{
-  (void)dev;
-  (void)x;
-  (void)y;
-  (void)radius;
-  (void)radius2;
-  (void)rotation;
-  *points = NULL;
-  *points_count = 0;
-  return 0;
-}
-
-static int _object_get_points_border(
-  dt_develop_t *dev,
-  struct dt_masks_form_t *form,
-  float **points,
-  int *points_count,
-  float **border,
-  int *border_count,
-  const int source,
-  const dt_iop_module_t *module)
-{
-  (void)dev;
-  (void)form;
-  (void)points;
-  (void)points_count;
-  (void)border;
-  (void)border_count;
-  (void)source;
-  (void)module;
-  return 0;
-}
-
-static int _object_get_source_area(
-  dt_iop_module_t *module,
-  dt_dev_pixelpipe_iop_t *piece,
-  dt_masks_form_t *form,
-  int *width,
-  int *height,
-  int *posx,
-  int *posy)
-{
-  (void)module;
-  (void)piece;
-  (void)form;
-  (void)width;
-  (void)height;
-  (void)posx;
-  (void)posy;
-  return 1;
-}
-
-static int _object_get_area(
-  const dt_iop_module_t *const restrict module,
-  const dt_dev_pixelpipe_iop_t *const restrict piece,
-  dt_masks_form_t *const restrict form,
-  int *width,
-  int *height,
-  int *posx,
-  int *posy)
-{
-  (void)module;
-  (void)piece;
-  (void)form;
-  (void)width;
-  (void)height;
-  (void)posx;
-  (void)posy;
-  return 1;
-}
-
-static int _object_get_mask(
-  const dt_iop_module_t *const restrict module,
-  const dt_dev_pixelpipe_iop_t *const restrict piece,
-  dt_masks_form_t *const restrict form,
-  float **buffer,
-  int *width,
-  int *height,
-  int *posx,
-  int *posy)
-{
-  (void)module;
-  (void)piece;
-  (void)form;
-  (void)buffer;
-  (void)width;
-  (void)height;
-  (void)posx;
-  (void)posy;
-  return 1;
-}
-
-static int _object_get_mask_roi(
-  const dt_iop_module_t *const restrict module,
-  const dt_dev_pixelpipe_iop_t *const restrict piece,
-  dt_masks_form_t *const form,
-  const dt_iop_roi_t *const roi,
-  float *const restrict buffer)
-{
-  (void)module;
-  (void)piece;
-  (void)form;
-  (void)roi;
-  (void)buffer;
-  return 1;
-}
-
-static GSList *_object_setup_mouse_actions(const struct dt_masks_form_t *const form)
+static GSList *_object_setup_mouse_actions
+  (const struct dt_masks_form_t *const form)
 {
   (void)form;
   GSList *lm = NULL;
@@ -1811,19 +1809,17 @@ static GSList *_object_setup_mouse_actions(const struct dt_masks_form_t *const f
   return lm;
 }
 
-static void _object_sanitize_config(dt_masks_type_t type) { (void)type; }
-
-static void _object_set_form_name(dt_masks_form_t *const form, const size_t nb)
+static void _object_set_form_name(dt_masks_form_t *const form,
+                                  const size_t nb)
 {
   snprintf(form->name, sizeof(form->name), _("object #%d"), (int)nb);
 }
 
-static void _object_set_hint_message(
-  const dt_masks_form_gui_t *const gui,
-  const dt_masks_form_t *const form,
-  const int opacity,
-  char *const restrict msgbuf,
-  const size_t msgbuf_len)
+static void _object_set_hint_message(const dt_masks_form_gui_t *const gui,
+                                     const dt_masks_form_t *const form,
+                                     const int opacity,
+                                     char *const restrict msgbuf,
+                                     const size_t msgbuf_len)
 {
   (void)form;
   if(gui->creation)
@@ -1835,8 +1831,11 @@ static void _object_set_hint_message(
       g_snprintf(msgbuf,
                  msgbuf_len,
                  _("<b>add</b>: click, <b>subtract</b>: shift+click, "
-                   "<b>clear</b>: ctrl+shift+click, <b>apply</b>: right-click\n"
-                   "<b>smoothing</b>: scroll (%3.2f), <b>cleanup</b>: shift+scroll (%d), "
+                   "<b>clear</b>: ctrl+shift+click, "
+                   "<b>apply</b>: right-click, "
+                   "<b>apply+save raster</b>: shift+right-click\n"
+                   "<b>smoothing</b>: scroll (%3.2f), "
+                   "<b>cleanup</b>: shift+scroll (%d), "
                    "<b>opacity</b>: ctrl+scroll (%d%%)"),
                  d->preview_smoothing, d->preview_cleanup, opacity);
     else
@@ -1846,16 +1845,6 @@ static void _object_set_hint_message(
                    "<b>opacity</b>: ctrl+scroll (%d%%)"),
                  opacity);
   }
-}
-
-static void _object_duplicate_points(
-  dt_develop_t *dev,
-  dt_masks_form_t *const base,
-  dt_masks_form_t *const dest)
-{
-  (void)dev;
-  (void)base;
-  (void)dest;
 }
 
 static void _object_modify_property(dt_masks_form_t *const form,
@@ -1926,32 +1915,23 @@ static void _object_modify_property(dt_masks_form_t *const form,
   }
 }
 
-static void
-_object_initial_source_pos(const float iwd, const float iht, float *x, float *y)
-{
-  (void)iwd;
-  (void)iht;
-  (void)x;
-  (void)y;
-}
-
 // the function table for object masks
 const dt_masks_functions_t dt_masks_functions_object = {
   .point_struct_size = sizeof(struct dt_masks_point_object_t),
-  .sanitize_config = _object_sanitize_config,
+  .sanitize_config = NULL,
   .setup_mouse_actions = _object_setup_mouse_actions,
   .set_form_name = _object_set_form_name,
   .set_hint_message = _object_set_hint_message,
   .modify_property = _object_modify_property,
-  .duplicate_points = _object_duplicate_points,
-  .initial_source_pos = _object_initial_source_pos,
-  .get_distance = _object_get_distance,
-  .get_points = _object_get_points,
-  .get_points_border = _object_get_points_border,
-  .get_mask = _object_get_mask,
-  .get_mask_roi = _object_get_mask_roi,
-  .get_area = _object_get_area,
-  .get_source_area = _object_get_source_area,
+  .duplicate_points = NULL,
+  .initial_source_pos = NULL,
+  .get_distance = NULL,
+  .get_points = NULL,
+  .get_points_border = NULL,
+  .get_mask = NULL,
+  .get_mask_roi = NULL,
+  .get_area = NULL,
+  .get_source_area = NULL,
   .mouse_moved = _object_events_mouse_moved,
   .mouse_scrolled = _object_events_mouse_scrolled,
   .button_pressed = _object_events_button_pressed,
