@@ -275,10 +275,12 @@ typedef struct dt_iop_basecurve_gui_data_t
   int minmax_curve_type, minmax_curve_nodes;
   GtkDrawingArea *area;
   GtkWidget *fusion, *exposure_step, *exposure_bias, *shadow_lift, *highlight_gain;
+  GtkWidget *node_x_slider, *node_y_slider;
   GtkWidget *cmb_preserve_colors;
   GtkWidget *workflow_mode;
   double mouse_x, mouse_y;
   int selected;
+  int last_selected;
   float draw_ys[DT_IOP_TONECURVE_RES];
   float loglogscale;
   GtkWidget *logbase;
@@ -597,10 +599,11 @@ void reload_defaults(dt_iop_module_t *self)
     d->color_look = 0; // Neutral look
     d->look_opacity = 1.0f;
 
-    d->basecurve_nodes[0] = 2;
+    d->basecurve_nodes[0] = 3;
     d->basecurve_type[0] = CUBIC_SPLINE;
     d->basecurve[0][0].x = 0.0f; d->basecurve[0][0].y = 0.0f;
-    d->basecurve[0][1].x = 1.0f; d->basecurve[0][1].y = 1.0f;
+    d->basecurve[0][1].x = 0.5f; d->basecurve[0][1].y = 0.5f;
+    d->basecurve[0][2].x = 1.0f; d->basecurve[0][2].y = 1.0f;
   }
 }
 
@@ -2244,10 +2247,11 @@ static gboolean dt_iop_basecurve_leave_notify(GtkWidget *widget,
                                               dt_iop_module_t *self)
 {
   dt_iop_basecurve_gui_data_t *g = self->gui_data;
-  if(!(event->state & GDK_BUTTON1_MASK))
-    g->selected = -1;
+  if(g->selected >= 0)
+    g->last_selected = g->selected;
+  g->selected = -1;
   gtk_widget_queue_draw(widget);
-  return FALSE;
+  return TRUE;
 }
 
 static float to_log(const float x, const float base)
@@ -2325,7 +2329,8 @@ static gboolean dt_iop_basecurve_draw(GtkWidget *widget, cairo_t *crf, dt_iop_mo
   cairo_fill(cr);
 
   cairo_translate(cr, 0, height);
-  if(g->selected >= 0)
+  int draw_selected = (g->selected >= 0) ? g->selected : g->last_selected;
+  if(draw_selected >= 0)
   {
     char text[30];
     // draw information about current selected node
@@ -2337,8 +2342,8 @@ static gboolean dt_iop_basecurve_draw(GtkWidget *widget, cairo_t *crf, dt_iop_mo
     layout = pango_cairo_create_layout(cr);
     pango_layout_set_font_description(layout, desc);
 
-    const float x_node_value = basecurve[g->selected].x * 100;
-    const float y_node_value = basecurve[g->selected].y * 100;
+    const float x_node_value = basecurve[draw_selected].x * 100;
+    const float y_node_value = basecurve[draw_selected].y * 100;
     const float d_node_value = y_node_value - x_node_value;
     // scale conservatively to 100% of width:
     snprintf(text, sizeof(text), "100.00 / 100.00 ( +100.00)");
@@ -2381,13 +2386,14 @@ static gboolean dt_iop_basecurve_draw(GtkWidget *widget, cairo_t *crf, dt_iop_mo
   // draw selected cursor
   cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.));
 
-  if(g->selected >= 0)
+  if(g->selected >= 0 || g->last_selected >= 0)
   {
-    cairo_set_source_rgb(cr, .9, .9, .9);
-    const float x = to_log(basecurve[g->selected].x, g->loglogscale),
-                y = to_log(basecurve[g->selected].y, g->loglogscale);
-    cairo_arc(cr, x * width, y * height, DT_PIXEL_APPLY_DPI(4), 0, 2. * M_PI);
-    cairo_stroke(cr);
+    int node_to_draw = (g->selected >= 0) ? g->selected : g->last_selected;
+    cairo_set_source_rgb(cr, 1., 1., 1.);
+    const float x = to_log(basecurve[node_to_draw].x, g->loglogscale),
+                y = to_log(basecurve[node_to_draw].y, g->loglogscale);
+    cairo_arc(cr, x * width, y * height, DT_PIXEL_APPLY_DPI(5), 0, 2. * M_PI);
+    cairo_fill(cr);
   }
 
   // draw curve
@@ -2527,6 +2533,11 @@ static gboolean dt_iop_basecurve_motion_notify(GtkWidget *widget,
     {
       // no vertex was close, create a new one!
       g->selected = _add_node(basecurve, &p->basecurve_nodes[ch], linx, liny);
+      if(g->selected >= 0 && g->selected < p->basecurve_nodes[0])
+      {
+        dt_bauhaus_slider_set(g->node_x_slider, p->basecurve[0][g->selected].x);
+        dt_bauhaus_slider_set(g->node_y_slider, p->basecurve[0][g->selected].y);
+      }
       dt_dev_add_history_item_target(darktable.develop, self, TRUE, widget);
     }
   }
@@ -2548,6 +2559,11 @@ static gboolean dt_iop_basecurve_motion_notify(GtkWidget *widget,
       }
     }
     g->selected = nearest;
+    if(g->selected >= 0 && g->selected < p->basecurve_nodes[0])
+    {
+      dt_bauhaus_slider_set(g->node_x_slider, p->basecurve[0][g->selected].x);
+      dt_bauhaus_slider_set(g->node_y_slider, p->basecurve[0][g->selected].y);
+    }
   }
   if(g->selected >= 0) gtk_widget_grab_focus(widget);
   gtk_widget_queue_draw(widget);
@@ -2619,6 +2635,12 @@ static gboolean dt_iop_basecurve_button_press(GtkWidget *widget,
             float other_y = to_log(basecurve[k].y, g->loglogscale);
             float dist = (y - other_y) * (y - other_y);
             if(dist < min) g->selected = selected;
+          }
+
+          if(g->selected >= 0 && g->selected < p->basecurve_nodes[0])
+          {
+            dt_bauhaus_slider_set(g->node_x_slider, p->basecurve[0][g->selected].x);
+            dt_bauhaus_slider_set(g->node_y_slider, p->basecurve[0][g->selected].y);
           }
 
           dt_dev_add_history_item_target(darktable.develop, self, TRUE, widget);
@@ -2697,6 +2719,12 @@ static gboolean _move_point_internal(dt_iop_module_t *self,
 
   basecurve[g->selected].x = CLAMP(basecurve[g->selected].x + dx, 0.0f, 1.0f);
   basecurve[g->selected].y = CLAMP(basecurve[g->selected].y + dy, 0.0f, 1.0f);
+
+  if(g->selected >= 0 && g->selected < p->basecurve_nodes[0])
+  {
+    dt_bauhaus_slider_set(g->node_x_slider, p->basecurve[0][g->selected].x);
+    dt_bauhaus_slider_set(g->node_y_slider, p->basecurve[0][g->selected].y);
+  }
 
   dt_iop_basecurve_sanity_check(self, widget);
 
@@ -2792,6 +2820,9 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
         dt_bauhaus_combobox_set(g->cmb_preserve_colors, DT_RGB_NORM_NONE);
       gtk_widget_set_visible(g->shadow_lift, TRUE);
       gtk_widget_set_visible(g->highlight_gain, TRUE);
+      gtk_widget_set_visible(g->node_x_slider, TRUE);
+      gtk_widget_set_visible(g->node_y_slider, TRUE);
+      gtk_widget_set_visible(g->logbase, FALSE);
       gtk_widget_set_visible(g->ucs_saturation_balance, TRUE);
       gtk_widget_set_visible(g->gamut_strength, TRUE);
       gtk_widget_set_visible(g->highlight_corr, TRUE);
@@ -2800,6 +2831,8 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       gtk_widget_set_visible(g->look_opacity, p->color_look > 0);
       gtk_widget_set_sensitive(g->shadow_lift, TRUE);
       gtk_widget_set_sensitive(g->highlight_gain, TRUE);
+      gtk_widget_set_sensitive(g->node_x_slider, TRUE);
+      gtk_widget_set_sensitive(g->node_y_slider, TRUE);
       gtk_widget_set_sensitive(g->ucs_saturation_balance, TRUE);
       gtk_widget_set_sensitive(g->gamut_strength, TRUE);
       gtk_widget_set_sensitive(g->highlight_corr, TRUE);
@@ -2836,9 +2869,10 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
           p->look_opacity = 1.0f;
           dt_bauhaus_slider_set(g->look_opacity, 1.0f);
           p->basecurve_type[0] = CUBIC_SPLINE;
-          p->basecurve_nodes[0] = 2;
+          p->basecurve_nodes[0] = 3;
           p->basecurve[0][0].x = 0.0f; p->basecurve[0][0].y = 0.0f;
-          p->basecurve[0][1].x = 1.0f; p->basecurve[0][1].y = 1.0f;
+          p->basecurve[0][1].x = 0.5f; p->basecurve[0][1].y = 0.5f;
+          p->basecurve[0][2].x = 1.0f; p->basecurve[0][2].y = 1.0f;
 
           gtk_widget_queue_draw(GTK_WIDGET(g->area));
         }
@@ -2850,6 +2884,8 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       gtk_widget_set_visible(g->cmb_preserve_colors, TRUE);
       gtk_widget_set_visible(g->shadow_lift, FALSE);
       gtk_widget_set_visible(g->highlight_gain, FALSE);
+      gtk_widget_set_visible(g->node_x_slider, TRUE);
+      gtk_widget_set_visible(g->node_y_slider, TRUE);
       gtk_widget_set_visible(g->ucs_saturation_balance, FALSE);
       gtk_widget_set_visible(g->gamut_strength, FALSE);
       gtk_widget_set_visible(g->highlight_corr, FALSE);
@@ -2864,6 +2900,8 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       gtk_widget_set_sensitive(g->target_gamut, FALSE);
       gtk_widget_set_sensitive(g->color_look, FALSE);
       gtk_widget_set_sensitive(g->look_opacity, FALSE);
+      gtk_widget_set_sensitive(g->node_x_slider, TRUE);
+      gtk_widget_set_sensitive(g->node_y_slider, TRUE);
       gtk_widget_set_tooltip_text(g->fusion, _("fuse this image stopped up/down a couple of times with itself, to "
                                                "compress high dynamic range. expose for the highlights before use."));
     }
@@ -2899,6 +2937,12 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->ucs_saturation_balance, p->ucs_saturation_balance);
   dt_bauhaus_combobox_set(g->color_look, p->color_look);
   dt_bauhaus_slider_set(g->look_opacity, p->look_opacity);
+  int display_idx = (g->selected >= 0) ? g->selected : g->last_selected;
+  if(display_idx >= 0 && display_idx < p->basecurve_nodes[0])
+  {
+    dt_bauhaus_slider_set(g->node_x_slider, p->basecurve[0][display_idx].x);
+    dt_bauhaus_slider_set(g->node_y_slider, p->basecurve[0][display_idx].y);
+  }
   g->last_workflow_mode = p->workflow_mode;
   g->look_selected_first_time = (p->color_look != 0);
   gui_changed(self, NULL, NULL);
@@ -2914,6 +2958,42 @@ static void logbase_callback(GtkWidget *slider, dt_iop_module_t *self)
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
 
+static void node_x_slider_callback(GtkWidget *slider, dt_iop_module_t *self)
+{
+  dt_iop_basecurve_gui_data_t *g = self->gui_data;
+  dt_iop_basecurve_params_t *p = self->params;
+
+  int node_idx = g->selected;
+  if(node_idx < 0) node_idx = g->last_selected;
+  if(node_idx < 0) node_idx = 1;
+  if(node_idx >= p->basecurve_nodes[0]) node_idx = p->basecurve_nodes[0] - 1;
+
+  float new_x = dt_bauhaus_slider_get(g->node_x_slider);
+  p->basecurve[0][node_idx].x = new_x;
+  g->selected = node_idx;
+  g->last_selected = node_idx;
+  gtk_widget_queue_draw(GTK_WIDGET(g->area));
+  dt_dev_add_history_item_target(darktable.develop, self, TRUE, self->widget);
+}
+
+static void node_y_slider_callback(GtkWidget *slider, dt_iop_module_t *self)
+{
+  dt_iop_basecurve_gui_data_t *g = self->gui_data;
+  dt_iop_basecurve_params_t *p = self->params;
+
+  int node_idx = g->selected;
+  if(node_idx < 0) node_idx = g->last_selected;
+  if(node_idx < 0) node_idx = 1;
+  if(node_idx >= p->basecurve_nodes[0]) node_idx = p->basecurve_nodes[0] - 1;
+
+  float new_y = dt_bauhaus_slider_get(g->node_y_slider);
+  p->basecurve[0][node_idx].y = new_y;
+  g->selected = node_idx;
+  g->last_selected = node_idx;
+  gtk_widget_queue_draw(GTK_WIDGET(g->area));
+  dt_dev_add_history_item_target(darktable.develop, self, TRUE, self->widget);
+}
+
 void gui_init(dt_iop_module_t *self)
 {
   dt_iop_basecurve_gui_data_t *g = IOP_GUI_ALLOC(basecurve);
@@ -2926,6 +3006,7 @@ void gui_init(dt_iop_module_t *self)
     (void)dt_draw_curve_add_point(g->minmax_curve, p->basecurve[0][k].x, p->basecurve[0][k].y);
   g->mouse_x = g->mouse_y = -1.0;
   g->selected = -1;
+  g->last_selected = -1;
   g->loglogscale = 0;
   g->look_selected_first_time = FALSE;
 
@@ -2985,6 +3066,26 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_factor(g->shadow_lift, 100.0);
   dt_bauhaus_slider_set_offset(g->shadow_lift, -100.0);
   dt_bauhaus_slider_set_default(g->shadow_lift, 1.0);
+
+  g->node_x_slider = dt_bauhaus_slider_new_with_range(self, 0.0f, 1.0f, 0, 0.5f, 3);
+  dt_bauhaus_widget_set_label(g->node_x_slider, NULL, _("node x position"));
+  gtk_widget_set_tooltip_text(g->node_x_slider, _("horizontal position of the selected node on the curve (0% = left, 100% = right)."));
+  dt_bauhaus_slider_set_format(g->node_x_slider, "%");
+  dt_bauhaus_slider_set_factor(g->node_x_slider, 100.0);
+  dt_bauhaus_slider_set_default(g->node_x_slider, 0.5);
+
+  g->node_y_slider = dt_bauhaus_slider_new_with_range(self, 0.0f, 1.0f, 0, 0.5f, 3);
+  dt_bauhaus_widget_set_label(g->node_y_slider, NULL, _("node y position"));
+  gtk_widget_set_tooltip_text(g->node_y_slider, _("vertical position of the selected node on the curve (0% = bottom, 100% = top)."));
+  dt_bauhaus_slider_set_format(g->node_y_slider, "%");
+  dt_bauhaus_slider_set_factor(g->node_y_slider, 100.0);
+  dt_bauhaus_slider_set_default(g->node_y_slider, 0.5);
+
+  g_signal_connect(G_OBJECT(g->node_x_slider), "value-changed", G_CALLBACK(node_x_slider_callback), self);
+  g_signal_connect(G_OBJECT(g->node_y_slider), "value-changed", G_CALLBACK(node_y_slider_callback), self);
+
+  gtk_box_pack_start(GTK_BOX(self->widget), g->node_x_slider, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->node_y_slider, TRUE, TRUE, 0);
 
   g->fusion = dt_bauhaus_combobox_from_params(self, "exposure_fusion");
   dt_bauhaus_combobox_add(g->fusion, _("none"));
@@ -3057,7 +3158,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_widget_set_label(g->logbase, NULL, N_("scale for graph"));
   g_signal_connect(G_OBJECT(g->logbase), "value-changed", G_CALLBACK(logbase_callback), self);
   gtk_box_pack_start(GTK_BOX(self->widget), g->logbase, TRUE, TRUE, 0); 
-  
+
   gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK | darktable.gui->scroll_mask
                                            | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
                                            | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
