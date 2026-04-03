@@ -1,4 +1,4 @@
-name: Libre PKG
+name: Main PKG
 
 on:
   #schedule:
@@ -443,25 +443,25 @@ jobs:
     runs-on: ubuntu-latest
     needs: [AppImage, Windows, macOS]
     steps:
-      - name: Checkout master to update 'Libre' tag
-        if: github.ref_name == 'master' # will be true only for Libre builds
+      - name: Checkout master to update 'Main' tag
+        if: github.ref_name == 'master' # will be true only for Main builds
         uses: actions/checkout@v6
         with:
           ref: master
           submodules: false
           path: src
           fetch-depth: 1
-      - name: Force move 'Libre' tag
-        if: github.ref_name == 'master' # will be true only for Libre builds
+      - name: Force move 'Main' tag
+        if: github.ref_name == 'master' # will be true only for Main builds
         run: |
           pushd src
-          # Delete and recreate Libre tag instead of just force retargeting.
+          # Delete and recreate Main tag instead of just force retargeting.
           # This updates the tag creation date. Without this, the github-shown
           # release date will be stuck on the date the tag was created.
-          git tag -d Libre || true
-          git push origin --delete Libre
-          git tag Libre
-          git push origin Libre
+          git tag -d Main || true
+          git push origin --delete Main
+          git tag Main
+          git push origin Main
           popd
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -479,9 +479,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          allowUpdates: true     # required to allow Libre release updates
-          removeArtifacts: true  # we don't want to pile up old artifacts in the Libre release
-          tag: Libre
+          allowUpdates: true     # required to allow Main release updates
+          removeArtifacts: true  # we don't want to pile up old artifacts in the Main release
+          tag: Main
           prerelease: true
           # We don't want a stable release that is in the process of being prepared
           # and not yet ready for publication to be visible
