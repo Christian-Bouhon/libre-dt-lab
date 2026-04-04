@@ -17,7 +17,7 @@ extern const char darktable_last_commit_year[];
 
 static const char *dt_supported_extensions[] __attribute__((unused)) = {"@DT_SUPPORTED_EXTENSIONS_STRING@", NULL};
 
-#define GETTEXT_PACKAGE "darktable"
+#define GETTEXT_PACKAGE "libre-dt-lab"
 
 #cmakedefine DARKTABLE_LOCALEDIR "@REL_BIN_TO_LOCALEDIR@"
 #cmakedefine DARKTABLE_LIBDIR    "@REL_BIN_TO_LIBDIR@"
