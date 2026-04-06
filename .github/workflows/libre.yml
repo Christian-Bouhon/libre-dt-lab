@@ -340,7 +340,10 @@ jobs:
       - name: Get version info
         run: |
           cd ${SRC_DIR}
-          echo "VERSION=$(git describe --tags --match release-* | sed 's/^release-//;s/-/+/;s/-/~/;s/rc/~rc/')" >> $GITHUB_ENV
+          # pour obtenir le hash court du commit
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          # ici version : 5.5.0 + le hash
+          echo "VERSION=5.5.0+$SHORT_SHA" >> $GITHUB_ENV
           ([[ ${MSYSTEM_CARCH} == x86_64 ]] && echo "SYSTEM=win64" || echo "SYSTEM=woa64") >> $GITHUB_ENV
       - name: Package upload
         uses: actions/upload-artifact@v7
