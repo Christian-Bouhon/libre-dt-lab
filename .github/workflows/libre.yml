@@ -171,7 +171,14 @@ jobs:
       - name: Update Lensfun data
         run: |
           sudo lensfun-update-data
+      - name: Get version info
+        run: |
+          cd src
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "VERSION=5.5.0+$SHORT_SHA" >> $GITHUB_ENV
       - name: Build and Install
+        env:
+          PROJECT_VERSION: ${{ env.VERSION }}
         run: |
           cd src
           bash tools/appimage-build-script.sh
@@ -310,11 +317,19 @@ jobs:
       - name: Update Lensfun data
         run: |
           lensfun-update-data
+      - name: Get version info
+        run: |
+          cd ${SRC_DIR}
+          # pour obtenir le hash court du commit
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          # ici version : 5.5.0 + le hash
+          echo "VERSION=5.5.0+$SHORT_SHA" >> $GITHUB_ENV
+          ([[ ${MSYSTEM_CARCH} == x86_64 ]] && echo "SYSTEM=win64" || echo "SYSTEM=woa64") >> $GITHUB_ENV
       - name: Build and Install
         run: |
           cmake -E make_directory "${BUILD_DIR}"
           cmake -E make_directory "${INSTALL_PREFIX}"
-          $(cygpath ${SRC_DIR})/.ci/ci-script.sh
+          $(cygpath ${SRC_DIR})/.ci/ci-script.sh -DPROJECT_VERSION="${{ env.VERSION }}"
       - name: Create multi-resolution icon file
         run: |
           # Create multi-resolution .ico file expected by the .iss script for use as setup file icon.
@@ -337,14 +352,6 @@ jobs:
           Compress-Archive -Path "$env:INSTALL_PREFIX\*" `
                            -DestinationPath "$env:BUILD_DIR\$zipname"
           Write-Host "Created: $zipname"
-      - name: Get version info
-        run: |
-          cd ${SRC_DIR}
-          # pour obtenir le hash court du commit
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          # ici version : 5.5.0 + le hash
-          echo "VERSION=5.5.0+$SHORT_SHA" >> $GITHUB_ENV
-          ([[ ${MSYSTEM_CARCH} == x86_64 ]] && echo "SYSTEM=win64" || echo "SYSTEM=woa64") >> $GITHUB_ENV
       - name: Package upload
         uses: actions/upload-artifact@v7
         with:
@@ -413,11 +420,16 @@ jobs:
       - name: Cancel workflow if job fails
         if: ${{ failure() }}
         uses: andymckay/cancel-action@0.5
-      - name: Build and Install
+      - name: Get version info
+        run: |
+          cd src
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "VERSION=5.5.0+$SHORT_SHA" >> $GITHUB_ENV
+        - name: Build and Install
         run: |
           cmake -E make_directory "${BUILD_DIR}";
           cmake -E make_directory "${INSTALL_PREFIX}";
-          ./src/.ci/ci-script.sh;
+          PROJECT_VERSION="${{ env.VERSION }}" ./src/.ci/ci-script.sh;
       - name: Test executable
         run: |
           echo "Testing libre-dt-lab executable..."
