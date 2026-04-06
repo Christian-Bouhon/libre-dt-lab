@@ -194,12 +194,18 @@ jobs:
             fi
           done
           ls -la *.AppImage 2>/dev/null || true
+      - name: Cleanup build tools
+        run: |
+          cd src/build
+          # Supprime tous les fichiers linuxdeploy et autres outils .AppImage
+          rm -f linuxdeploy*.AppImage
+          # Optionnel : lister les fichiers restants pour vérifier dans les logs
+          echo "Fichiers prêts pour l'upload :"
+          ls -lh
       - name: Package upload
         uses: actions/upload-artifact@v7
         with:
-          path: |
-            ${{ github.workspace }}/src/build/libre-dt-lab-*.AppImage
-            ${{ github.workspace }}/src/build/libre-dt-lab-*.AppImage.zsync
+          path: ${{ github.workspace }}/src/build/*.AppImage*
           name: artifact-appimage-${{ runner.arch }}
           retention-days: 1
 
