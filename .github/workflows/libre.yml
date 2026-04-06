@@ -197,7 +197,9 @@ jobs:
       - name: Package upload
         uses: actions/upload-artifact@v7
         with:
-          path: ${{ github.workspace }}/src/build/*.AppImage*
+          path: |
+            ${{ github.workspace }}/src/build/libre-dt-lab-*.AppImage
+            ${{ github.workspace }}/src/build/libre-dt-lab-*.AppImage.zsync
           name: artifact-appimage-${{ runner.arch }}
           retention-days: 1
 
