@@ -420,12 +420,14 @@ jobs:
       - name: Cancel workflow if job fails
         if: ${{ failure() }}
         uses: andymckay/cancel-action@0.5
+
       - name: Get version info
         run: |
           cd src
           SHORT_SHA=$(git rev-parse --short HEAD)
           echo "VERSION=5.5.0+$SHORT_SHA" >> $GITHUB_ENV
-        - name: Build and Install
+
+      - name: Build and Install
         run: |
           cmake -E make_directory "${BUILD_DIR}";
           cmake -E make_directory "${INSTALL_PREFIX}";
