@@ -19,9 +19,14 @@ endif(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
 if(DEFINED PROJECT_VERSION)
   project(libre-dt-lab VERSION ${PROJECT_VERSION} LANGUAGES CXX C)
 else()
-  # Actual version string will be generated from git later
+# Actual version string will be generated from git later
   project(libre-dt-lab VERSION 0 LANGUAGES CXX C)
 endif()
+
+# if(NOT DEFINED PROJECT_VERSION)
+#   set(PROJECT_VERSION "5.5.0")
+# endif()
+# project(libre-dt-lab VERSION ${PROJECT_VERSION} LANGUAGES CXX C)
 
 # Allow forcing the C/CPP compiler that is actually used during the compilation
 # to something other than what is used by the cmake run. This is useful when

@@ -84,7 +84,7 @@ case "$TARGET" in
       -DVALIDATE_APPDATA_FILE=ON \
       -DBUILD_TESTING=ON \
       -DTESTBUILD_OPENCL_PROGRAMS=ON \
-      -DUSE_AI=ON \
+      -DUSE_AI=OFF \
       $ECO "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log)
     target_build
     ;;
@@ -92,7 +92,7 @@ case "$TARGET" in
     cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
       -G"$GENERATOR" \
       -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
-      -DUSE_AI=ON \
+      -DUSE_AI=OFF \
       $ECO "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log)
     target_notest
     ;;
