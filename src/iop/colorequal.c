@@ -913,9 +913,9 @@ static void _guide_with_chromaticity(float *const restrict UV,
     const float uv[2] = { UV[2 * k + 0], UV[2 * k + 1] };
     const float cv[2] = { a[4 * k + 0] * uv[0] + a[4 * k + 1] * uv[1] + b[2 * k + 0],
                           a[4 * k + 2] * uv[0] + a[4 * k + 3] * uv[1] + b[2 * k + 1] };
-    corrections[2 * k + 1] = interpolatef(_get_satweight(saturation[k] - sat_shift), cv[0], 1.0f);
+    corrections[2 * k + 1] = 1.0f + (cv[0] - 1.0f) * _get_satweight(saturation[k] - sat_shift);
     const float gradient_weight = 1.0f - CLIP(gradients[k]);
-    b_corrections[k] = interpolatef(gradient_weight * _get_satweight(saturation[k] - bright_shift), cv[1], 0.0f);
+    b_corrections[k] = cv[1] * gradient_weight * _get_satweight(saturation[k] - bright_shift);
   }
   dt_free_align(a);
   dt_free_align(b);
@@ -1955,7 +1955,7 @@ static inline void _draw_sliders_hue_gradient
   for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
   {
     const float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
-    const float hue_temp = hue_min + stop * 2.f * M_PI_F;
+    const float hue_temp = hue_min + stop * DT_2PI_F;
     dt_aligned_pixel_t RGB = {  1.0f, 1.0f, 1.0f, 1.0f };
     _build_dt_UCS_HSB_gradients((dt_aligned_pixel_t){ hue_temp, sat, brightness, 0.f },
                                 RGB, work_profile, gamut_LUT);
@@ -2058,7 +2058,7 @@ static void _init_graph_backgrounds(dt_iop_colorequal_gui_data_t *g,
       const float x = 360.0f * (float)(gwidth - j - 1) / (graph_width - 1.0f) - 90.0f;
       const float y = 1.0f - (float)i / (graph_height - 1.0f);
       const float hue = (x < -180.0f) ? _conventional_hue_deg_to_ucs_rad(x +180.0f) : _conventional_hue_deg_to_ucs_rad(x);
-      const float hhue = hue - (y - 0.5f) * 2.f * M_PI_F;
+      const float hhue = hue - (y - 0.5f) * DT_2PI_F;
 
       dt_aligned_pixel_t RGB;
       dt_aligned_pixel_t HSB[NUM_CHANNELS] = {{ hhue, max_saturation,     SLIDER_BRIGHTNESS,              1.0f },
@@ -2470,7 +2470,7 @@ static gboolean _iop_colorequalizer_draw(GtkWidget *widget,
       smoothing = p->smoothing_hue;
       clip = FALSE;
       offset = 0.5f;
-      factor = 1.f / (2.f * M_PI_F);
+      factor = 1.f / DT_2PI_F;
       break;
     }
     case BRIGHTNESS:
@@ -2493,7 +2493,7 @@ static gboolean _iop_colorequalizer_draw(GtkWidget *widget,
   {
     const float x = ((float)k / (float)(360 - 1) + dx) * graph_width;
     float hue = _conventional_hue_deg_to_ucs_rad(k);
-    hue = (hue < M_PI_F) ? hue : -2.f * M_PI_F + hue; // The LUT is defined in [-pi; pi[
+    hue = (hue < M_PI_F) ? hue : -DT_2PI_F + hue; // The LUT is defined in [-pi; pi[
     const float y = (offset - lookup_gamut(g->LUT, hue) * factor) * graph_height;
 
     if(k == first)
@@ -2508,7 +2508,7 @@ static gboolean _iop_colorequalizer_draw(GtkWidget *widget,
   {
     float hue = _get_hue_node(k, 0.0f); // in radians
     const float xn = (k / ((float)NODES) + dx    ) * graph_width;
-    hue = (hue < M_PI_F) ? hue : -2.f * M_PI_F + hue; // The LUT is defined in [-pi; pi[
+    hue = (hue < M_PI_F) ? hue : -DT_2PI_F + hue; // The LUT is defined in [-pi; pi[
     const float yn = (offset - lookup_gamut(g->LUT, hue) * factor) * graph_height;
 
     // fill bars
@@ -2575,7 +2575,7 @@ static void _pipe_RGB_to_Ych(dt_iop_module_t *self,
   XYZ_to_Ych(XYZ_D65, Ych);
 
   if(Ych[2] < 0.f)
-    Ych[2] = 2.f * M_PI_F + Ych[2];
+    Ych[2] = DT_2PI_F + Ych[2];
 }
 
 /* mouse_moved — updates the hue read under the mouse cursor.
@@ -2981,7 +2981,7 @@ static void _area_set_value(const dt_iop_colorequal_gui_data_t *g,
          max = 100.0f;
          break;
        case(HUE):
-         factor = 1.f / (2.f * M_PI_F);
+         factor = 1.f / DT_2PI_F;
          max = (100.0f / 180.0f) * 100.0f;
          break;
        case(BRIGHTNESS):
