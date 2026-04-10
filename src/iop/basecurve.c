@@ -43,6 +43,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(5)
 #define DT_IOP_TONECURVE_RES 256
 #define MAXNODES 20
@@ -2260,8 +2264,8 @@ static void _compute_histogram_from_thumbnail(const uint8_t *buffer,
   const size_t num_pixels = (size_t)width * height;
   for(size_t k = 0; k < num_pixels; k++)
   {
-    // La miniature est encodée en espace gamma sRGB (approx 2.2).
-    // On linéarise les valeurs pour correspondre au domaine linéaire du module basecurve.
+    // The thumbnail is encoded in sRGB gamma space (approx 2.2).
+    // Linearize values to match the linear domain expected by the basecurve module.
     float r = powf(buffer[k * 4 + 0] / 255.0f, 2.2f);
     float g = powf(buffer[k * 4 + 1] / 255.0f, 2.2f);
     float b = powf(buffer[k * 4 + 2] / 255.0f, 2.2f);
@@ -2275,9 +2279,9 @@ static void _compute_curve_nodes_from_histogram(uint32_t histogram[256],
                                                 int workflow_mode,
                                                 gboolean high_key)
 {
-// Percentiles d'entrée (où on lit l'histogramme)
+// Input percentiles: where we sample the luminance histogram
 float input_pcts[5]  = { 0.05f, 0.18f, 0.50f, 0.82f, 0.95f };
-// Valeurs de sortie souhaitées (ce qu'on veut mapper dessus)
+// Desired output Y values: the tone targets we map each percentile to
 float output_y[5]    = { 0.035f, 0.15f, 0.45f, 0.75f, 0.93f };
 
   nodes[0].x = 0.0f;
@@ -2309,7 +2313,7 @@ float output_y[5]    = { 0.035f, 0.15f, 0.45f, 0.75f, 0.93f };
 
   if(high_key)
   {
-    // Mode scène claire : on garde le point noir à (0,0) et une position des noeuds (0, 1, 2)
+    // High-key mode: shift all output targets upward to preserve brightness in bright scenes.
     output_y[0] = 0.21f;
     output_y[1] = 0.40f;
     output_y[2] = 0.65f;
@@ -2327,7 +2331,8 @@ float output_y[5]    = { 0.035f, 0.15f, 0.45f, 0.75f, 0.93f };
 
     while(node_idx < 5 && pct >= input_pcts[node_idx])
     {
-      // Force modulée selon le mode et le type de scène
+    // Blend weight between the histogram-derived X position and the target output_y value.
+    // Lower = closer to output_y (softer response); higher = follows histogram more closely. 
       float node_force = (workflow_mode == 0) 
                          ? ((node_idx <= 3) ? 0.60f : 0.40f) 
                          : (high_key ? 0.45f : 0.30f);
@@ -2335,7 +2340,7 @@ float output_y[5]    = { 0.035f, 0.15f, 0.45f, 0.75f, 0.93f };
       float hist_x = (float)i / 255.0f;
       float new_x = output_y[node_idx] + (hist_x - output_y[node_idx]) * node_force;
       
-      // Sécurité : garantir que les X sont strictement croissants pour la spline
+      // Safety: ensure X positions are strictly increasing, as required by the spline interpolator.
       if(node_idx > 0 && new_x <= nodes[node_idx].x)
         new_x = nodes[node_idx].x + 0.01f;
       else if(node_idx == 0 && new_x <= 0.0f)
@@ -2347,7 +2352,7 @@ float output_y[5]    = { 0.035f, 0.15f, 0.45f, 0.75f, 0.93f };
     }
   }
 
-  while(node_idx < 5) // Remplissage des nœuds restants si l'histogramme est incomplet
+  while(node_idx < 5) // Fill remaining nodes with evenly spaced fallback if histogram is sparse.
   {
     nodes[node_idx + 1].x = nodes[node_idx].x + (1.0f - nodes[node_idx].x) / (6.0f - node_idx);
     nodes[node_idx + 1].y = output_y[node_idx];
@@ -2380,7 +2385,7 @@ static void _basecurve_compute_common(dt_iop_module_t *self, gboolean high_key)
 
   dt_dev_add_history_item_target(darktable.develop, self, TRUE, self->widget);
   
-  // Force la mise à jour des curseurs X/Y dans le panneau latéral
+  // Refresh the whole module UI (sliders, curve widget) to reflect the newly computed nodes.
   dt_iop_gui_update(self);
 
   gtk_widget_queue_draw(GTK_WIDGET(((dt_iop_basecurve_gui_data_t *)self->gui_data)->area));
@@ -3174,7 +3179,11 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->look_opacity, p->look_opacity);
   int display_idx = (g->selected >= 0) ? g->selected : g->last_selected;
   if(display_idx < 0 || display_idx >= p->basecurve_nodes[0])
+  {
     display_idx = p->basecurve_nodes[0] / 2;
+    g->selected = display_idx;
+    g->last_selected = display_idx;
+  }
   if(display_idx >= 0 && display_idx < p->basecurve_nodes[0])
   {
     dt_bauhaus_slider_set(g->node_x_slider, p->basecurve[0][display_idx].x);
