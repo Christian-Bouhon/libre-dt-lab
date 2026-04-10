@@ -43,10 +43,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(5)
 #define DT_IOP_TONECURVE_RES 256
 #define MAXNODES 20
@@ -84,7 +80,7 @@ typedef struct dt_iop_basecurve_params_t
 static const float color_looks[11][11] = {
   {1.000f, 0.000f, 0.000f,  0.000f, 1.000f, 0.000f,  0.000f, 0.000f, 1.000f}, // 1. neutral
   {1.076f, -0.047f, -0.058f, -0.014f, 1.044f, -0.052f, -0.105f, 0.049f, 1.076f}, // 2. natural look
-  {1.029f, -0.023f, -0.002f, -0.008f, 1.008f, 0.007f, -0.074f, 0.046f, 1.010}, // 3. portrait
+  {1.029f, -0.023f, -0.002f, -0.008f, 1.008f, 0.007f, -0.074f, 0.046f, 1.010f}, // 3. portrait
   {1.074f, -0.054f, -0.071f, 0.006f, 1.009f, -0.059f, -0.103f, 0.060f, 1.086f}, // 4. vibrant
   {1.084f, -0.006f, -0.093f, -0.074f, 1.008f, 0.060f, -0.011f, 0.005f, 1.024f}, // 5. nature
   {1.218f, -0.119f, -0.099f, 0.007f, 1.076f, -0.069f, -0.192f, 0.048f, 1.154f}, // 6. blue sky
@@ -2191,9 +2187,7 @@ void commit_params(dt_iop_module_t *self,
     d->basecurve_type = p->basecurve_type[ch];
     for(int k = 0; k < p->basecurve_nodes[ch]; k++)
     {
-      // printf("p->basecurve[%i][%i].x = %f;\n", ch, k, p->basecurve[ch][k].x);
-      // printf("p->basecurve[%i][%i].y = %f;\n", ch, k, p->basecurve[ch][k].y);
-      (void)dt_draw_curve_add_point(d->curve, p->basecurve[ch][k].x, p->basecurve[ch][k].y);
+    (void)dt_draw_curve_add_point(d->curve, p->basecurve[ch][k].x, p->basecurve[ch][k].y);
     }
   }
   else
