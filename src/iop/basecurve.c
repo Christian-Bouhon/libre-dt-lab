@@ -19,6 +19,7 @@
 #include "common/colorspaces_inline_conversions.h"
 #include "common/debug.h"
 #include "common/imagebuf.h"
+#include "common/image.h"
 #include "common/math.h"
 #include "common/opencl.h"
 #include "common/rgb_norms.h"
@@ -34,7 +35,7 @@
 #include "gui/presets.h"
 #include "gui/accelerators.h"
 #include "iop/iop_api.h"
-
+#include "imageio/imageio_common.h"
 #include <regex.h>
 #include <assert.h>
 #include <gtk/gtk.h>
@@ -42,10 +43,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(5)
 #define DT_IOP_TONECURVE_RES 256
 #define MAXNODES 20
-
 
 DT_MODULE_INTROSPECTION(7, dt_iop_basecurve_params_t)
 
@@ -555,7 +559,7 @@ void reload_defaults(dt_iop_module_t *self)
 
     gboolean FOUND = FALSE;
 
-    // first check for camera specific basecure if needed
+    // first check for camera specific basecurve if needed
 
     const gboolean autoapply_percamera =
       dt_conf_get_bool("plugins/darkroom/basecurve/auto_apply_percamera_presets");
@@ -591,12 +595,11 @@ void reload_defaults(dt_iop_module_t *self)
 
   if(!dt_is_display_referred())
   {
-    // Force kinematic defaults for scene-referred workflow:
     d->workflow_mode = 1;
     d->shadow_lift = 1.0f;
     d->highlight_gain = 1.0f;
     d->ucs_saturation_balance = 0.2f;
-    d->color_look = 0; // Neutral look
+    d->color_look = 0;
     d->look_opacity = 1.0f;
 
     d->basecurve_nodes[0] = 3;
@@ -604,6 +607,11 @@ void reload_defaults(dt_iop_module_t *self)
     d->basecurve[0][0].x = 0.0f; d->basecurve[0][0].y = 0.0f;
     d->basecurve[0][1].x = 0.5f; d->basecurve[0][1].y = 0.5f;
     d->basecurve[0][2].x = 1.0f; d->basecurve[0][2].y = 1.0f;
+  }
+  else
+  {
+    d->color_look = 0;
+    d->look_opacity = 1.0f;
   }
 }
 
@@ -985,7 +993,7 @@ int process_cl_fusion(dt_iop_module_t *self,
       CLARG(dev_in), CLARG(dev_comb[0]), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(d->workflow_mode),
       CLARGFLOAT(d->shadow_lift), CLARGFLOAT(d->highlight_gain), CLARGFLOAT(d->ucs_saturation_balance),
       CLARGFLOAT(d->gamut_strength), CLARGFLOAT(d->highlight_corr), CLARG(d->target_gamut), CLARGFLOAT(d->look_opacity),
-      CLARG(look_mat_buf), CLARGFLOAT(alpha));
+      CLARG(look_mat_buf), CLARGFLOAT(alpha), CLARG(dev_profile_info), CLARG(use_work_profile));
 
 error:
   for(int k = 0; k < num_levels_max; k++)
@@ -1051,7 +1059,7 @@ int process_cl_lut(dt_iop_module_t *self,
   for(int i=0; i<9; i++) look_mat_buf[i] = color_looks[d->color_look][i];
   const float alpha = 0.6f;
 
-  if(d->workflow_mode > 0)
+  if(d->workflow_mode > 0 || d->color_look > 0)
   {
     dev_tmp = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
     if(dev_tmp == NULL) goto error;
@@ -1075,13 +1083,13 @@ int process_cl_lut(dt_iop_module_t *self,
                                            CLARG(dev_profile_lut), CLARG(use_work_profile));
   }
 
-  if(d->workflow_mode > 0)
+  if(d->workflow_mode > 0 || d->color_look > 0)
   {
     err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_basecurve_finalize, width, height,
         CLARG(dev_in), CLARG(dev_tmp), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(d->workflow_mode),
         CLARGFLOAT(d->shadow_lift), CLARGFLOAT(d->highlight_gain), CLARGFLOAT(d->ucs_saturation_balance),
         CLARGFLOAT(d->gamut_strength), CLARGFLOAT(d->highlight_corr), CLARG(d->target_gamut),
-        CLARGFLOAT(d->look_opacity), CLARG(look_mat_buf), CLARGFLOAT(alpha));
+        CLARGFLOAT(d->look_opacity), CLARG(look_mat_buf), CLARGFLOAT(alpha), CLARG(dev_profile_info), CLARG(use_work_profile));
     if(err != CL_SUCCESS) goto error;
   }
 
@@ -1382,7 +1390,12 @@ static void process_lut(dt_iop_module_t *self,
   const float *const in = (const float *)ivoid;
   float *const out = (float *)ovoid;
   dt_iop_basecurve_data_t *const d = piece->data;
-  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_iop_work_profile_info(piece->module, piece->module->dev->iop);
+  const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
+
+  const gboolean has_work_profile = (work_profile != NULL) && dt_is_valid_colormatrix(work_profile->matrix_in[0][0]);
+  const float r_coeff_lum = has_work_profile ? work_profile->matrix_in[1][0] : 0.2627f;
+  const float g_coeff_lum = has_work_profile ? work_profile->matrix_in[1][1] : 0.6780f;
+  const float b_coeff_lum = has_work_profile ? work_profile->matrix_in[1][2] : 0.0593f;
 
   const int wd = roi_in->width, ht = roi_in->height;
 
@@ -1391,7 +1404,7 @@ static void process_lut(dt_iop_module_t *self,
   else
     apply_curve(in, out, wd, ht, d->preserve_colors, 1.0, d->table, d->unbounded_coeffs, work_profile);
 
-  if(d->workflow_mode > 0)
+  if(d->color_look > 0)
   {
     const float *mat = color_looks[d->color_look];
 
@@ -1439,9 +1452,18 @@ static void process_lut(dt_iop_module_t *self,
         g = powf(g, d->shadow_lift);
         b = powf(b, d->shadow_lift);
       }
-
-      const float r_coeff = 0.2627f, g_coeff = 0.6780f, b_coeff = 0.0593f;
-      float y_in = r * r_coeff + g * g_coeff + b * b_coeff;
+      float y_in;
+      dt_aligned_pixel_t xyz = { 0.f };
+      if(has_work_profile)
+      {
+        dt_aligned_pixel_t pix = { r, g, b, 0.f };
+        dt_apply_transposed_color_matrix(pix, work_profile->matrix_in_transposed, xyz);
+        y_in = xyz[1];
+      }
+      else
+      {
+        y_in = r_coeff_lum * r + g_coeff_lum * g + b_coeff_lum * b; // Fallback Rec.2020
+      }
       float y_out = y_in;
 
       /* Scene-referred: apply luminance-adaptive shoulder extension for
@@ -1452,11 +1474,13 @@ static void process_lut(dt_iop_module_t *self,
          avoid changing UI or legacy/display-referred behavior. */
       if(d->workflow_mode == 1 || d->workflow_mode == 2)
       {
-        // compute Jz from current RGB (Rec2020 -> XYZ -> JzAzBz)
-        float xyz[3];
-        xyz[0] = 0.636958f * r + 0.144617f * g + 0.168881f * b;
-        xyz[1] = 0.262700f * r + 0.677998f * g + 0.059302f * b;
-        xyz[2] = 0.000000f * r + 0.028073f * g + 1.060985f * b;
+        if(!has_work_profile)
+        {
+          // compute Jz from current RGB -> XYZ -> JzAzBz
+          xyz[0] = 0.636958f * r + 0.144617f * g + 0.168881f * b; // Fallback Rec.2020
+          xyz[1] = y_in;
+          xyz[2] = 0.000000f * r + 0.028073f * g + 1.060985f * b; // Fallback Rec.2020
+        }
         for(int i=0;i<3;i++) xyz[i] = fmaxf(xyz[i], 0.0f);
 
         float xyz_scaled[4];
@@ -1498,11 +1522,17 @@ static void process_lut(dt_iop_module_t *self,
 
       if(d->ucs_saturation_balance != 0.0f || d->gamut_strength > 0.0f || d->highlight_corr != 0.0f)
       {
-        // RGB Rec2020 to XYZ D65
-        float xyz[4];
-        xyz[0] = 0.636958f * out[k] + 0.144617f * out[k+1] + 0.168881f * out[k+2];
-        xyz[1] = 0.262700f * out[k] + 0.677998f * out[k+1] + 0.059302f * out[k+2];
-        xyz[2] = 0.000000f * out[k] + 0.028073f * out[k+1] + 1.060985f * out[k+2];
+        if(has_work_profile)
+        {
+          dt_aligned_pixel_t pix = { out[k], out[k+1], out[k+2], 0.f };
+          dt_apply_transposed_color_matrix(pix, work_profile->matrix_in_transposed, xyz);
+        }
+        else
+        {
+          xyz[0] = 0.636958f * out[k] + 0.144617f * out[k+1] + 0.168881f * out[k+2];
+          xyz[1] = r_coeff_lum * out[k] + g_coeff_lum * out[k+1] + b_coeff_lum * out[k+2];
+          xyz[2] = 0.000000f * out[k] + 0.028073f * out[k+1] + 1.060985f * out[k+2];
+        }
 
         for(int i=0; i<3; i++) xyz[i] = fmaxf(xyz[i], 0.0f);
 
@@ -1586,16 +1616,16 @@ static void process_lut(dt_iop_module_t *self,
           // JzAzBz to XYZ
           dt_JzAzBz_2_XYZ(jab, xyz_scaled);
           for(int i=0; i<3; i++) xyz[i] = xyz_scaled[i] / 400.0f;
-
-          // XYZ D65 to RGB Rec2020
-          out[k]   =  1.716651f * xyz[0] - 0.355671f * xyz[1] - 0.253366f * xyz[2];
-          out[k+1] = -0.666684f * xyz[0] + 1.616481f * xyz[1] + 0.015768f * xyz[2];
-          out[k+2] =  0.017640f * xyz[0] - 0.042770f * xyz[1] + 0.942103f * xyz[2];
+          
+          dt_aligned_pixel_t pix_xyz = { xyz[0], xyz[1], xyz[2], 0.f };
+          dt_aligned_pixel_t pix_rgb;
+          dt_apply_transposed_color_matrix(pix_xyz, work_profile->matrix_out_transposed, pix_rgb);
+          for(int i=0; i<3; i++) out[k+i] = pix_rgb[i];
 
           float min_val = fminf(out[k], fminf(out[k+1], out[k+2]));
           if(min_val < 0.0f)
           {
-            float lum = 0.2627f * out[k] + 0.6780f * out[k+1] + 0.0593f * out[k+2];
+            float lum = r_coeff_lum * out[k] + g_coeff_lum * out[k+1] + b_coeff_lum * out[k+2];
             if(lum > 0.0f)
             {
               float factor = lum / (lum - min_val);
@@ -1649,7 +1679,7 @@ static void process_lut(dt_iop_module_t *self,
       // Final gamut check to preserve hue (exact color)
       if(out[k] < 0.0f || out[k] > 1.0f || out[k+1] < 0.0f || out[k+1] > 1.0f || out[k+2] < 0.0f || out[k+2] > 1.0f)
       {
-        const float luma = 0.2627f * out[k] + 0.6780f * out[k+1] + 0.0593f * out[k+2];
+        const float luma = r_coeff_lum * out[k] + g_coeff_lum * out[k+1] + b_coeff_lum * out[k+2];
         const float target_luma = CLAMP(luma, 0.0f, 1.0f);
         float t = 1.0f;
         if(out[k] < 0.0f) t = fminf(t, target_luma / (target_luma - out[k]));
@@ -1678,7 +1708,12 @@ static void process_fusion(dt_iop_module_t *self,
   float *const out = (float *)ovoid;
   dt_iop_basecurve_data_t *const d = piece->data;
   const dt_iop_order_iccprofile_info_t *const work_profile
-    = dt_ioppr_get_iop_work_profile_info(piece->module, piece->module->dev->iop);
+    = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
+
+  const gboolean has_work_profile = (work_profile != NULL) && dt_is_valid_colormatrix(work_profile->matrix_in[0][0]);
+  const float r_coeff_lum = has_work_profile ? work_profile->matrix_in[1][0] : 0.2627f;
+  const float g_coeff_lum = has_work_profile ? work_profile->matrix_in[1][1] : 0.6780f;
+  const float b_coeff_lum = has_work_profile ? work_profile->matrix_in[1][2] : 0.0593f;
 
   // allocate temporary buffer for wavelet transform + blending
   const int wd = roi_in->width, ht = roi_in->height;
@@ -1828,8 +1863,8 @@ static void process_fusion(dt_iop_module_t *self,
     val[1] = fminf(val[1], 1e6f);
     val[2] = fminf(val[2], 1e6f);
 
-    // If using scene-referred workflow
-    if(d->workflow_mode > 0)
+    // If color look is selected
+    if(d->color_look > 0)
     {
       // Apply Color Look
       float r = val[0], g = val[1], b = val[2];
@@ -1856,29 +1891,40 @@ static void process_fusion(dt_iop_module_t *self,
         val[1] = powf(val[1], d->shadow_lift);
         val[2] = powf(val[2], d->shadow_lift);
       }
-
-      const float r_coeff = 0.2627f, g_coeff = 0.6780f, b_coeff = 0.0593f;
-      float y_in = val[0] * r_coeff + val[1] * g_coeff + val[2] * b_coeff;
-      float y_out = y_in;
+    float y_in;
+    dt_aligned_pixel_t xyz = { 0.f };
+    if(has_work_profile)
+    {
+      dt_aligned_pixel_t pix = { val[0], val[1], val[2], 0.f };
+      dt_apply_transposed_color_matrix(pix, work_profile->matrix_in_transposed, xyz);
+      y_in = xyz[1];
+    }
+    else
+    {
+      y_in = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2]; // Fallback Rec.2020
+    }
+    float y_out = y_in;
 
       if(d->workflow_mode == 1 || d->workflow_mode == 2)
       {
-        float xyz_local[3];
-        xyz_local[0] = 0.636958f * val[0] + 0.144617f * val[1] + 0.168881f * val[2];
-        xyz_local[1] = 0.262700f * val[0] + 0.677998f * val[1] + 0.059302f * val[2];
-        xyz_local[2] = 0.000000f * val[0] + 0.028073f * val[1] + 1.060985f * val[2];
-        for(int i=0;i<3;i++) xyz_local[i] = fmaxf(xyz_local[i], 0.0f);
+      if(!has_work_profile)
+      {
+        xyz[0] = 0.636958f * val[0] + 0.144617f * val[1] + 0.168881f * val[2];
+        xyz[1] = y_in;
+        xyz[2] = 0.000000f * val[0] + 0.028073f * val[1] + 1.060985f * val[2];
+        }
+      for(int i=0;i<3;i++) xyz[i] = fmaxf(xyz[i], 0.0f);
 
-        float xyz_scaled_local[4];
-        xyz_scaled_local[0] = xyz_local[0] * 400.0f;
-        xyz_scaled_local[1] = xyz_local[1] * 400.0f;
-        xyz_scaled_local[2] = xyz_local[2] * 400.0f;
-        xyz_scaled_local[3] = 0.0f;
+        float xyz_scaled[4];
+        xyz_scaled[0] = xyz[0] * 400.0f;
+        xyz_scaled[1] = xyz[1] * 400.0f;
+        xyz_scaled[2] = xyz[2] * 400.0f;
+        xyz_scaled[3] = 0.0f;
 
-        float jab_local[4] = {0.0f,0.0f,0.0f,0.0f};
-        dt_XYZ_2_JzAzBz(xyz_scaled_local, jab_local);
+        float jab[4] = {0.0f,0.0f,0.0f,0.0f};
+        dt_XYZ_2_JzAzBz(xyz_scaled, jab);
 
-        const float L = fminf(fmaxf(jab_local[0], 0.0f), 1.0f);
+        const float L = fminf(fmaxf(jab[0], 0.0f), 1.0f);
         const float alpha = 0.6f;
         const float k_scale = 1.0f + alpha * L * L;
 
@@ -1907,19 +1953,25 @@ static void process_fusion(dt_iop_module_t *self,
 
       if(d->ucs_saturation_balance != 0.0f || d->gamut_strength > 0.0f || d->highlight_corr != 0.0f)
       {
-        // RGB Rec2020 to XYZ D65
-        float xyz[4];
+        if(has_work_profile)
+        {
+        dt_aligned_pixel_t pix = { val[0], val[1], val[2], 0.f };
+        dt_apply_transposed_color_matrix(pix, work_profile->matrix_in_transposed, xyz);
+        }
+        else
+        {
         xyz[0] = 0.636958f * val[0] + 0.144617f * val[1] + 0.168881f * val[2];
-        xyz[1] = 0.262700f * val[0] + 0.677998f * val[1] + 0.059302f * val[2];
+        xyz[1] = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2];
         xyz[2] = 0.000000f * val[0] + 0.028073f * val[1] + 1.060985f * val[2];
+        }
 
-        for(int i=0; i<3; i++) xyz[i] = fmaxf(xyz[i], 0.0f);
+      for(int i=0; i<3; i++) xyz[i] = fmaxf(xyz[i], 0.0f);
 
         // XYZ to JzAzBz
         float jab[4];
-        float xyz_scaled[4];
-        for(int i=0; i<3; i++) xyz_scaled[i] = xyz[i] * 400.0f; // Scale to 400 nits for JzAzBz
-        dt_XYZ_2_JzAzBz(xyz_scaled, jab);
+      float xyz_scaled[4];
+      for(int i=0; i<3; i++) xyz_scaled[i] = xyz[i] * 400.0f; // Scale to 400 nits for JzAzBz
+      dt_XYZ_2_JzAzBz(xyz_scaled, jab);
 
         int modified = 0;
 
@@ -1996,15 +2048,15 @@ static void process_fusion(dt_iop_module_t *self,
           dt_JzAzBz_2_XYZ(jab, xyz_scaled);
           for(int i=0; i<3; i++) xyz[i] = xyz_scaled[i] / 400.0f;
 
-          // XYZ D65 to RGB Rec2020
-          val[0] =  1.716651f * xyz[0] - 0.355671f * xyz[1] - 0.253366f * xyz[2];
-          val[1] = -0.666684f * xyz[0] + 1.616481f * xyz[1] + 0.015768f * xyz[2];
-          val[2] =  0.017640f * xyz[0] - 0.042770f * xyz[1] + 0.942103f * xyz[2];
+          dt_aligned_pixel_t pix_xyz = { xyz[0], xyz[1], xyz[2], 0.f };
+          dt_aligned_pixel_t pix_rgb;
+          dt_apply_transposed_color_matrix(pix_xyz, work_profile->matrix_out_transposed, pix_rgb);
+          for(int i=0; i<3; i++) val[i] = pix_rgb[i];
 
           float min_val = fminf(val[0], fminf(val[1], val[2]));
           if(min_val < 0.0f)
           {
-            float lum = 0.2627f * val[0] + 0.6780f * val[1] + 0.0593f * val[2];
+            float lum = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2];
             if(lum > 0.0f)
             {
               float factor = lum / (lum - min_val);
@@ -2058,7 +2110,7 @@ static void process_fusion(dt_iop_module_t *self,
       // Final gamut check to preserve hue (exact color)
       if(val[0] < 0.0f || val[0] > 1.0f || val[1] < 0.0f || val[1] > 1.0f || val[2] < 0.0f || val[2] > 1.0f)
       {
-        const float luma = 0.2627f * val[0] + 0.6780f * val[1] + 0.0593f * val[2];
+        const float luma = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2];
         const float target_luma = CLAMP(luma, 0.0f, 1.0f);
         float t = 1.0f;
         if(val[0] < 0.0f) t = fminf(t, target_luma / (target_luma - val[0]));
@@ -2179,6 +2231,181 @@ void cleanup_pipe(dt_iop_module_t *self,
   dt_draw_curve_destroy(d->curve);
   free(piece->data);
   piece->data = NULL;
+}
+
+static gboolean _get_embedded_thumbnail(dt_iop_module_t *self,
+                                        uint8_t **buffer,
+                                        int32_t *width,
+                                        int32_t *height)
+{
+  if(!self->dev || !dt_is_valid_imgid(self->dev->image_storage.id))
+    return TRUE;
+
+  char filename[PATH_MAX] = { 0 };
+  gboolean from_cache = FALSE;
+  dt_image_full_path(self->dev->image_storage.id, filename, sizeof(filename), &from_cache);
+
+  if(filename[0] == '\0')
+    return TRUE;
+
+  dt_colorspaces_color_profile_type_t color_space = DT_COLORSPACE_NONE;
+  if(dt_imageio_large_thumbnail(filename, buffer, width, height, &color_space))
+    return TRUE;
+
+  return FALSE;
+}
+
+static void _compute_histogram_from_thumbnail(const uint8_t *buffer,
+                                               int width, int height,
+                                               uint32_t histogram[256])
+{
+  memset(histogram, 0, sizeof(uint32_t) * 256);
+
+  const size_t num_pixels = (size_t)width * height;
+  for(size_t k = 0; k < num_pixels; k++)
+  {
+    // The thumbnail is encoded in sRGB gamma space (approx 2.2).
+    // Linearize values to match the linear domain expected by the basecurve module.
+    float r = powf(buffer[k * 4 + 0] / 255.0f, 2.2f);
+    float g = powf(buffer[k * 4 + 1] / 255.0f, 2.2f);
+    float b = powf(buffer[k * 4 + 2] / 255.0f, 2.2f);
+    float y = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+    histogram[CLAMP((int)(y * 255.0f), 0, 255)]++;
+  }
+}
+
+static void _compute_curve_nodes_from_histogram(uint32_t histogram[256],
+                                                dt_iop_basecurve_node_t nodes[7],
+                                                int workflow_mode,
+                                                gboolean high_key)
+{
+// Input percentiles: where we sample the luminance histogram
+float input_pcts[5]  = { 0.05f, 0.18f, 0.50f, 0.82f, 0.95f };
+// Desired output Y values: the tone targets we map each percentile to
+float output_y[5]    = { 0.035f, 0.15f, 0.45f, 0.75f, 0.93f };
+
+  nodes[0].x = 0.0f;
+  nodes[0].y = 0.0f;
+  nodes[6].x = 1.0f;
+  nodes[6].y = 1.0f;
+
+  uint32_t total = 0;
+  float normalized_mean_luminance = 0.0f;
+  for(int i = 0; i < 256; i++)
+  {
+    uint32_t count = histogram[i];
+    total += count;
+    normalized_mean_luminance += ((float)i / 255.0f) * count;
+  }
+
+  if(total > 0) normalized_mean_luminance /= (float)total;
+  else normalized_mean_luminance = 0.5f;
+
+  if(total == 0)
+  {
+    for(int p = 0; p < 5; p++)
+    {
+      nodes[p + 1].x = output_y[p];
+      nodes[p + 1].y = output_y[p];
+    }
+    return;
+  }
+
+  if(high_key)
+  {
+    // High-key mode: shift all output targets upward to preserve brightness in bright scenes.
+    output_y[0] = 0.21f;
+    output_y[1] = 0.40f;
+    output_y[2] = 0.65f;
+    output_y[3] = 0.88f;
+    output_y[4] = 0.95f;
+  }
+
+  uint32_t cumsum = 0;
+  int node_idx = 0;
+  
+  for(int i = 0; i < 256 && node_idx < 5; i++)
+  {
+    cumsum += histogram[i];
+    float pct = (float)cumsum / total;
+
+    while(node_idx < 5 && pct >= input_pcts[node_idx])
+    {
+    // Blend weight between the histogram-derived X position and the target output_y value.
+    // Lower = closer to output_y (softer response); higher = follows histogram more closely. 
+      float node_force = (workflow_mode == 0) 
+                         ? ((node_idx <= 3) ? 0.60f : 0.40f) 
+                         : (high_key ? 0.45f : 0.30f);
+
+      float hist_x = (float)i / 255.0f;
+      float new_x = output_y[node_idx] + (hist_x - output_y[node_idx]) * node_force;
+      
+      // Safety: ensure X positions are strictly increasing, as required by the spline interpolator.
+      if(node_idx > 0 && new_x <= nodes[node_idx].x)
+        new_x = nodes[node_idx].x + 0.01f;
+      else if(node_idx == 0 && new_x <= 0.0f)
+        new_x = 0.01f;
+
+      nodes[node_idx + 1].x = fminf(new_x, 0.99f);
+      nodes[node_idx + 1].y = output_y[node_idx];
+      node_idx++;
+    }
+  }
+
+  while(node_idx < 5) // Fill remaining nodes with evenly spaced fallback if histogram is sparse.
+  {
+    nodes[node_idx + 1].x = nodes[node_idx].x + (1.0f - nodes[node_idx].x) / (6.0f - node_idx);
+    nodes[node_idx + 1].y = output_y[node_idx];
+    node_idx++;
+  }
+}
+
+static void _basecurve_compute_common(dt_iop_module_t *self, gboolean high_key)
+{
+  uint8_t *buffer = NULL;
+  int32_t width = 0, height = 0;
+
+  if(_get_embedded_thumbnail(self, &buffer, &width, &height))
+  {
+    dt_print(DT_DEBUG_ALWAYS, "[basecurve] no embedded thumbnail available\n");
+    dt_control_log(_("base curve: no embedded thumbnail found in this raw file"));
+    return;
+  }
+
+  uint32_t histogram[256];
+  _compute_histogram_from_thumbnail(buffer, width, height, histogram);
+  dt_free_align(buffer);
+
+  dt_iop_basecurve_params_t *p = self->params;
+
+  p->basecurve_nodes[0] = 7;
+  p->basecurve_type[0] = MONOTONE_HERMITE;
+
+  _compute_curve_nodes_from_histogram(histogram, p->basecurve[0], p->workflow_mode, high_key);
+
+  dt_dev_add_history_item_target(darktable.develop, self, TRUE, self->widget);
+  
+  // Refresh the whole module UI (sliders, curve widget) to reflect the newly computed nodes.
+  dt_iop_gui_update(self);
+
+  gtk_widget_queue_draw(GTK_WIDGET(((dt_iop_basecurve_gui_data_t *)self->gui_data)->area));
+
+  dt_print(DT_DEBUG_ALWAYS, "[basecurve] computed curve from embedded thumbnail: %d nodes\n", p->basecurve_nodes[0]);
+}
+
+void dt_iop_basecurve_compute_from_thumbnail(dt_iop_module_t *self)
+{
+  _basecurve_compute_common(self, FALSE);
+}
+
+static void _compute_from_thumbnail_callback(GtkWidget *widget, dt_iop_module_t *self)
+{
+  dt_iop_basecurve_compute_from_thumbnail(self);
+}
+
+static void _compute_bright_callback(GtkWidget *widget, dt_iop_module_t *self)
+{
+  _basecurve_compute_common(self, TRUE);
 }
 
 static float eval_grey(float x)
@@ -2654,10 +2881,11 @@ static gboolean dt_iop_basecurve_button_press(GtkWidget *widget,
       // reset current curve
       if(p->workflow_mode > 0)
       {
-        p->basecurve_nodes[ch] = 2;
+        p->basecurve_nodes[ch] = 3;
         p->basecurve_type[ch] = CUBIC_SPLINE;
         p->basecurve[ch][0].x = 0.0f; p->basecurve[ch][0].y = 0.0f;
-        p->basecurve[ch][1].x = 1.0f; p->basecurve[ch][1].y = 1.0f;
+        p->basecurve[ch][1].x = 0.5f; p->basecurve[ch][1].y = 0.5f;
+        p->basecurve[ch][2].x = 1.0f; p->basecurve[ch][2].y = 1.0f;
       }
       else
       {
@@ -2669,7 +2897,10 @@ static gboolean dt_iop_basecurve_button_press(GtkWidget *widget,
           p->basecurve[ch][k].y = d->basecurve[ch][k].y;
         }
       }
-      g->selected = -2; // avoid motion notify re-inserting immediately.
+      g->selected = 1;
+      g->last_selected = 1;
+      dt_bauhaus_slider_set(g->node_x_slider, 0.5f);
+      dt_bauhaus_slider_set(g->node_y_slider, 0.5f);
       dt_dev_add_history_item_target(darktable.develop, self, TRUE, widget);
       gtk_widget_queue_draw(GTK_WIDGET(g->area));
       return TRUE;
@@ -2890,18 +3121,27 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       gtk_widget_set_visible(g->gamut_strength, FALSE);
       gtk_widget_set_visible(g->highlight_corr, FALSE);
       gtk_widget_set_visible(g->target_gamut, FALSE);
-      gtk_widget_set_visible(g->color_look, FALSE);
-      gtk_widget_set_visible(g->look_opacity, FALSE);
+      gtk_widget_set_visible(g->color_look, TRUE);
+      gtk_widget_set_visible(g->look_opacity, p->color_look > 0);
       gtk_widget_set_sensitive(g->shadow_lift, FALSE);
       gtk_widget_set_sensitive(g->highlight_gain, FALSE);
       gtk_widget_set_sensitive(g->ucs_saturation_balance, FALSE);
       gtk_widget_set_sensitive(g->gamut_strength, FALSE);
       gtk_widget_set_sensitive(g->highlight_corr, FALSE);
       gtk_widget_set_sensitive(g->target_gamut, FALSE);
-      gtk_widget_set_sensitive(g->color_look, FALSE);
-      gtk_widget_set_sensitive(g->look_opacity, FALSE);
+      gtk_widget_set_sensitive(g->color_look, TRUE);
+      gtk_widget_set_sensitive(g->look_opacity, p->color_look > 0);
       gtk_widget_set_sensitive(g->node_x_slider, TRUE);
       gtk_widget_set_sensitive(g->node_y_slider, TRUE);
+      if(w == g->color_look)
+      {
+        if(p->color_look > 0 && !g->look_selected_first_time)
+        {
+          p->look_opacity = 1.0f;
+          dt_bauhaus_slider_set(g->look_opacity, 1.0f);
+          g->look_selected_first_time = TRUE;
+        }
+      }
       gtk_widget_set_tooltip_text(g->fusion, _("fuse this image stopped up/down a couple of times with itself, to "
                                                "compress high dynamic range. expose for the highlights before use."));
     }
@@ -2938,6 +3178,12 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_combobox_set(g->color_look, p->color_look);
   dt_bauhaus_slider_set(g->look_opacity, p->look_opacity);
   int display_idx = (g->selected >= 0) ? g->selected : g->last_selected;
+  if(display_idx < 0 || display_idx >= p->basecurve_nodes[0])
+  {
+    display_idx = p->basecurve_nodes[0] / 2;
+    g->selected = display_idx;
+    g->last_selected = display_idx;
+  }
   if(display_idx >= 0 && display_idx < p->basecurve_nodes[0])
   {
     dt_bauhaus_slider_set(g->node_x_slider, p->basecurve[0][display_idx].x);
@@ -2965,7 +3211,7 @@ static void node_x_slider_callback(GtkWidget *slider, dt_iop_module_t *self)
 
   int node_idx = g->selected;
   if(node_idx < 0) node_idx = g->last_selected;
-  if(node_idx < 0) node_idx = 1;
+  if(node_idx < 0) node_idx = p->basecurve_nodes[0] / 2;
   if(node_idx >= p->basecurve_nodes[0]) node_idx = p->basecurve_nodes[0] - 1;
 
   float new_x = dt_bauhaus_slider_get(g->node_x_slider);
@@ -2983,7 +3229,7 @@ static void node_y_slider_callback(GtkWidget *slider, dt_iop_module_t *self)
 
   int node_idx = g->selected;
   if(node_idx < 0) node_idx = g->last_selected;
-  if(node_idx < 0) node_idx = 1;
+  if(node_idx < 0) node_idx = p->basecurve_nodes[0] / 2;
   if(node_idx >= p->basecurve_nodes[0]) node_idx = p->basecurve_nodes[0] - 1;
 
   float new_y = dt_bauhaus_slider_get(g->node_y_slider);
@@ -3015,7 +3261,36 @@ void gui_init(dt_iop_module_t *self)
   g_object_set_data(G_OBJECT(g->area), "iop-instance", self);
   dt_action_define_iop(self, NULL, N_("curve"), GTK_WIDGET(g->area), NULL);
 
-  self->widget = dt_gui_vbox(GTK_WIDGET(g->area));
+  self->widget = dt_gui_vbox();
+
+    gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK | darktable.gui->scroll_mask
+                                           | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
+                                           | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
+  gtk_widget_set_can_focus(GTK_WIDGET(g->area), TRUE);
+  GtkWidget *overlay = gtk_overlay_new();
+  gtk_box_pack_start(GTK_BOX(self->widget), overlay, TRUE, TRUE, 0);
+  gtk_container_add(GTK_CONTAINER(overlay), GTK_WIDGET(g->area));
+  gtk_widget_show(overlay);
+
+  GtkWidget *box_btns = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
+  gtk_overlay_add_overlay(GTK_OVERLAY(overlay), box_btns);
+  gtk_widget_set_halign(box_btns, GTK_ALIGN_START);
+  gtk_widget_set_valign(box_btns, GTK_ALIGN_START);
+  gtk_widget_set_margin_start(box_btns, DT_GUI_CURVE_EDITOR_INSET);
+  gtk_widget_set_margin_top(box_btns, DT_GUI_CURVE_EDITOR_INSET);
+  gtk_widget_show(box_btns);
+
+  GtkWidget *btn_compute = dtgtk_button_new(dtgtk_cairo_paint_camera, 0, NULL);
+  gtk_widget_set_tooltip_text(btn_compute, _("calculate 5-node curve automatically from embedded thumbnail"));
+  g_signal_connect(G_OBJECT(btn_compute), "clicked", G_CALLBACK(_compute_from_thumbnail_callback), self);
+  gtk_box_pack_start(GTK_BOX(box_btns), btn_compute, FALSE, FALSE, 0);
+  dt_action_define_iop(self, NULL, N_("compute from thumbnail"), btn_compute, &dt_action_def_button);
+
+  GtkWidget *btn_compute_bright = dtgtk_button_new(dtgtk_cairo_paint_styles, 0, NULL);
+  gtk_widget_set_tooltip_text(btn_compute_bright, _("calculate curve for bright/high-key scenes"));
+  g_signal_connect(G_OBJECT(btn_compute_bright), "clicked", G_CALLBACK(_compute_bright_callback), self);
+  gtk_box_pack_start(GTK_BOX(box_btns), btn_compute_bright, FALSE, FALSE, 0);
+  dt_action_define_iop(self, NULL, N_("compute for bright scenes"), btn_compute_bright, &dt_action_def_button);
 
   g->cmb_preserve_colors = dt_bauhaus_combobox_from_params(self, "preserve_colors");
   gtk_widget_set_tooltip_text(g->cmb_preserve_colors, _("method to preserve colors when applying contrast"));
@@ -3159,10 +3434,6 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->logbase), "value-changed", G_CALLBACK(logbase_callback), self);
   gtk_box_pack_start(GTK_BOX(self->widget), g->logbase, TRUE, TRUE, 0); 
 
-  gtk_widget_add_events(GTK_WIDGET(g->area), GDK_POINTER_MOTION_MASK | darktable.gui->scroll_mask
-                                           | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK
-                                           | GDK_ENTER_NOTIFY_MASK | GDK_LEAVE_NOTIFY_MASK);
-  gtk_widget_set_can_focus(GTK_WIDGET(g->area), TRUE);
   g_signal_connect(G_OBJECT(g->area), "draw", G_CALLBACK(dt_iop_basecurve_draw), self);
   g_signal_connect(G_OBJECT(g->area), "button-press-event", G_CALLBACK(dt_iop_basecurve_button_press), self);
   g_signal_connect(G_OBJECT(g->area), "motion-notify-event", G_CALLBACK(dt_iop_basecurve_motion_notify), self);

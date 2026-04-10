@@ -357,7 +357,9 @@ basecurve_finalize(read_only image2d_t in,
                    const int target_gamut, 
                    const float look_opacity, 
                    const float16 look_mat, 
-                   const float alpha)
+                   const float alpha,
+                   constant dt_colorspaces_iccprofile_info_cl_t *profile_info,
+                   const int use_work_profile)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -392,9 +394,9 @@ basecurve_finalize(read_only image2d_t in,
       pixel.z = (pixel.z > 0.0f) ? native_powr(pixel.z, shadow_lift) : pixel.z;
     }
 
-    const float r_coeff = 0.2627f;
-    const float g_coeff = 0.6780f;
-    const float b_coeff = 0.0593f;
+    const float r_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[3] : 0.2627f;
+    const float g_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[4] : 0.6780f;
+    const float b_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[5] : 0.0593f;
     
     float y_in = pixel.x * r_coeff + pixel.y * g_coeff + pixel.z * b_coeff;
     float y_out = y_in;
@@ -404,9 +406,18 @@ basecurve_finalize(read_only image2d_t in,
     if(workflow_mode == 1 || workflow_mode == 2)
     {
       float3 xyz;
-      xyz.x = 0.636958f * pixel.x + 0.144617f * pixel.y + 0.168881f * pixel.z;
-      xyz.y = 0.262700f * pixel.x + 0.677998f * pixel.y + 0.059302f * pixel.z;
-      xyz.z = 0.000000f * pixel.x + 0.028073f * pixel.y + 1.060985f * pixel.z;
+      if(use_work_profile != 0 && profile_info != 0)
+      {
+        xyz.x = profile_info->matrix_in[0] * pixel.x + profile_info->matrix_in[1] * pixel.y + profile_info->matrix_in[2] * pixel.z;
+        xyz.y = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
+        xyz.z = profile_info->matrix_in[6] * pixel.x + profile_info->matrix_in[7] * pixel.y + profile_info->matrix_in[8] * pixel.z;
+      }
+      else
+      {
+        xyz.x = 0.636958f * pixel.x + 0.144617f * pixel.y + 0.168881f * pixel.z;
+        xyz.y = 0.262700f * pixel.x + 0.677998f * pixel.y + 0.059302f * pixel.z;
+        xyz.z = 0.000000f * pixel.x + 0.028073f * pixel.y + 1.060985f * pixel.z;
+      }
 
       xyz = fmax(xyz, (float3)(0.0f));
 
@@ -437,11 +448,20 @@ basecurve_finalize(read_only image2d_t in,
     float4 jab = (float4)(0.0f);
     if(ucs_saturation_balance != 0.0f || gamut_strength > 0.0f || highlight_corr != 0.0f)
     {
-      // RGB Rec2020 to XYZ D65
+      // RGB -> XYZ
       float3 xyz;
-      xyz.x = 0.636958f * pixel.x + 0.144617f * pixel.y + 0.168881f * pixel.z;
-      xyz.y = 0.262700f * pixel.x + 0.677998f * pixel.y + 0.059302f * pixel.z;
-      xyz.z = 0.000000f * pixel.x + 0.028073f * pixel.y + 1.060985f * pixel.z;
+      if(use_work_profile != 0 && profile_info != 0)
+      {
+        xyz.x = profile_info->matrix_in[0] * pixel.x + profile_info->matrix_in[1] * pixel.y + profile_info->matrix_in[2] * pixel.z;
+        xyz.y = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
+        xyz.z = profile_info->matrix_in[6] * pixel.x + profile_info->matrix_in[7] * pixel.y + profile_info->matrix_in[8] * pixel.z;
+      }
+      else
+      {
+        xyz.x = 0.636958f * pixel.x + 0.144617f * pixel.y + 0.168881f * pixel.z;
+        xyz.y = 0.262700f * pixel.x + 0.677998f * pixel.y + 0.059302f * pixel.z;
+        xyz.z = 0.000000f * pixel.x + 0.028073f * pixel.y + 1.060985f * pixel.z;
+      }
 
       xyz = fmax(xyz, 0.0f);
 
