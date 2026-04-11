@@ -556,7 +556,7 @@ basecurve_finalize(read_only image2d_t in,
         const float min_val = fmin(pixel.x, fmin(pixel.y, pixel.z));
         if(min_val < 0.0f)
         {
-          const float lum = 0.2627f * pixel.x + 0.6780f * pixel.y + 0.0593f * pixel.z;
+          const float lum = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
           if(lum > 0.0f)
           {
            const float factor = lum / (lum - min_val);

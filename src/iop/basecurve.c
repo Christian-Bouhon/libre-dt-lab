@@ -1433,7 +1433,8 @@ static void process_lut(dt_iop_module_t *self,
         out[k+1] = fmaxf(out[k+1], 0.0f);
         out[k+2] = fmaxf(out[k+2], 0.0f);
       }
-
+      float y_in;
+      dt_aligned_pixel_t xyz;
       // Reload for next steps
       r = out[k];
       g = out[k+1];
@@ -1451,8 +1452,6 @@ static void process_lut(dt_iop_module_t *self,
         g = powf(g, d->shadow_lift);
         b = powf(b, d->shadow_lift);
       }
-      float y_in;
-    dt_aligned_pixel_t xyz;
     for(int i=0; i<4; i++) xyz[i] = 0.0f;
       if(has_work_profile)
       {
@@ -1880,7 +1879,8 @@ static void process_fusion(dt_iop_module_t *self,
       val[1] = g * (1.0f - d->look_opacity) + tg * d->look_opacity;
       val[2] = b * (1.0f - d->look_opacity) + tb * d->look_opacity;
     }
-
+    float y_in;
+    dt_aligned_pixel_t xyz;
     if(d->color_look > 0 || d->workflow_mode > 0 || d->shadow_lift != 1.0f || d->highlight_gain != 1.0f)
     {
       val[0] = fmaxf(val[0], 0.0f);
@@ -1897,8 +1897,6 @@ static void process_fusion(dt_iop_module_t *self,
         val[1] = powf(val[1], d->shadow_lift);
         val[2] = powf(val[2], d->shadow_lift);
       }
-    float y_in;
-    dt_aligned_pixel_t xyz;
     for(int i=0; i<4; i++) xyz[i] = 0.0f;
     if(has_work_profile)
     {
