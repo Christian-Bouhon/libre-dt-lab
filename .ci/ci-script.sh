@@ -84,6 +84,11 @@ CMAKE_ARGS=(
   -DUSE_AI=OFF
 )
 
+# Prise en compte de la version passée en variable d'environnement
+if [ -n "$PROJECT_VERSION" ]; then
+  CMAKE_ARGS+=("-DPROJECT_VERSION=$PROJECT_VERSION")
+fi
+
 case "$TARGET" in
   "build")
     cmake "${CMAKE_ARGS[@]}" \
