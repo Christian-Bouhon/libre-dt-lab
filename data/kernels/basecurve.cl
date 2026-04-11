@@ -371,10 +371,12 @@ basecurve_finalize(read_only image2d_t in,
   // Sanitize to avoid Inf/NaN propagation
   pixel.xyz = fmax(pixel.xyz, 0.0f);
   pixel.xyz = fmin(pixel.xyz, (float3)(1e6f));
+  
+  float3 pixel_in = pixel.xyz;
 
-  if(workflow_mode > 0)
+  // Apply Color Look - Moved outside to match C logic (Display-referred support)
+  if (look_opacity > 0.0f)
   {
-    float3 pixel_in = pixel.xyz;
     float3 look_transformed;
     look_transformed.x = dot(pixel_in, (float3)(look_mat.s0, look_mat.s1, look_mat.s2));
     look_transformed.y = dot(pixel_in, (float3)(look_mat.s3, look_mat.s4, look_mat.s5));
@@ -382,21 +384,26 @@ basecurve_finalize(read_only image2d_t in,
 
     // Mix between original and transformed
     pixel.xyz = mix(pixel_in, look_transformed, look_opacity);
-    pixel.xyz = fmax(pixel.xyz, 0.0f); // Anti-black artifacts
+    pixel.xyz = fmax(pixel.xyz, 0.0f); 
+    pixel_in = pixel.xyz; // Update input for following steps
+  }
 
+  if(workflow_mode > 0 || shadow_lift != 1.0f || highlight_gain != 1.0f || ucs_saturation_balance != 0.0f || gamut_strength > 0.0f || highlight_corr != 0.0f)
+  {
     if(highlight_gain != 1.0f)
       pixel.xyz *= highlight_gain;
 
     if(shadow_lift != 1.0f)
     {
-      pixel.x = (pixel.x > 0.0f) ? native_powr(pixel.x, shadow_lift) : pixel.x;
-      pixel.y = (pixel.y > 0.0f) ? native_powr(pixel.y, shadow_lift) : pixel.y;
-      pixel.z = (pixel.z > 0.0f) ? native_powr(pixel.z, shadow_lift) : pixel.z;
+      pixel.x = (pixel.x > 0.0f) ? pow(pixel.x, shadow_lift) : pixel.x;
+      pixel.y = (pixel.y > 0.0f) ? pow(pixel.y, shadow_lift) : pixel.y;
+      pixel.z = (pixel.z > 0.0f) ? pow(pixel.z, shadow_lift) : pixel.z;
     }
 
-    const float r_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[3] : 0.2627f;
-    const float g_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[4] : 0.6780f;
-    const float b_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[5] : 0.0593f;
+    // Correct matrix indexing (row 1 starts at index 4 for 3x4 matrix)
+    const float r_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[4] : 0.2627f;
+    const float g_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[5] : 0.6780f;
+    const float b_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[6] : 0.0593f;
     
     float y_in = pixel.x * r_coeff + pixel.y * g_coeff + pixel.z * b_coeff;
     float y_out = y_in;
@@ -410,7 +417,7 @@ basecurve_finalize(read_only image2d_t in,
       {
         xyz.x = profile_info->matrix_in[0] * pixel.x + profile_info->matrix_in[1] * pixel.y + profile_info->matrix_in[2] * pixel.z;
         xyz.y = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
-        xyz.z = profile_info->matrix_in[6] * pixel.x + profile_info->matrix_in[7] * pixel.y + profile_info->matrix_in[8] * pixel.z;
+        xyz.z = profile_info->matrix_in[8] * pixel.x + profile_info->matrix_in[9] * pixel.y + profile_info->matrix_in[10] * pixel.z;
       }
       else
       {
@@ -454,7 +461,7 @@ basecurve_finalize(read_only image2d_t in,
       {
         xyz.x = profile_info->matrix_in[0] * pixel.x + profile_info->matrix_in[1] * pixel.y + profile_info->matrix_in[2] * pixel.z;
         xyz.y = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
-        xyz.z = profile_info->matrix_in[6] * pixel.x + profile_info->matrix_in[7] * pixel.y + profile_info->matrix_in[8] * pixel.z;
+        xyz.z = profile_info->matrix_in[8] * pixel.x + profile_info->matrix_in[9] * pixel.y + profile_info->matrix_in[10] * pixel.z;
       }
       else
       {
@@ -538,8 +545,13 @@ basecurve_finalize(read_only image2d_t in,
         // JzAzBz to XYZ
         xyz = JzAzBz_2_XYZ(jab).xyz / 400.0f;
 
-        // XYZ D65 to RGB Rec2020
-        pixel.xyz = XYZ_to_Rec2020(xyz);
+        // XYZ D65 to Working RGB (using profile_info for perfect parity with C)
+        if (use_work_profile != 0 && profile_info != 0)
+          pixel.xyz = (float3)(dot(xyz, (float3)(profile_info->matrix_out[0], profile_info->matrix_out[1], profile_info->matrix_out[2])),
+                               dot(xyz, (float3)(profile_info->matrix_out[4], profile_info->matrix_out[5], profile_info->matrix_out[6])),
+                               dot(xyz, (float3)(profile_info->matrix_out[8], profile_info->matrix_out[9], profile_info->matrix_out[10])));
+        else
+          pixel.xyz = XYZ_to_Rec2020(xyz);
         
         const float min_val = fmin(pixel.x, fmin(pixel.y, pixel.z));
         if(min_val < 0.0f)
@@ -592,7 +604,7 @@ basecurve_finalize(read_only image2d_t in,
     // Final gamut check to preserve hue
     if(pixel.x < 0.0f || pixel.x > 1.0f || pixel.y < 0.0f || pixel.y > 1.0f || pixel.z < 0.0f || pixel.z > 1.0f)
     {
-      const float luma = 0.2627f * pixel.x + 0.6780f * pixel.y + 0.0593f * pixel.z;
+      const float luma = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
       const float target_luma = clamp(luma, 0.0f, 1.0f);
       float t = 1.0f;
       if(pixel.x < 0.0f) t = fmin(t, target_luma / (target_luma - pixel.x));

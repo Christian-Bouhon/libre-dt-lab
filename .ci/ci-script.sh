@@ -76,31 +76,24 @@ diskspace
 
 cd "$BUILD_DIR"
 
-# Préparation des arguments communs
-CMAKE_ARGS=(
-  -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX"
-  -G"$GENERATOR"
-  -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE"
-  -DUSE_AI=OFF
-)
-
-# Prise en compte de la version passée en variable d'environnement
-if [ -n "$PROJECT_VERSION" ]; then
-  CMAKE_ARGS+=("-DPROJECT_VERSION=$PROJECT_VERSION")
-fi
-
 case "$TARGET" in
   "build")
-    cmake "${CMAKE_ARGS[@]}" \
-          -DVALIDATE_APPDATA_FILE=ON \
-          -DBUILD_TESTING=ON \
-          -DTESTBUILD_OPENCL_PROGRAMS=ON \
-          $ECO "$@" "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log; exit 1)
+    cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
+      -G"$GENERATOR" \
+      -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
+      -DVALIDATE_APPDATA_FILE=ON \
+      -DBUILD_TESTING=ON \
+      -DTESTBUILD_OPENCL_PROGRAMS=ON \
+      -DUSE_AI=ON \
+      $ECO "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log)
     target_build
     ;;
   "skiptest")
-    cmake "${CMAKE_ARGS[@]}" \
-          $ECO "$@" "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log; exit 1)
+    cmake -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
+      -G"$GENERATOR" \
+      -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
+      -DUSE_AI=ON \
+      $ECO "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log)
     target_notest
     ;;
   *)

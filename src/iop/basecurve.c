@@ -1400,10 +1400,9 @@ static void process_lut(dt_iop_module_t *self,
   else
     apply_curve(in, out, wd, ht, d->preserve_colors, 1.0, d->table, d->unbounded_coeffs, work_profile);
 
-  if(d->color_look > 0)
+  if(d->color_look > 0 || d->workflow_mode > 0 || d->shadow_lift != 1.0f || d->highlight_gain != 1.0f
+     || d->ucs_saturation_balance != 0.0f || d->gamut_strength > 0.0f || d->highlight_corr != 0.0f)
   {
-    const float *mat = color_looks[d->color_look];
-
     const size_t npixels = (size_t)wd * ht;
     DT_OMP_FOR()
     for(size_t k = 0; k < 4 * npixels; k += 4)
@@ -1417,19 +1416,23 @@ static void process_lut(dt_iop_module_t *self,
       g = fmaxf(-1e6f, fminf(g, 1e6f));
       b = fmaxf(-1e6f, fminf(b, 1e6f));
 
-      // Apply Color Look
-      const float tr = r * mat[0] + g * mat[1] + b * mat[2];
-      const float tg = r * mat[3] + g * mat[4] + b * mat[5];
-      const float tb = r * mat[6] + g * mat[7] + b * mat[8];
+      if(d->color_look > 0)
+      {
+        const float *mat = color_looks[d->color_look];
+        // Apply Color Look
+        const float tr = r * mat[0] + g * mat[1] + b * mat[2];
+        const float tg = r * mat[3] + g * mat[4] + b * mat[5];
+        const float tb = r * mat[6] + g * mat[7] + b * mat[8];
 
-      // Mix with opacity
-      out[k]   = r * (1.0f - d->look_opacity) + tr * d->look_opacity;
-      out[k+1] = g * (1.0f - d->look_opacity) + tg * d->look_opacity;
-      out[k+2] = b * (1.0f - d->look_opacity) + tb * d->look_opacity;
+        // Mix with opacity
+        out[k]   = r * (1.0f - d->look_opacity) + tr * d->look_opacity;
+        out[k+1] = g * (1.0f - d->look_opacity) + tg * d->look_opacity;
+        out[k+2] = b * (1.0f - d->look_opacity) + tb * d->look_opacity;
 
-      out[k]   = fmaxf(out[k], 0.0f);
-      out[k+1] = fmaxf(out[k+1], 0.0f);
-      out[k+2] = fmaxf(out[k+2], 0.0f);
+        out[k]   = fmaxf(out[k], 0.0f);
+        out[k+1] = fmaxf(out[k+1], 0.0f);
+        out[k+2] = fmaxf(out[k+2], 0.0f);
+      }
 
       // Reload for next steps
       r = out[k];
@@ -1449,7 +1452,8 @@ static void process_lut(dt_iop_module_t *self,
         b = powf(b, d->shadow_lift);
       }
       float y_in;
-      dt_aligned_pixel_t xyz = { 0.f };
+    dt_aligned_pixel_t xyz;
+    for(int i=0; i<4; i++) xyz[i] = 0.0f;
       if(has_work_profile)
       {
         dt_aligned_pixel_t pix = { r, g, b, 0.f };
@@ -1479,7 +1483,7 @@ static void process_lut(dt_iop_module_t *self,
         }
         for(int i=0;i<3;i++) xyz[i] = fmaxf(xyz[i], 0.0f);
 
-        float xyz_scaled[4];
+        float xyz_scaled[4] = {0};
         xyz_scaled[0] = xyz[0] * 400.0f;
         xyz_scaled[1] = xyz[1] * 400.0f;
         xyz_scaled[2] = xyz[2] * 400.0f;
@@ -1533,8 +1537,8 @@ static void process_lut(dt_iop_module_t *self,
         for(int i=0; i<3; i++) xyz[i] = fmaxf(xyz[i], 0.0f);
 
         // XYZ to JzAzBz
-        float jab[4];
-        float xyz_scaled[4];
+        float jab[4] = {0};
+        float xyz_scaled[4] = {0};
         for(int i=0; i<3; i++) xyz_scaled[i] = xyz[i] * 400.0f; // Scale to 400 nits for JzAzBz
         dt_XYZ_2_JzAzBz(xyz_scaled, jab);
 
@@ -1579,7 +1583,8 @@ static void process_lut(dt_iop_module_t *self,
           // HIGHLIGHT HUE AND SATURATION CORRECTION (sync with OpenCL)
           // Mask starts at Jz = 0.20 and is full at Jz = 0.90. Linear transition.
           float hl_mask = CLAMP((jab[0] - 0.20f) / 0.70f, 0.0f, 1.0f);
-
+          
+          if(dt_isnan(hl_mask)) hl_mask = 0.0f;
           if(hl_mask > 0.0f)
           {
             // 1. Soft symmetric desaturation (0.75 factor)
@@ -1613,7 +1618,8 @@ static void process_lut(dt_iop_module_t *self,
           dt_JzAzBz_2_XYZ(jab, xyz_scaled);
           for(int i=0; i<3; i++) xyz[i] = xyz_scaled[i] / 400.0f;
           
-          dt_aligned_pixel_t pix_xyz = { xyz[0], xyz[1], xyz[2], 0.f };
+          dt_aligned_pixel_t pix_xyz;
+          for(int i=0; i<3; i++) pix_xyz[i] = xyz[i]; pix_xyz[3] = 0.0f;
           dt_aligned_pixel_t pix_rgb;
           dt_apply_transposed_color_matrix(pix_xyz, work_profile->matrix_out_transposed, pix_rgb);
           for(int i=0; i<3; i++) out[k+i] = pix_rgb[i];
@@ -1845,7 +1851,8 @@ static void process_fusion(dt_iop_module_t *self,
   }
 
   // copy output buffer
-  const float *mat = color_looks[d->color_look];
+  const float *mat = (d->color_look > 0) ? color_looks[d->color_look] : NULL;
+
   DT_OMP_FOR()
   for(size_t k = 0; k < (size_t)4 * wd * ht; k += 4)
   {
@@ -1859,8 +1866,8 @@ static void process_fusion(dt_iop_module_t *self,
     val[1] = fminf(val[1], 1e6f);
     val[2] = fminf(val[2], 1e6f);
 
-    // If color look is selected
-    if(d->color_look > 0)
+    // If color look is selected, apply matrix
+    if(mat)
     {
       // Apply Color Look
       float r = val[0], g = val[1], b = val[2];
@@ -1872,7 +1879,10 @@ static void process_fusion(dt_iop_module_t *self,
       val[0] = r * (1.0f - d->look_opacity) + tr * d->look_opacity;
       val[1] = g * (1.0f - d->look_opacity) + tg * d->look_opacity;
       val[2] = b * (1.0f - d->look_opacity) + tb * d->look_opacity;
+    }
 
+    if(d->color_look > 0 || d->workflow_mode > 0 || d->shadow_lift != 1.0f || d->highlight_gain != 1.0f)
+    {
       val[0] = fmaxf(val[0], 0.0f);
       val[1] = fmaxf(val[1], 0.0f);
       val[2] = fmaxf(val[2], 0.0f);
@@ -1888,7 +1898,8 @@ static void process_fusion(dt_iop_module_t *self,
         val[2] = powf(val[2], d->shadow_lift);
       }
     float y_in;
-    dt_aligned_pixel_t xyz = { 0.f };
+    dt_aligned_pixel_t xyz;
+    for(int i=0; i<4; i++) xyz[i] = 0.0f;
     if(has_work_profile)
     {
       dt_aligned_pixel_t pix = { val[0], val[1], val[2], 0.f };
@@ -2044,7 +2055,8 @@ static void process_fusion(dt_iop_module_t *self,
           dt_JzAzBz_2_XYZ(jab, xyz_scaled);
           for(int i=0; i<3; i++) xyz[i] = xyz_scaled[i] / 400.0f;
 
-          dt_aligned_pixel_t pix_xyz = { xyz[0], xyz[1], xyz[2], 0.f };
+          dt_aligned_pixel_t pix_xyz;
+          for(int i=0; i<3; i++) pix_xyz[i] = xyz[i]; pix_xyz[3] = 0.0f;
           dt_aligned_pixel_t pix_rgb;
           dt_apply_transposed_color_matrix(pix_xyz, work_profile->matrix_out_transposed, pix_rgb);
           for(int i=0; i<3; i++) val[i] = pix_rgb[i];

@@ -23,9 +23,6 @@ jobs:
         os: [ubuntu-22.04, ubuntu-24.04-arm]
         branch:
           - { code: master, label: gitmaster }
-        btype: [ Release ]
-        generator: [ Ninja ]
-        target: [ skiptest ]
         include:
           - os: ubuntu-22.04
             compiler: { compiler: GNU12, CC: gcc-12, CXX: g++-12, packages: gcc-12 g++-12 }
@@ -101,9 +98,7 @@ jobs:
             python3-jsonschema \
             xsltproc \
             zlib1g-dev \
-            appstream \
-            libexpat1-dev \
-            libbrotli-dev
+            appstream
       - name: Add PPA for newer multimedia libs (x86_64 only)
         if: runner.arch != 'ARM64'
         run: |
@@ -150,13 +145,12 @@ jobs:
           cd ..
       - name: Build and install a more recent version of exiv2
         run: |
-          git clone --branch v0.28.3 --depth 1 https://github.com/Exiv2/exiv2 src-exiv2
+          git clone --branch v0.28.8 --depth 1 https://github.com/Exiv2/exiv2 src-exiv2
           cd src-exiv2
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
             -DEXIV2_ENABLE_NLS=ON \
-            -DEXIV2_ENABLE_BMFF=ON \
             -DEXIV2_ENABLE_VIDEO=OFF \
             -DCMAKE_INSTALL_PREFIX=/usr
           cmake --build build
@@ -259,8 +253,6 @@ jobs:
           pacboy: >-
             cc:p
             cmake:p
-            expat:p
-            brotli:p
             libarchive:p
             libxslt:p
             ninja:p
@@ -303,14 +295,15 @@ jobs:
           update: false
       - name: Build and install the latest compatible version of exiv2
         run: |
-          git clone --branch v0.28.3 --depth 1 https://github.com/Exiv2/exiv2 src-exiv2
+          git clone --branch v0.27.7 --depth 1 https://github.com/Exiv2/exiv2 src-exiv2
           cd src-exiv2
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
-            -DEXIV2_ENABLE_NLS=ON \
             -DEXIV2_ENABLE_BMFF=ON \
+            -DEXIV2_ENABLE_NLS=ON \
             -DEXIV2_ENABLE_VIDEO=OFF \
+            -DEXIV2_ENABLE_WIN_UNICODE=ON \
             -DCMAKE_INSTALL_PREFIX=${MINGW_PREFIX}
           cmake --build build
           cmake --install build
@@ -385,7 +378,7 @@ jobs:
       matrix:
         build:
           - { os: macos-14,       xcode: 16.2, deployment: 14.0 } # AppleClang 16, arm64
-          - { os: macos-13,       xcode: 15.2, deployment: 13.0 } # AppleClang 15, x86_64
+          - { os: macos-15-intel, xcode: 26.3, deployment: 15.0 } # AppleClang 17, x86_64
         compiler:
           - { compiler: XCode,   CC: cc, CXX: c++ }
         btype: [ Release ]
