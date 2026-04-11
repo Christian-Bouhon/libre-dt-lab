@@ -81,7 +81,7 @@ CMAKE_ARGS=(
   -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX"
   -G"$GENERATOR"
   -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE"
-  -DUSE_AI=ON
+  -DUSE_AI=OFF
 )
 
 case "$TARGET" in
@@ -90,12 +90,12 @@ case "$TARGET" in
           -DVALIDATE_APPDATA_FILE=ON \
           -DBUILD_TESTING=ON \
           -DTESTBUILD_OPENCL_PROGRAMS=ON \
-          $ECO "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log; exit 1)
+          $ECO "$@" "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log; exit 1)
     target_build
     ;;
   "skiptest")
     cmake "${CMAKE_ARGS[@]}" \
-          $ECO "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log; exit 1)
+          $ECO "$@" "$SRC_DIR" || (cat "$BUILD_DIR"/CMakeFiles/CMakeOutput.log; cat "$BUILD_DIR"/CMakeFiles/CMakeError.log; exit 1)
     target_notest
     ;;
   *)
