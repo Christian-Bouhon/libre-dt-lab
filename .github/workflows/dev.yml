@@ -259,6 +259,8 @@ jobs:
           pacboy: >-
             cc:p
             cmake:p
+            expat:p
+            brotli:p
             libarchive:p
             libxslt:p
             ninja:p
@@ -301,12 +303,13 @@ jobs:
           update: false
       - name: Build and install the latest compatible version of exiv2
         run: |
-          git clone --branch v0.28.8 --depth 1 https://github.com/Exiv2/exiv2 src-exiv2
+          git clone --branch v0.28.3 --depth 1 https://github.com/Exiv2/exiv2 src-exiv2
           cd src-exiv2
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
             -DEXIV2_ENABLE_NLS=ON \
+            -DEXIV2_ENABLE_BMFF=ON \
             -DEXIV2_ENABLE_VIDEO=OFF \
             -DCMAKE_INSTALL_PREFIX=${MINGW_PREFIX}
           cmake --build build
@@ -382,7 +385,7 @@ jobs:
       matrix:
         build:
           - { os: macos-14,       xcode: 16.2, deployment: 14.0 } # AppleClang 16, arm64
-          - { os: macos-15-intel, xcode: 16.1, deployment: 15.0 } # AppleClang 17, x86_64
+          - { os: macos-13,       xcode: 15.2, deployment: 13.0 } # AppleClang 15, x86_64
         compiler:
           - { compiler: XCode,   CC: cc, CXX: c++ }
         btype: [ Release ]
