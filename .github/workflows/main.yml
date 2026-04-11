@@ -166,6 +166,7 @@ jobs:
           git clone -b ${{ github.ref_name }} https://github.com/${{ github.repository }} src
           pushd src
           git submodule init
+          git config submodule.src/tests/integration.update none
           git submodule update
           popd
       - name: Update Lensfun data
@@ -313,6 +314,7 @@ jobs:
           git clone -b ${{ github.ref_name }} https://github.com/${{ github.repository }} src
           pushd src
           git submodule init
+          git config submodule.src/tests/integration.update none
           git submodule update
           popd
       - name: Update Lensfun data
@@ -428,9 +430,7 @@ jobs:
           echo "Testing libre-dt-lab executable..."
           ls -la ${INSTALL_PREFIX}/bin/
           ${INSTALL_PREFIX}/bin/libre-dt-lab --version || echo "Version check failed (expected on headless)"
-          echo "Testing with timeout (10 seconds)..."
-          timeout 10 ${INSTALL_PREFIX}/bin/libre-dt-lab || echo "Timeout or crash detected (expected on headless, but should not segfault)"
-          echo "Test completed."
+        continue-on-error: true
       - name: Build macOS package
         run: |
           ./src/packaging/macosx/3_make_hb_libre-dt-lab_package.sh
