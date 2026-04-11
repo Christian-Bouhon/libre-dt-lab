@@ -1403,6 +1403,7 @@ static void process_lut(dt_iop_module_t *self,
   if(d->color_look > 0 || d->workflow_mode > 0 || d->shadow_lift != 1.0f || d->highlight_gain != 1.0f
      || d->ucs_saturation_balance != 0.0f || d->gamut_strength > 0.0f || d->highlight_corr != 0.0f)
   {
+    const float *mat = (d->color_look > 0) ? color_looks[d->color_look] : NULL;
     const size_t npixels = (size_t)wd * ht;
     DT_OMP_FOR()
     for(size_t k = 0; k < 4 * npixels; k += 4)
@@ -1416,9 +1417,8 @@ static void process_lut(dt_iop_module_t *self,
       g = fmaxf(-1e6f, fminf(g, 1e6f));
       b = fmaxf(-1e6f, fminf(b, 1e6f));
 
-      if(d->color_look > 0)
+      if(mat)
       {
-        const float *mat = color_looks[d->color_look];
         // Apply Color Look
         const float tr = r * mat[0] + g * mat[1] + b * mat[2];
         const float tg = r * mat[3] + g * mat[4] + b * mat[5];
@@ -1618,7 +1618,8 @@ static void process_lut(dt_iop_module_t *self,
           for(int i=0; i<3; i++) xyz[i] = xyz_scaled[i] / 400.0f;
           
           dt_aligned_pixel_t pix_xyz;
-          for(int i=0; i<3; i++) pix_xyz[i] = xyz[i]; pix_xyz[3] = 0.0f;
+          for(int i=0; i<3; i++) pix_xyz[i] = xyz[i];
+          pix_xyz[3] = 0.0f;
           dt_aligned_pixel_t pix_rgb;
           dt_apply_transposed_color_matrix(pix_xyz, work_profile->matrix_out_transposed, pix_rgb);
           for(int i=0; i<3; i++) out[k+i] = pix_rgb[i];
@@ -2054,7 +2055,8 @@ static void process_fusion(dt_iop_module_t *self,
           for(int i=0; i<3; i++) xyz[i] = xyz_scaled[i] / 400.0f;
 
           dt_aligned_pixel_t pix_xyz;
-          for(int i=0; i<3; i++) pix_xyz[i] = xyz[i]; pix_xyz[3] = 0.0f;
+          for(int i=0; i<3; i++) pix_xyz[i] = xyz[i];
+          pix_xyz[3] = 0.0f;
           dt_aligned_pixel_t pix_rgb;
           dt_apply_transposed_color_matrix(pix_xyz, work_profile->matrix_out_transposed, pix_rgb);
           for(int i=0; i<3; i++) val[i] = pix_rgb[i];
