@@ -1554,15 +1554,14 @@ static void process_lut(dt_iop_module_t *self,
           const float chroma = fmaxf(fmaxf(r_sat, g_sat), b_sat) - fminf(fminf(r_sat, g_sat), b_sat);
           const float effective_saturation = d->ucs_saturation_balance * fminf(chroma * 2.0f, 1.0f);
 
-          // Apply saturation balance
-          // Use Rec2020 Luminance Y for mask
-          const float Y = xyz[1];
-          const float L = powf(fmaxf(Y, 0.0f), 0.5f);
+          // Apply saturation balance using luminance mask
+          const float Y_ucs = xyz[1];
+          const float L_ucs = powf(fmaxf(Y_ucs, 0.0f), 0.5f);
           const float fulcrum = 0.5f;
-          const float n = (L - fulcrum) / fulcrum;
+          const float n = (L_ucs - fulcrum) / fulcrum;
           const float mask_shadow = 1.0f / (1.0f + expf(n * 4.0f));
           float sat_adjust = effective_saturation * (2.0f * mask_shadow - 1.0f);
-          sat_adjust *= fminf(L * 4.0f, 1.0f);
+          sat_adjust *= fminf(L_ucs * 4.0f, 1.0f);
           const float sat_factor = 1.0f + sat_adjust;
           jab[1] *= sat_factor;
           jab[2] *= sat_factor;
@@ -1571,9 +1570,9 @@ static void process_lut(dt_iop_module_t *self,
 
         if(d->gamut_strength > 0.0f)
         {
-          const float Y = xyz[1];
-          const float L = powf(fmaxf(Y, 0.0f), 0.5f);
-          const float chroma_factor = 1.0f - d->gamut_strength * (0.2f + 0.2f * L);
+          const float Y_gam = xyz[1];
+          const float L_gam = powf(fmaxf(Y_gam, 0.0f), 0.5f);
+          const float chroma_factor = 1.0f - d->gamut_strength * (0.2f + 0.2f * L_gam);
           jab[1] *= chroma_factor;
           jab[2] *= chroma_factor;
           modified = 1;
@@ -1618,15 +1617,20 @@ static void process_lut(dt_iop_module_t *self,
           // JzAzBz to XYZ
           dt_JzAzBz_2_XYZ(jab, xyz_scaled);
           for(int i=0; i<3; i++) xyz[i] = xyz_scaled[i] / 400.0f;
-          
-          dt_aligned_pixel_t pix_xyz;
-          for(int i=0; i<3; i++)
-          {
-            pix_xyz[i] = xyz[i];
-          }
-          pix_xyz[3] = 0.0f;
+
+          dt_aligned_pixel_t pix_xyz = { xyz[0], xyz[1], xyz[2], 0.0f };
           dt_aligned_pixel_t pix_rgb;
-          dt_apply_transposed_color_matrix(pix_xyz, work_profile->matrix_out_transposed, pix_rgb);
+          if(has_work_profile)
+          {
+            dt_apply_transposed_color_matrix(pix_xyz, work_profile->matrix_out_transposed, pix_rgb);
+          }
+          else
+          {
+            // Fallback: inverse Rec.2020 XYZ -> RGB
+            pix_rgb[0] =  1.716651f * xyz[0] - 0.355671f * xyz[1] - 0.253366f * xyz[2];
+            pix_rgb[1] = -0.666684f * xyz[0] + 1.616481f * xyz[1] + 0.015768f * xyz[2];
+            pix_rgb[2] =  0.017640f * xyz[0] - 0.042770f * xyz[1] + 0.942103f * xyz[2];
+          }
           for(int i=0; i<3; i++) out[k+i] = pix_rgb[i];
 
           float min_val = fminf(out[k], fminf(out[k+1], out[k+2]));
@@ -1642,15 +1646,15 @@ static void process_lut(dt_iop_module_t *self,
             }
           }
         }
-
+      }
       if(d->gamut_strength > 0.0f)
       {
         const float orig_r = out[k];
         const float orig_g = out[k+1];
         const float orig_b = out[k+2];
 
-        const float Y = 0.2126f * orig_r + 0.7152f * orig_g + 0.0722f * orig_b;
-        float lum_weight = CLAMP((Y - 0.3f) / (0.8f - 0.3f), 0.0f, 1.0f);
+        const float Y_rgb = 0.2126f * orig_r + 0.7152f * orig_g + 0.0722f * orig_b;
+        float lum_weight = CLAMP((Y_rgb - 0.3f) / (0.8f - 0.3f), 0.0f, 1.0f);
         lum_weight = lum_weight * lum_weight * (3.0f - 2.0f * lum_weight);
         const float effective_strength = d->gamut_strength * lum_weight;
 
@@ -1680,7 +1684,6 @@ static void process_lut(dt_iop_module_t *self,
         out[k] = orig_r * (1.0f - effective_strength) + out[k] * effective_strength;
         out[k+1] = orig_g * (1.0f - effective_strength) + out[k+1] * effective_strength;
         out[k+2] = orig_b * (1.0f - effective_strength) + out[k+2] * effective_strength;
-      }
       }
 
       // Final gamut check to preserve hue (exact color)
@@ -1997,15 +2000,14 @@ static void process_fusion(dt_iop_module_t *self,
           const float chroma = fmaxf(fmaxf(r_sat, g_sat), b_sat) - fminf(fminf(r_sat, g_sat), b_sat);
           const float effective_saturation = d->ucs_saturation_balance * fminf(chroma * 2.0f, 1.0f);
 
-          // Apply saturation balance
-          // Use Rec2020 Luminance Y for mask
-          const float Y = xyz[1];
-          const float L = powf(fmaxf(Y, 0.0f), 0.5f);
+          // Apply saturation balance using luminance mask
+          const float Y_ucs = xyz[1];
+          const float L_ucs = powf(fmaxf(Y_ucs, 0.0f), 0.5f);
           const float fulcrum = 0.5f;
-          const float n = (L - fulcrum) / fulcrum;
+          const float n = (L_ucs - fulcrum) / fulcrum;
           const float mask_shadow = 1.0f / (1.0f + expf(n * 4.0f));
           float sat_adjust = effective_saturation * (2.0f * mask_shadow - 1.0f);
-          sat_adjust *= fminf(L * 4.0f, 1.0f);
+          sat_adjust *= fminf(L_ucs * 4.0f, 1.0f);
           const float sat_factor = 1.0f + sat_adjust;
           jab[1] *= sat_factor;
           jab[2] *= sat_factor;
@@ -2014,9 +2016,9 @@ static void process_fusion(dt_iop_module_t *self,
 
         if(d->gamut_strength > 0.0f)
         {
-          const float Y = xyz[1];
-          const float L = powf(fmaxf(Y, 0.0f), 0.5f);
-          const float chroma_factor = 1.0f - d->gamut_strength * (0.2f + 0.2f * L);
+          const float Y_gam = xyz[1];
+          const float L_gam = powf(fmaxf(Y_gam, 0.0f), 0.5f);
+          const float chroma_factor = 1.0f - d->gamut_strength * (0.2f + 0.2f * L_gam);
           jab[1] *= chroma_factor;
           jab[2] *= chroma_factor;
           modified = 1;
@@ -2061,14 +2063,19 @@ static void process_fusion(dt_iop_module_t *self,
           dt_JzAzBz_2_XYZ(jab, xyz_scaled);
           for(int i=0; i<3; i++) xyz[i] = xyz_scaled[i] / 400.0f;
 
-          dt_aligned_pixel_t pix_xyz;
-          for(int i=0; i<3; i++)
-          {
-            pix_xyz[i] = xyz[i];
-          }
-          pix_xyz[3] = 0.0f;
+          dt_aligned_pixel_t pix_xyz = { xyz[0], xyz[1], xyz[2], 0.0f };
           dt_aligned_pixel_t pix_rgb;
-          dt_apply_transposed_color_matrix(pix_xyz, work_profile->matrix_out_transposed, pix_rgb);
+          if(has_work_profile)
+          {
+            dt_apply_transposed_color_matrix(pix_xyz, work_profile->matrix_out_transposed, pix_rgb);
+          }
+          else
+          {
+            // Fallback: inverse Rec.2020 XYZ -> RGB
+            pix_rgb[0] =  1.716651f * xyz[0] - 0.355671f * xyz[1] - 0.253366f * xyz[2];
+            pix_rgb[1] = -0.666684f * xyz[0] + 1.616481f * xyz[1] + 0.015768f * xyz[2];
+            pix_rgb[2] =  0.017640f * xyz[0] - 0.042770f * xyz[1] + 0.942103f * xyz[2];
+          }
           for(int i=0; i<3; i++) val[i] = pix_rgb[i];
 
           float min_val = fminf(val[0], fminf(val[1], val[2]));
@@ -2091,8 +2098,8 @@ static void process_fusion(dt_iop_module_t *self,
         const float orig_g = val[1];
         const float orig_b = val[2];
 
-        const float Y = 0.2126f * orig_r + 0.7152f * orig_g + 0.0722f * orig_b;
-        float lum_weight = CLAMP((Y - 0.3f) / (0.8f - 0.3f), 0.0f, 1.0f);
+        const float Y_rgb = 0.2126f * orig_r + 0.7152f * orig_g + 0.0722f * orig_b;
+        float lum_weight = CLAMP((Y_rgb - 0.3f) / (0.8f - 0.3f), 0.0f, 1.0f);
         lum_weight = lum_weight * lum_weight * (3.0f - 2.0f * lum_weight);
         const float effective_strength = d->gamut_strength * lum_weight;
 
@@ -2306,16 +2313,8 @@ float output_y[5]    = { 0.035f, 0.15f, 0.45f, 0.75f, 0.93f };
   nodes[6].y = 1.0f;
 
   uint32_t total = 0;
-  float normalized_mean_luminance = 0.0f;
   for(int i = 0; i < 256; i++)
-  {
-    uint32_t count = histogram[i];
-    total += count;
-    normalized_mean_luminance += ((float)i / 255.0f) * count;
-  }
-
-  if(total > 0) normalized_mean_luminance /= (float)total;
-  else normalized_mean_luminance = 0.5f;
+    total += histogram[i];
 
   if(total == 0)
   {
