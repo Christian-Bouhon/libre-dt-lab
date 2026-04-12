@@ -388,6 +388,11 @@ basecurve_finalize(read_only image2d_t in,
     pixel_in = pixel.xyz; // Update input for following steps
   }
 
+  // Define coefficients at top level for scope consistency
+  const float r_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[3] : 0.2627f;
+  const float g_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[4] : 0.6780f;
+  const float b_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[5] : 0.0593f;
+
   if(workflow_mode > 0 || shadow_lift != 1.0f || highlight_gain != 1.0f || ucs_saturation_balance != 0.0f || gamut_strength > 0.0f || highlight_corr != 0.0f)
   {
     if(highlight_gain != 1.0f)
@@ -399,11 +404,6 @@ basecurve_finalize(read_only image2d_t in,
       pixel.y = (pixel.y > 0.0f) ? pow(pixel.y, shadow_lift) : pixel.y;
       pixel.z = (pixel.z > 0.0f) ? pow(pixel.z, shadow_lift) : pixel.z;
     }
-
-    // Correct matrix indexing (row 1 starts at index 4 for 3x4 matrix)
-    const float r_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[4] : 0.2627f;
-    const float g_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[5] : 0.6780f;
-    const float b_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[6] : 0.0593f;
     
     float y_in = pixel.x * r_coeff + pixel.y * g_coeff + pixel.z * b_coeff;
     float y_out = y_in;
@@ -417,7 +417,7 @@ basecurve_finalize(read_only image2d_t in,
       {
         xyz.x = profile_info->matrix_in[0] * pixel.x + profile_info->matrix_in[1] * pixel.y + profile_info->matrix_in[2] * pixel.z;
         xyz.y = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
-        xyz.z = profile_info->matrix_in[8] * pixel.x + profile_info->matrix_in[9] * pixel.y + profile_info->matrix_in[10] * pixel.z;
+        xyz.z = profile_info->matrix_in[6] * pixel.x + profile_info->matrix_in[7] * pixel.y + profile_info->matrix_in[8] * pixel.z;
       }
       else
       {
@@ -461,7 +461,7 @@ basecurve_finalize(read_only image2d_t in,
       {
         xyz.x = profile_info->matrix_in[0] * pixel.x + profile_info->matrix_in[1] * pixel.y + profile_info->matrix_in[2] * pixel.z;
         xyz.y = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
-        xyz.z = profile_info->matrix_in[8] * pixel.x + profile_info->matrix_in[9] * pixel.y + profile_info->matrix_in[10] * pixel.z;
+        xyz.z = profile_info->matrix_in[6] * pixel.x + profile_info->matrix_in[7] * pixel.y + profile_info->matrix_in[8] * pixel.z;
       }
       else
       {
@@ -548,8 +548,8 @@ basecurve_finalize(read_only image2d_t in,
         // XYZ D65 to Working RGB (using profile_info for perfect parity with C)
         if (use_work_profile != 0 && profile_info != 0)
           pixel.xyz = (float3)(dot(xyz, (float3)(profile_info->matrix_out[0], profile_info->matrix_out[1], profile_info->matrix_out[2])),
-                               dot(xyz, (float3)(profile_info->matrix_out[4], profile_info->matrix_out[5], profile_info->matrix_out[6])),
-                               dot(xyz, (float3)(profile_info->matrix_out[8], profile_info->matrix_out[9], profile_info->matrix_out[10])));
+                               dot(xyz, (float3)(profile_info->matrix_out[3], profile_info->matrix_out[4], profile_info->matrix_out[5])),
+                               dot(xyz, (float3)(profile_info->matrix_out[6], profile_info->matrix_out[7], profile_info->matrix_out[8])));
         else
           pixel.xyz = XYZ_to_Rec2020(xyz);
         

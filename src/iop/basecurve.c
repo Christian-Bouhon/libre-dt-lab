@@ -1393,12 +1393,12 @@ static void process_lut(dt_iop_module_t *self,
   const float g_coeff_lum = has_work_profile ? work_profile->matrix_in[1][1] : 0.6780f;
   const float b_coeff_lum = has_work_profile ? work_profile->matrix_in[1][2] : 0.0593f;
 
-  const int wd = roi_in->width, ht = roi_in->height;
+  const size_t wd = roi_in->width, ht = roi_in->height;
 
   if(d->preserve_colors == DT_RGB_NORM_NONE)
-    apply_legacy_curve(in, out, wd, ht, 1.0, d->table, d->unbounded_coeffs);
+    apply_legacy_curve(in, out, (int)wd, (int)ht, 1.0, d->table, d->unbounded_coeffs);
   else
-    apply_curve(in, out, wd, ht, d->preserve_colors, 1.0, d->table, d->unbounded_coeffs, work_profile);
+    apply_curve(in, out, (int)wd, (int)ht, d->preserve_colors, 1.0, d->table, d->unbounded_coeffs, work_profile);
 
   if(d->color_look > 0 || d->workflow_mode > 0 || d->shadow_lift != 1.0f || d->highlight_gain != 1.0f
      || d->ucs_saturation_balance != 0.0f || d->gamut_strength > 0.0f || d->highlight_corr != 0.0f)
@@ -1408,9 +1408,12 @@ static void process_lut(dt_iop_module_t *self,
     DT_OMP_FOR()
     for(size_t k = 0; k < 4 * npixels; k += 4)
     {
-      float r = out[k];
-      float g = out[k+1];
-      float b = out[k+2];
+      float r, g, b, y_in, y_out, gain;
+      dt_aligned_pixel_t xyz;
+
+      r = out[k];
+      g = out[k+1];
+      b = out[k+2];
 
       // Sanitize to avoid Inf/NaN issues
       r = fmaxf(-1e6f, fminf(r, 1e6f));
@@ -1433,8 +1436,6 @@ static void process_lut(dt_iop_module_t *self,
         out[k+1] = fmaxf(out[k+1], 0.0f);
         out[k+2] = fmaxf(out[k+2], 0.0f);
       }
-      float y_in;
-      dt_aligned_pixel_t xyz;
       // Reload for next steps
       r = out[k];
       g = out[k+1];
@@ -1452,10 +1453,11 @@ static void process_lut(dt_iop_module_t *self,
         g = powf(g, d->shadow_lift);
         b = powf(b, d->shadow_lift);
       }
-    for(int i=0; i<4; i++) xyz[i] = 0.0f;
+      for(int i = 0; i < 4; i++) { xyz[i] = 0.0f; }
       if(has_work_profile)
       {
-        dt_aligned_pixel_t pix = { r, g, b, 0.f };
+        dt_aligned_pixel_t pix;
+        pix[0] = r; pix[1] = g; pix[2] = b; pix[3] = 0.0f;
         dt_apply_transposed_color_matrix(pix, work_profile->matrix_in_transposed, xyz);
         y_in = xyz[1];
       }
@@ -1463,7 +1465,7 @@ static void process_lut(dt_iop_module_t *self,
       {
         y_in = r_coeff_lum * r + g_coeff_lum * g + b_coeff_lum * b; // Fallback Rec.2020
       }
-      float y_out = y_in;
+      y_out = y_in;
 
       /* Scene-referred: apply luminance-adaptive shoulder extension for
          ACES-like tonemapping. Compute perceptual luminance Jz from RGB
@@ -1503,7 +1505,7 @@ static void process_lut(dt_iop_module_t *self,
           y_out = _aces_20_tonemap(x_scaled * 1.680f) * k_scale; //CB 20260307 1.680 (0.75ev) to better match ACES 1.0 tonemap at mid-tones
       }
 
-      float gain = y_out / fmaxf(y_in, 1e-6f);
+      gain = y_out / fmaxf(y_in, 1e-6f);
 
       out[k] = r * gain;
       out[k+1] = g * gain;
@@ -1618,7 +1620,10 @@ static void process_lut(dt_iop_module_t *self,
           for(int i=0; i<3; i++) xyz[i] = xyz_scaled[i] / 400.0f;
           
           dt_aligned_pixel_t pix_xyz;
-          for(int i=0; i<3; i++) pix_xyz[i] = xyz[i];
+          for(int i=0; i<3; i++)
+          {
+            pix_xyz[i] = xyz[i];
+          }
           pix_xyz[3] = 0.0f;
           dt_aligned_pixel_t pix_rgb;
           dt_apply_transposed_color_matrix(pix_xyz, work_profile->matrix_out_transposed, pix_rgb);
@@ -1852,11 +1857,12 @@ static void process_fusion(dt_iop_module_t *self,
 
   // copy output buffer
   const float *mat = (d->color_look > 0) ? color_looks[d->color_look] : NULL;
-
   DT_OMP_FOR()
   for(size_t k = 0; k < (size_t)4 * wd * ht; k += 4)
   {
-    float val[3];
+    float val[3], y_in, y_out, gain;
+    dt_aligned_pixel_t xyz;
+
     val[0] = fmaxf(comb[0][k + 0], 0.f);
     val[1] = fmaxf(comb[0][k + 1], 0.f);
     val[2] = fmaxf(comb[0][k + 2], 0.f);
@@ -1880,8 +1886,6 @@ static void process_fusion(dt_iop_module_t *self,
       val[1] = g * (1.0f - d->look_opacity) + tg * d->look_opacity;
       val[2] = b * (1.0f - d->look_opacity) + tb * d->look_opacity;
     }
-    float y_in;
-    dt_aligned_pixel_t xyz;
     if(d->color_look > 0 || d->workflow_mode > 0 || d->shadow_lift != 1.0f || d->highlight_gain != 1.0f)
     {
       val[0] = fmaxf(val[0], 0.0f);
@@ -1898,10 +1902,11 @@ static void process_fusion(dt_iop_module_t *self,
         val[1] = powf(val[1], d->shadow_lift);
         val[2] = powf(val[2], d->shadow_lift);
       }
-    for(int i=0; i<4; i++) xyz[i] = 0.0f;
+    for(int i = 0; i < 4; i++) { xyz[i] = 0.0f; }
     if(has_work_profile)
     {
-      dt_aligned_pixel_t pix = { val[0], val[1], val[2], 0.f };
+      dt_aligned_pixel_t pix;
+      pix[0] = val[0]; pix[1] = val[1]; pix[2] = val[2]; pix[3] = 0.0f;
       dt_apply_transposed_color_matrix(pix, work_profile->matrix_in_transposed, xyz);
       y_in = xyz[1];
     }
@@ -1909,7 +1914,7 @@ static void process_fusion(dt_iop_module_t *self,
     {
       y_in = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2]; // Fallback Rec.2020
     }
-    float y_out = y_in;
+    y_out = y_in;
 
       if(d->workflow_mode == 1 || d->workflow_mode == 2)
       {
@@ -1941,7 +1946,7 @@ static void process_fusion(dt_iop_module_t *self,
           y_out = _aces_20_tonemap(x_scaled * 1.680f) * k_scale; //CB 20260307 1.680 (0.75ev) to better match ACES 1.0 tonemap at mid-tones
       }
 
-      float gain = y_out / fmaxf(y_in, 1e-6f);
+      gain = y_out / fmaxf(y_in, 1e-6f);
 
       val[0] *= gain;
       val[1] *= gain;
@@ -1961,8 +1966,10 @@ static void process_fusion(dt_iop_module_t *self,
       {
         if(has_work_profile)
         {
-        dt_aligned_pixel_t pix = { val[0], val[1], val[2], 0.f };
-        dt_apply_transposed_color_matrix(pix, work_profile->matrix_in_transposed, xyz);
+          dt_aligned_pixel_t pix;
+          // Use current local fused values 'val', not the output buffer
+          pix[0] = val[0]; pix[1] = val[1]; pix[2] = val[2]; pix[3] = 0.0f;
+          dt_apply_transposed_color_matrix(pix, work_profile->matrix_in_transposed, xyz);
         }
         else
         {
@@ -2055,7 +2062,10 @@ static void process_fusion(dt_iop_module_t *self,
           for(int i=0; i<3; i++) xyz[i] = xyz_scaled[i] / 400.0f;
 
           dt_aligned_pixel_t pix_xyz;
-          for(int i=0; i<3; i++) pix_xyz[i] = xyz[i];
+          for(int i=0; i<3; i++)
+          {
+            pix_xyz[i] = xyz[i];
+          }
           pix_xyz[3] = 0.0f;
           dt_aligned_pixel_t pix_rgb;
           dt_apply_transposed_color_matrix(pix_xyz, work_profile->matrix_out_transposed, pix_rgb);
