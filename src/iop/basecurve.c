@@ -254,7 +254,7 @@ int legacy_params(dt_iop_module_t *self,
     n->workflow_mode = 0;
     n->shadow_lift = 1.0f;
     n->highlight_gain = 1.0f;
-    n->ucs_saturation_balance = 0.2f;
+    n->ucs_saturation_balance = 0.0f;
     n->gamut_strength = 0.0f;
     n->highlight_corr = 0.0f;
     n->target_gamut = 2;
@@ -305,7 +305,7 @@ typedef struct basecurve_preset_t
   int filter;
 } basecurve_preset_t;
 
-#define m MONOTONE_HERMITE
+#define m CUBIC_SPLINE
 
 static const basecurve_preset_t basecurve_camera_presets[] = {
   // copy paste your measured basecurve line at the top here, like so (note the exif data and the last 1):
@@ -2195,12 +2195,27 @@ void commit_params(dt_iop_module_t *self,
   d->exposure_bias = p->exposure_bias;
   d->preserve_colors = p->preserve_colors;
   d->workflow_mode = p->workflow_mode;
-  // Intentional inversion: slider to the right (>1.0) -> exponent < 1.0 -> lightens shadows
-  d->shadow_lift = 2.0f - p->shadow_lift;
-  d->highlight_gain = p->highlight_gain;
-  d->ucs_saturation_balance = p->ucs_saturation_balance;
-  d->gamut_strength = p->gamut_strength;
-  d->highlight_corr = p->highlight_corr;
+  if(p->workflow_mode > 0)
+  {
+    // Scene-referred: apply all parameters as set by the user.
+    // Intentional inversion: slider right (>1.0) -> exponent < 1.0 -> lightens shadows
+    d->shadow_lift            = 2.0f - p->shadow_lift;
+    d->highlight_gain         = p->highlight_gain;
+    d->ucs_saturation_balance = p->ucs_saturation_balance;
+    d->gamut_strength         = p->gamut_strength;
+    d->highlight_corr         = p->highlight_corr;
+  }
+  else
+  {
+    // Legacy/display mode: neutralize all scene-referred parameters.
+    // Camera presets zero-initialize these fields, which would cause
+    // highlight_gain=0 (black image) or shadow_lift=2.0 (wrong gamma).
+    d->shadow_lift            = 1.0f;
+    d->highlight_gain         = 1.0f;
+    d->ucs_saturation_balance = 0.0f;
+    d->gamut_strength         = 0.0f;
+    d->highlight_corr         = 0.0f;
+  }
   d->target_gamut = p->target_gamut;
   d->color_look = p->color_look;
   d->look_opacity = p->look_opacity;
@@ -2912,10 +2927,16 @@ static gboolean dt_iop_basecurve_button_press(GtkWidget *widget,
           p->basecurve[ch][k].y = d->basecurve[ch][k].y;
         }
       }
-      g->selected = 1;
-      g->last_selected = 1;
-      dt_bauhaus_slider_set(g->node_x_slider, 0.5f);
-      dt_bauhaus_slider_set(g->node_y_slider, 0.5f);
+      // Select the middle node of the reset curve and show its real coordinates.
+      // In scene mode: 3 nodes -> middle = node 1 (0.5, 0.5).
+      // In display mode: camera curve may have many nodes -> pick the true middle.
+      {
+        const int mid = p->basecurve_nodes[ch] / 2;
+        g->selected = mid;
+        g->last_selected = mid;
+        dt_bauhaus_slider_set(g->node_x_slider, p->basecurve[ch][mid].x);
+        dt_bauhaus_slider_set(g->node_y_slider, p->basecurve[ch][mid].y);
+      }
       dt_dev_add_history_item_target(darktable.develop, self, TRUE, widget);
       gtk_widget_queue_draw(GTK_WIDGET(g->area));
       return TRUE;
