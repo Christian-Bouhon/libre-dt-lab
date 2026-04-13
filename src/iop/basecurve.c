@@ -292,6 +292,7 @@ typedef struct dt_iop_basecurve_gui_data_t
   GtkWidget *look_opacity;
   int last_workflow_mode;
   gboolean look_selected_first_time;
+  gboolean in_gui_update; // TRUE while gui_update is running, prevents slider callbacks from adding spurious history
 } dt_iop_basecurve_gui_data_t;
 
 typedef struct basecurve_preset_t
@@ -3200,6 +3201,7 @@ void gui_update(dt_iop_module_t *self)
 {
   dt_iop_basecurve_params_t *p = self->params;
   dt_iop_basecurve_gui_data_t *g = self->gui_data;
+  g->in_gui_update = TRUE;
 
   gtk_widget_set_visible(g->exposure_step, p->exposure_fusion != 0);
   gtk_widget_set_visible(g->exposure_bias, p->exposure_fusion != 0);
@@ -3227,6 +3229,7 @@ void gui_update(dt_iop_module_t *self)
   }
   g->last_workflow_mode = p->workflow_mode;
   g->look_selected_first_time = (p->color_look != 0);
+  g->in_gui_update = FALSE;
   gui_changed(self, NULL, NULL);
 
   // gui curve is read directly from params during expose event.
@@ -3250,6 +3253,7 @@ static void node_x_slider_callback(GtkWidget *slider, dt_iop_module_t *self)
   if(node_idx < 0) node_idx = p->basecurve_nodes[0] / 2;
   if(node_idx >= p->basecurve_nodes[0]) node_idx = p->basecurve_nodes[0] - 1;
 
+  if(g->in_gui_update) return; // Skip during programmatic update to avoid spurious history entries
   float new_x = dt_bauhaus_slider_get(g->node_x_slider);
   p->basecurve[0][node_idx].x = new_x;
   g->selected = node_idx;
@@ -3268,6 +3272,7 @@ static void node_y_slider_callback(GtkWidget *slider, dt_iop_module_t *self)
   if(node_idx < 0) node_idx = p->basecurve_nodes[0] / 2;
   if(node_idx >= p->basecurve_nodes[0]) node_idx = p->basecurve_nodes[0] - 1;
 
+  if(g->in_gui_update) return; // Skip during programmatic update to avoid spurious history entries
   float new_y = dt_bauhaus_slider_get(g->node_y_slider);
   p->basecurve[0][node_idx].y = new_y;
   g->selected = node_idx;
@@ -3291,6 +3296,7 @@ void gui_init(dt_iop_module_t *self)
   g->last_selected = -1;
   g->loglogscale = 0;
   g->look_selected_first_time = FALSE;
+  g->in_gui_update = FALSE;
 
   g->area = GTK_DRAWING_AREA(dt_ui_resize_wrap(NULL, 0, "plugins/darkroom/basecurve/graph_height"));
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("abscissa: input, ordinate: output. works on RGB channels"));
