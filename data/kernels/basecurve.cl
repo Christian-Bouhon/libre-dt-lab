@@ -442,6 +442,10 @@ basecurve_finalize(read_only image2d_t in,
     }
 
     float gain = y_out / fmax(y_in, 1e-6f);
+
+    /* Sensor clip recovery: save pre-gain values to compute clip based on MAX channel weighted by saturation.
+       This preserves white objects (low saturation) while correcting colored highlights. */
+    const float3 pixel_pre_gain = pixel.xyz;
     pixel.xyz *= gain;
 
     const float threshold = 0.80f;
@@ -450,6 +454,20 @@ basecurve_finalize(read_only image2d_t in,
       float factor = (y_out - threshold) / (1.0f - threshold);
       factor = clamp(factor, 0.0f, 1.0f);
       pixel.xyz = mix(pixel.xyz, (float3)y_out, factor);
+    }
+
+    /* Saturation-weighted clip recovery: clip based on MAX channel, not per-channel.
+       - White object (R≈G≈B>1, low sat) → no correction → preserves brightness
+       - Saturated (R≫G or B, high sat) → full correction */
+    {
+      const float max_val = fmax(pixel_pre_gain.x, fmax(pixel_pre_gain.y, pixel_pre_gain.z));
+      const float min_val = fmin(pixel_pre_gain.x, fmin(pixel_pre_gain.y, pixel_pre_gain.z));
+      const float clip_max = clamp((max_val - 1.0f) * 2.0f, 0.0f, 1.0f);
+      const float saturation = (max_val > 1e-4f) ? (max_val - min_val) / max_val : 0.0f;
+      const float clip_final = clip_max * saturation;
+
+      if(clip_final > 0.0f)
+        pixel.xyz = mix(pixel.xyz, (float3)y_out, clip_final);
     }
 
     float4 jab = (float4)(0.0f);
@@ -487,7 +505,7 @@ basecurve_finalize(read_only image2d_t in,
         // Apply saturation balance
         const float Y = xyz.y;
         const float L = native_sqrt(fmax(Y, 0.0f));
-        const float fulcrum = 0.5f;
+        const float fulcrum = 0.65f;
         const float n = (L - fulcrum) / fulcrum;
         const float mask_shadow = 1.0f / (1.0f + dtcl_exp(n * 4.0f));
         

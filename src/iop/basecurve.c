@@ -306,7 +306,7 @@ typedef struct basecurve_preset_t
   int filter;
 } basecurve_preset_t;
 
-#define m CUBIC_SPLINE
+#define m MONOTONE_HERMITE
 
 static const basecurve_preset_t basecurve_camera_presets[] = {
   // copy paste your measured basecurve line at the top here, like so (note the exif data and the last 1):
@@ -1522,6 +1522,36 @@ static void process_lut(dt_iop_module_t *self,
         out[k+2] = out[k+2] * (1.0f - factor) + y_out * factor;
       }
 
+      /* Sensor clip recovery: when one or two channels were burned (input > 1.0
+         before the curve), the uniform gain leaves them disproportionately high,
+         producing a color cast instead of white in blown highlights.
+         For each channel that exceeded 1.0 in the pre-curve input, blend it
+         progressively towards y_out (neutral luminance at this tone level).
+         The blend weight is proportional to how far above 1.0 the channel was,
+         clamped to [0,1] with a soft rolloff factor of 2.0 (full blend at +0.5 EV).
+
+         SATURATION-WEIGHTED: Instead of per-channel correction, we compute the clip
+         factor based on the MAX channel (not each independently), then weight
+         by saturation. This preserves white objects (low saturation) while still
+         correcting saturated highlights (high saturation, e.g., sunset colors).
+
+         - White object (R≈G≈B>1, low sat) → no correction, preserves brightness
+         - Saturated (R≫G or B, high sat) → full correction */
+      {
+        const float max_val = fmaxf(r, fmaxf(g, b));
+        const float min_val = fminf(r, fminf(g, b));
+        const float clip_max = CLAMP((max_val - 1.0f) * 2.0f, 0.0f, 1.0f);
+        const float saturation = (max_val > 1e-4f) ? (max_val - min_val) / max_val : 0.0f;
+        const float clip_final = clip_max * saturation;
+
+        if(clip_final > 0.0f)
+        {
+          out[k]   = out[k]   * (1.0f - clip_final) + y_out * clip_final;
+          out[k+1] = out[k+1] * (1.0f - clip_final) + y_out * clip_final;
+          out[k+2] = out[k+2] * (1.0f - clip_final) + y_out * clip_final;
+        }
+      }
+
       if(d->ucs_saturation_balance != 0.0f || d->gamut_strength > 0.0f || d->highlight_corr != 0.0f)
       {
         if(has_work_profile)
@@ -1558,7 +1588,7 @@ static void process_lut(dt_iop_module_t *self,
           // Apply saturation balance using luminance mask
           const float Y_ucs = xyz[1];
           const float L_ucs = powf(fmaxf(Y_ucs, 0.0f), 0.5f);
-          const float fulcrum = 0.5f;
+          const float fulcrum = 0.65f;
           const float n = (L_ucs - fulcrum) / fulcrum;
           const float mask_shadow = 1.0f / (1.0f + expf(n * 4.0f));
           float sat_adjust = effective_saturation * (2.0f * mask_shadow - 1.0f);
@@ -1966,6 +1996,30 @@ static void process_fusion(dt_iop_module_t *self,
         val[2] = val[2] * (1.0f - factor) + y_out * factor;
       }
 
+      /* Sensor clip recovery: same logic as process_lut.
+         val[0..2] here are the pre-ACES values (after highlight_gain/shadow_lift).
+         Use them as the clip reference since they reflect the input before tone-mapping.
+
+         SATURATION-WEIGHTED: Compute clip based on MAX channel, weight by saturation. */
+      {
+        const float val_r_pre = val[0] / fmaxf(gain, 1e-6f);
+        const float val_g_pre = val[1] / fmaxf(gain, 1e-6f);
+        const float val_b_pre = val[2] / fmaxf(gain, 1e-6f);
+
+        const float max_val = fmaxf(val_r_pre, fmaxf(val_g_pre, val_b_pre));
+        const float min_val = fminf(val_r_pre, fminf(val_g_pre, val_b_pre));
+        const float clip_max = CLAMP((max_val - 1.0f) * 2.0f, 0.0f, 1.0f);
+        const float saturation = (max_val > 1e-4f) ? (max_val - min_val) / max_val : 0.0f;
+        const float clip_final = clip_max * saturation;
+
+        if(clip_final > 0.0f)
+        {
+          val[0] = val[0] * (1.0f - clip_final) + y_out * clip_final;
+          val[1] = val[1] * (1.0f - clip_final) + y_out * clip_final;
+          val[2] = val[2] * (1.0f - clip_final) + y_out * clip_final;
+        }
+      }
+
       if(d->ucs_saturation_balance != 0.0f || d->gamut_strength > 0.0f || d->highlight_corr != 0.0f)
       {
         if(has_work_profile)
@@ -2004,7 +2058,7 @@ static void process_fusion(dt_iop_module_t *self,
           // Apply saturation balance using luminance mask
           const float Y_ucs = xyz[1];
           const float L_ucs = powf(fmaxf(Y_ucs, 0.0f), 0.5f);
-          const float fulcrum = 0.5f;
+          const float fulcrum = 0.65f;
           const float n = (L_ucs - fulcrum) / fulcrum;
           const float mask_shadow = 1.0f / (1.0f + expf(n * 4.0f));
           float sat_adjust = effective_saturation * (2.0f * mask_shadow - 1.0f);
@@ -2321,7 +2375,7 @@ static void _compute_curve_nodes_from_histogram(uint32_t histogram[256],
 // Input percentiles: where we sample the luminance histogram
 float input_pcts[5]  = { 0.05f, 0.18f, 0.50f, 0.82f, 0.95f };
 // Desired output Y values: the tone targets we map each percentile to
-float output_y[5]    = { 0.035f, 0.15f, 0.45f, 0.75f, 0.93f };
+float output_y[5]    = { 0.035f, 0.15f, 0.45f, 0.75f, 0.90f };
 
   nodes[0].x = 0.0f;
   nodes[0].y = 0.0f;
@@ -2347,9 +2401,9 @@ float output_y[5]    = { 0.035f, 0.15f, 0.45f, 0.75f, 0.93f };
     // High-key mode: shift all output targets upward to preserve brightness in bright scenes.
     output_y[0] = 0.21f;
     output_y[1] = 0.40f;
-    output_y[2] = 0.65f;
-    output_y[3] = 0.88f;
-    output_y[4] = 0.95f;
+    output_y[2] = 0.63f;
+    output_y[3] = 0.80f;
+    output_y[4] = 0.85f;
   }
 
   uint32_t cumsum = 0;
