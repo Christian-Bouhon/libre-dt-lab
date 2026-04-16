@@ -175,8 +175,6 @@ jobs:
       - name: Build and Install
         run: |
           cd src
-          mkdir -p ../AppDir/usr/lib/x86_64-linux-gnu/darktable/plugins
-          mkdir -p ../AppDir/usr/share/applications
           bash tools/appimage-build-script.sh
       - name: Rename artifacts
         run: |

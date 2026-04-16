@@ -571,7 +571,7 @@ basecurve_finalize(read_only image2d_t in,
     {
       float4 orig = pixel;
 
-      float Y = 0.2126f * pixel.x + 0.7152f * pixel.y + 0.0722f * pixel.z;
+      float Y_rgb = 0.2126f * pixel.x + 0.7152f * pixel.y + 0.0722f * pixel.z;
       float lum_weight = clamp((Y_rgb - 0.5f) / (0.9f - 0.5f), 0.0f, 1.0f);
       lum_weight = lum_weight * lum_weight * (3.0f - 2.0f * lum_weight);
       float effective_strength = gamut_strength * lum_weight;
