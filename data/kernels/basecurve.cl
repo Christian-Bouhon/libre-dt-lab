@@ -442,10 +442,6 @@ basecurve_finalize(read_only image2d_t in,
     }
 
     float gain = y_out / fmax(y_in, 1e-6f);
-
-    /* Sensor clip recovery: save pre-gain values to compute clip based on MAX channel weighted by saturation.
-       This preserves white objects (low saturation) while correcting colored highlights. */
-    const float3 pixel_pre_gain = pixel.xyz;
     pixel.xyz *= gain;
 
     const float threshold = 0.80f;
@@ -454,20 +450,6 @@ basecurve_finalize(read_only image2d_t in,
       float factor = (y_out - threshold) / (1.0f - threshold);
       factor = clamp(factor, 0.0f, 1.0f);
       pixel.xyz = mix(pixel.xyz, (float3)y_out, factor);
-    }
-
-    /* Saturation-weighted clip recovery: clip based on MAX channel, not per-channel.
-       - White object (R≈G≈B>1, low sat) → no correction → preserves brightness
-       - Saturated (R≫G or B, high sat) → full correction */
-    {
-      const float max_val = fmax(pixel_pre_gain.x, fmax(pixel_pre_gain.y, pixel_pre_gain.z));
-      const float min_val = fmin(pixel_pre_gain.x, fmin(pixel_pre_gain.y, pixel_pre_gain.z));
-      const float clip_max = clamp((max_val - 1.0f) * 2.0f, 0.0f, 1.0f);
-      const float saturation = (max_val > 1e-4f) ? (max_val - min_val) / max_val : 0.0f;
-      const float clip_final = clip_max * saturation;
-
-      if(clip_final > 0.0f)
-        pixel.xyz = mix(pixel.xyz, (float3)y_out, clip_final);
     }
 
     float4 jab = (float4)(0.0f);
@@ -590,7 +572,7 @@ basecurve_finalize(read_only image2d_t in,
       float4 orig = pixel;
 
       float Y = 0.2126f * pixel.x + 0.7152f * pixel.y + 0.0722f * pixel.z;
-      float lum_weight = clamp((Y - 0.3f) / (0.8f - 0.3f), 0.0f, 1.0f);
+      float lum_weight = clamp((Y_rgb - 0.5f) / (0.9f - 0.5f), 0.0f, 1.0f);
       lum_weight = lum_weight * lum_weight * (3.0f - 2.0f * lum_weight);
       float effective_strength = gamut_strength * lum_weight;
 
@@ -598,7 +580,7 @@ basecurve_finalize(read_only image2d_t in,
       if(target_gamut == 1) limit = 0.95f;
       else if(target_gamut == 2) limit = 1.00f;
 
-      float threshold = limit * (1.0f - (effective_strength * 0.25f));
+      float threshold = limit * (1.0f - (effective_strength * 0.10f));
       float max_val = fmax(pixel.x, fmax(pixel.y, pixel.z));
 
       if(max_val > threshold)
@@ -611,10 +593,13 @@ basecurve_finalize(read_only image2d_t in,
         const float range_blue = 1.1f * range;
         const float compressed_blue = threshold + range * delta / (delta + range_blue);
         const float factor_blue = compressed_blue / max_val;
-
-        pixel.x *= factor;
-        pixel.y *= factor;
-        pixel.z *= factor_blue;
+        // CB. Calculer la luminance actuelle du pixel (avant compression)
+        // CB  utilise les coefficients de la norme RGB définie dans le fichier
+        const float luma = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
+        // CB. Compresser vers la luminance (désaturation
+        pixel.x = luma + (pixel.x - luma) * factor;
+        pixel.y = luma + (pixel.y - luma) * factor;
+        pixel.z = luma + (pixel.z - luma) * factor_blue;
       }
       pixel = mix(orig, pixel, effective_strength);
     }

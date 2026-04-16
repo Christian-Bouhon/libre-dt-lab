@@ -306,7 +306,7 @@ typedef struct basecurve_preset_t
   int filter;
 } basecurve_preset_t;
 
-#define m MONOTONE_HERMITE
+#define m CUBIC_SPLINE
 
 static const basecurve_preset_t basecurve_camera_presets[] = {
   // copy paste your measured basecurve line at the top here, like so (note the exif data and the last 1):
@@ -1522,36 +1522,6 @@ static void process_lut(dt_iop_module_t *self,
         out[k+2] = out[k+2] * (1.0f - factor) + y_out * factor;
       }
 
-      /* Sensor clip recovery: when one or two channels were burned (input > 1.0
-         before the curve), the uniform gain leaves them disproportionately high,
-         producing a color cast instead of white in blown highlights.
-         For each channel that exceeded 1.0 in the pre-curve input, blend it
-         progressively towards y_out (neutral luminance at this tone level).
-         The blend weight is proportional to how far above 1.0 the channel was,
-         clamped to [0,1] with a soft rolloff factor of 2.0 (full blend at +0.5 EV).
-
-         SATURATION-WEIGHTED: Instead of per-channel correction, we compute the clip
-         factor based on the MAX channel (not each independently), then weight
-         by saturation. This preserves white objects (low saturation) while still
-         correcting saturated highlights (high saturation, e.g., sunset colors).
-
-         - White object (R≈G≈B>1, low sat) → no correction, preserves brightness
-         - Saturated (R≫G or B, high sat) → full correction */
-      {
-        const float max_val = fmaxf(r, fmaxf(g, b));
-        const float min_val = fminf(r, fminf(g, b));
-        const float clip_max = CLAMP((max_val - 1.0f) * 2.0f, 0.0f, 1.0f);
-        const float saturation = (max_val > 1e-4f) ? (max_val - min_val) / max_val : 0.0f;
-        const float clip_final = clip_max * saturation;
-
-        if(clip_final > 0.0f)
-        {
-          out[k]   = out[k]   * (1.0f - clip_final) + y_out * clip_final;
-          out[k+1] = out[k+1] * (1.0f - clip_final) + y_out * clip_final;
-          out[k+2] = out[k+2] * (1.0f - clip_final) + y_out * clip_final;
-        }
-      }
-
       if(d->ucs_saturation_balance != 0.0f || d->gamut_strength > 0.0f || d->highlight_corr != 0.0f)
       {
         if(has_work_profile)
@@ -1685,7 +1655,7 @@ static void process_lut(dt_iop_module_t *self,
         const float orig_b = out[k+2];
 
         const float Y_rgb = 0.2126f * orig_r + 0.7152f * orig_g + 0.0722f * orig_b;
-        float lum_weight = CLAMP((Y_rgb - 0.3f) / (0.8f - 0.3f), 0.0f, 1.0f);
+        float lum_weight = CLAMP((Y_rgb - 0.5f) / (0.9f - 0.5f), 0.0f, 1.0f);
         lum_weight = lum_weight * lum_weight * (3.0f - 2.0f * lum_weight);
         const float effective_strength = d->gamut_strength * lum_weight;
 
@@ -1693,7 +1663,7 @@ static void process_lut(dt_iop_module_t *self,
         if(d->target_gamut == 1) limit = 0.95f;
         else if(d->target_gamut == 2) limit = 1.00f;
 
-        float gamut_threshold = limit * (1.0f - (effective_strength * 0.25f));
+        float gamut_threshold = limit * (1.0f - (effective_strength * 0.10f));
         float max_val = fmaxf(out[k], fmaxf(out[k+1], out[k+2]));
 
         if(max_val > gamut_threshold)
@@ -1707,9 +1677,12 @@ static void process_lut(dt_iop_module_t *self,
           const float compressed_blue = gamut_threshold + range * delta / (delta + range_blue);
           const float factor_blue = compressed_blue / max_val;
 
-          out[k] *= factor;
-          out[k+1] *= factor;
-          out[k+2] *= factor_blue;
+          // CB. Calculer la luminance actuelle du pixel (avant compression)
+          const float luma = r_coeff_lum * out[k] + g_coeff_lum * out[k+1] + b_coeff_lum * out[k+2];
+          // CB. Application du facteur en préservant la luminance (désaturation)
+          out[k] = luma + (out[k] - luma) * factor;
+          out[k+1] = luma + (out[k+1] - luma) * factor;
+          out[k+2] = luma + (out[k+2] - luma) * factor_blue;
         }
 
         out[k] = orig_r * (1.0f - effective_strength) + out[k] * effective_strength;
@@ -1996,30 +1969,6 @@ static void process_fusion(dt_iop_module_t *self,
         val[2] = val[2] * (1.0f - factor) + y_out * factor;
       }
 
-      /* Sensor clip recovery: same logic as process_lut.
-         val[0..2] here are the pre-ACES values (after highlight_gain/shadow_lift).
-         Use them as the clip reference since they reflect the input before tone-mapping.
-
-         SATURATION-WEIGHTED: Compute clip based on MAX channel, weight by saturation. */
-      {
-        const float val_r_pre = val[0] / fmaxf(gain, 1e-6f);
-        const float val_g_pre = val[1] / fmaxf(gain, 1e-6f);
-        const float val_b_pre = val[2] / fmaxf(gain, 1e-6f);
-
-        const float max_val = fmaxf(val_r_pre, fmaxf(val_g_pre, val_b_pre));
-        const float min_val = fminf(val_r_pre, fminf(val_g_pre, val_b_pre));
-        const float clip_max = CLAMP((max_val - 1.0f) * 2.0f, 0.0f, 1.0f);
-        const float saturation = (max_val > 1e-4f) ? (max_val - min_val) / max_val : 0.0f;
-        const float clip_final = clip_max * saturation;
-
-        if(clip_final > 0.0f)
-        {
-          val[0] = val[0] * (1.0f - clip_final) + y_out * clip_final;
-          val[1] = val[1] * (1.0f - clip_final) + y_out * clip_final;
-          val[2] = val[2] * (1.0f - clip_final) + y_out * clip_final;
-        }
-      }
-
       if(d->ucs_saturation_balance != 0.0f || d->gamut_strength > 0.0f || d->highlight_corr != 0.0f)
       {
         if(has_work_profile)
@@ -2154,7 +2103,7 @@ static void process_fusion(dt_iop_module_t *self,
         const float orig_b = val[2];
 
         const float Y_rgb = 0.2126f * orig_r + 0.7152f * orig_g + 0.0722f * orig_b;
-        float lum_weight = CLAMP((Y_rgb - 0.3f) / (0.8f - 0.3f), 0.0f, 1.0f);
+        float lum_weight = CLAMP((Y_rgb - 0.5f) / (0.9f - 0.5f), 0.0f, 1.0f);
         lum_weight = lum_weight * lum_weight * (3.0f - 2.0f * lum_weight);
         const float effective_strength = d->gamut_strength * lum_weight;
 
@@ -2162,7 +2111,7 @@ static void process_fusion(dt_iop_module_t *self,
         if(d->target_gamut == 1) limit = 0.95f;
         else if(d->target_gamut == 2) limit = 1.00f;
 
-        float gamut_threshold = limit * (1.0f - (effective_strength * 0.25f));
+        float gamut_threshold = limit * (1.0f - (effective_strength * 0.10f));
         float max_val = fmaxf(val[0], fmaxf(val[1], val[2]));
 
         if(max_val > gamut_threshold)
@@ -2176,9 +2125,12 @@ static void process_fusion(dt_iop_module_t *self,
           const float compressed_blue = gamut_threshold + range * delta / (delta + range_blue);
           const float factor_blue = compressed_blue / max_val;
 
-          val[0] *= factor;
-          val[1] *= factor;
-          val[2] *= factor_blue;
+          // CB. Calculer la luminance actuelle du pixel (avant compression)
+          const float luma = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2];
+          // CB. Application du facteur en préservant la luminance (désaturation)
+          val[0] = luma + (val[0] - luma) * factor;
+          val[1] = luma + (val[1] - luma) * factor;
+          val[2] = luma + (val[2] - luma) * factor_blue;
         }
 
         val[0] = orig_r * (1.0f - effective_strength) + val[0] * effective_strength;
