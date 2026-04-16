@@ -576,8 +576,8 @@ basecurve_finalize(read_only image2d_t in,
       lum_weight = lum_weight * lum_weight * (3.0f - 2.0f * lum_weight);
       float effective_strength = gamut_strength * lum_weight;
 
-      float limit = 0.90f;
-      if(target_gamut == 1) limit = 0.95f;
+      float limit = 0.72f;
+      if(target_gamut == 1) limit = 0.80f;
       else if(target_gamut == 2) limit = 1.00f;
 
       float threshold = limit * (1.0f - (effective_strength * 0.10f));
