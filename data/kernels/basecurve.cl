@@ -499,7 +499,7 @@ basecurve_finalize(read_only image2d_t in,
 
       // Prepare Norm for tonemapping
       float V_orig = fmax(0.0f, pow(V_norm, 1.25f)); /* OKLAB_BRILLIANCE_POWER = 1.25 */
-      V_orig *= (1.189f + highlight_gain); // CB essai: 1.257f = + 0.33ev 1.189 = +0.25ev
+      V_orig *= (1.110f + highlight_gain); // CB essai: 1.257f = + 0.33ev; 1.189 = +0.25ev; 1.110 = +0.15ev
       V_orig = fmax(0.0f, pow(V_orig, shadow_lift + 1.0f));
 
       float V_new = _aces_20_tonemap(V_orig);

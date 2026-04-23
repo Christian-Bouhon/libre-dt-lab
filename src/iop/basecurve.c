@@ -1612,7 +1612,7 @@ static void process_lut(dt_iop_module_t *self,
 
         // Prepare Norm for tonemapping
         float V_orig = fmaxf(0.0f, powf(V_norm, OKLAB_BRILLIANCE_POWER));
-        V_orig *= (1.189f + d->highlight_gain); // CB essai: 1.257f = + 0.33ev 1.189 = +0.25ev
+        V_orig *= (1.110f + d->highlight_gain); // CB essai: 1.257f = + 0.33ev, 1.189 = +0.25ev 1.110 = +0.15ev
         V_orig = fmaxf(0.0f, powf(V_orig, d->shadow_lift + 1.0f));
 
         /* ACES 2.0 fit by Narkowicz/Filiberto */
@@ -2127,7 +2127,7 @@ static void process_fusion(dt_iop_module_t *self,
 
         // Prepare Norm for tonemapping
         float V_orig = fmaxf(0.0f, powf(V_norm, OKLAB_BRILLIANCE_POWER));
-        V_orig *= (1.189f + d->highlight_gain); // CB essai: 1.257f = + 0.33ev; 1.189 = +0.25ev
+        V_orig *= (1.110f + d->highlight_gain); // CB essai: 1.257f = + 0.33ev; 1.189 = +0.25ev; 1.110 = +0.15ev
         V_orig = fmaxf(0.0f, powf(V_orig, d->shadow_lift + 1.0f));
 
         float V_new = _aces_20_tonemap(V_orig);
