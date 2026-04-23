@@ -47,9 +47,9 @@
 #define DT_IOP_TONECURVE_RES 256
 #define MAXNODES 20
 
-static const float ACES_EXPOSURE_ADJUST = 2.0f;
-static const float OKLAB_BRILLIANCE_POWER = 1.25f;
-static const float ROLLOFF_THRESHOLD = 0.80f;
+#define ACES_EXPOSURE_ADJUST 2.0f
+#define OKLAB_BRILLIANCE_POWER 1.25f
+#define ROLLOFF_THRESHOLD 0.80f
 
 DT_MODULE_INTROSPECTION(8, dt_iop_basecurve_params_t)
 
@@ -3589,7 +3589,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_combobox_add(g->workflow_mode, _("display"));
   dt_bauhaus_combobox_add(g->workflow_mode, _("kinematic"));
   dt_bauhaus_combobox_add(g->workflow_mode, _("dynamic"));
-  dt_bauhaus_combobox_add(g->workflow_mode, _("cinematic"));
+  dt_bauhaus_combobox_add(g->workflow_mode, _("cinematic (UCS)"));
   gtk_widget_set_tooltip_text(g->workflow_mode, _("tone mapping method applied after the curve"));
 
   g->color_look = dt_bauhaus_combobox_from_params(self, "color_look");
