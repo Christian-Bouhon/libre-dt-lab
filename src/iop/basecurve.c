@@ -47,7 +47,11 @@
 #define DT_IOP_TONECURVE_RES 256
 #define MAXNODES 20
 
-DT_MODULE_INTROSPECTION(7, dt_iop_basecurve_params_t)
+static const float ACES_EXPOSURE_ADJUST = 2.0f;
+static const float OKLAB_BRILLIANCE_POWER = 1.25f;
+static const float ROLLOFF_THRESHOLD = 0.80f;
+
+DT_MODULE_INTROSPECTION(8, dt_iop_basecurve_params_t)
 
 typedef struct dt_iop_basecurve_node_t
 {
@@ -70,11 +74,13 @@ typedef struct dt_iop_basecurve_params_t
   float shadow_lift;      // $MIN: 0.25 $MAX: 1.75 $DEFAULT: 1.0 $DESCRIPTION: "shadow correction"
   float highlight_gain;   // $MIN: 0.25 $MAX: 1.75 $DEFAULT: 1.0 $DESCRIPTION: "highlight gain"
   float ucs_saturation_balance; // $MIN: -0.75 $MAX: 0.75 $DEFAULT: 0.2 $DESCRIPTION: "balance saturation ucs"
+  float saturation_boost; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "saturation boost UCS"
   float gamut_strength;   // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "gamut compression"
   float highlight_corr;   // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "highlight hue/sat"
   int target_gamut;       // $DEFAULT: 2 $DESCRIPTION: "target gamut"
   int color_look;         // $DEFAULT: 0 $DESCRIPTION: "color look style"
   float look_opacity;     // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "look opacity"
+  float use_rolloff;      // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "highlight roll-off"
 } dt_iop_basecurve_params_t;
 
 static const float color_looks[11][9] = {
@@ -266,6 +272,38 @@ int legacy_params(dt_iop_module_t *self,
     *new_version = 7;
     return 0;
   }
+  if(old_version == 7)
+  {
+    typedef struct dt_iop_basecurve_params_v7_t
+    {
+      dt_iop_basecurve_node_t basecurve[3][MAXNODES];
+      int basecurve_nodes[3];
+      int basecurve_type[3];
+      int exposure_fusion;
+      float exposure_stops;
+      float exposure_bias;
+      dt_iop_rgb_norms_t preserve_colors;
+      int workflow_mode;
+      float shadow_lift;
+      float highlight_gain;
+      float ucs_saturation_balance;
+      float gamut_strength;
+      float highlight_corr;
+      int target_gamut;
+      int color_look;
+      float look_opacity;
+    } dt_iop_basecurve_params_v7_t;
+    const dt_iop_basecurve_params_v7_t *o = (dt_iop_basecurve_params_v7_t *)old_params;
+    dt_iop_basecurve_params_t *n = calloc(1, sizeof(dt_iop_basecurve_params_t));
+    memcpy(n, o, sizeof(dt_iop_basecurve_params_v7_t));
+    // Consolidated migration from v7 to stable v8
+    n->use_rolloff = 1.0f;      // highlight roll-off default dosage (100%)
+    n->saturation_boost = 0.0f; // saturation boost default (neutral)
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_basecurve_params_t);
+    *new_version = 8;
+    return 0;
+  }
   return 1;
 }
 
@@ -285,6 +323,8 @@ typedef struct dt_iop_basecurve_gui_data_t
   float loglogscale;
   GtkWidget *logbase;
   GtkWidget *ucs_saturation_balance;
+  GtkWidget *saturation_boost;
+  GtkWidget *use_rolloff;
   GtkWidget *gamut_strength;
   GtkWidget *highlight_corr;
   GtkWidget *target_gamut;
@@ -386,11 +426,13 @@ typedef struct dt_iop_basecurve_data_t
   float shadow_lift;
   float highlight_gain;
   float ucs_saturation_balance;
+  float saturation_boost;
   float gamut_strength;
   float highlight_corr;
   int target_gamut;
   int color_look;
   float look_opacity;
+  float use_rolloff;
 } dt_iop_basecurve_data_t;
 
 typedef struct dt_iop_basecurve_global_data_t
@@ -596,6 +638,7 @@ void reload_defaults(dt_iop_module_t *self)
     d->shadow_lift = 1.0f;
     d->highlight_gain = 1.0f;
     d->ucs_saturation_balance = 0.2f;
+    d->saturation_boost = 0.0f;
     d->color_look = 0;
     d->look_opacity = 1.0f;
 
@@ -604,6 +647,7 @@ void reload_defaults(dt_iop_module_t *self)
     d->basecurve[0][0].x = 0.0f; d->basecurve[0][0].y = 0.0f;
     d->basecurve[0][1].x = 0.5f; d->basecurve[0][1].y = 0.5f;
     d->basecurve[0][2].x = 1.0f; d->basecurve[0][2].y = 1.0f;
+    d->use_rolloff = 1;
   }
   else
   {
@@ -988,7 +1032,7 @@ int process_cl_fusion(dt_iop_module_t *self,
   // Apply shadow_lift and tone mapping here if needed
   err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_basecurve_finalize, width, height,
       CLARG(dev_in), CLARG(dev_comb[0]), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(d->workflow_mode),
-      CLARGFLOAT(d->shadow_lift), CLARGFLOAT(d->highlight_gain), CLARGFLOAT(d->ucs_saturation_balance),
+      CLARGFLOAT(d->use_rolloff), CLARGFLOAT(d->shadow_lift), CLARGFLOAT(d->highlight_gain), CLARGFLOAT(d->saturation_boost), CLARGFLOAT(d->ucs_saturation_balance),
       CLARGFLOAT(d->gamut_strength), CLARGFLOAT(d->highlight_corr), CLARG(d->target_gamut), CLARGFLOAT(d->look_opacity),
       CLARG(look_mat_buf), CLARGFLOAT(alpha), CLARG(dev_profile_info), CLARG(use_work_profile));
 
@@ -1084,7 +1128,7 @@ int process_cl_lut(dt_iop_module_t *self,
   {
     err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_basecurve_finalize, width, height,
         CLARG(dev_in), CLARG(dev_tmp), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(d->workflow_mode),
-        CLARGFLOAT(d->shadow_lift), CLARGFLOAT(d->highlight_gain), CLARGFLOAT(d->ucs_saturation_balance),
+      CLARGFLOAT(d->use_rolloff), CLARGFLOAT(d->shadow_lift), CLARGFLOAT(d->highlight_gain), CLARGFLOAT(d->saturation_boost), CLARGFLOAT(d->ucs_saturation_balance),
         CLARGFLOAT(d->gamut_strength), CLARGFLOAT(d->highlight_corr), CLARG(d->target_gamut),
         CLARGFLOAT(d->look_opacity), CLARG(look_mat_buf), CLARGFLOAT(alpha), CLARG(dev_profile_info), CLARG(use_work_profile));
     if(err != CL_SUCCESS) goto error;
@@ -1376,6 +1420,34 @@ static inline void gauss_reduce(
       detail[k] = input[k] - detail[k];
   }
 }
+// --- CONVERSIONS OKLAB POUR C (CPU) ---
+static inline void rgb_to_oklab_cpu(const float rgb[3], float lab[3])
+{
+  float l = 0.4122214708f * rgb[0] + 0.5363325363f * rgb[1] + 0.0514459929f * rgb[2];
+  float m = 0.2119034982f * rgb[0] + 0.6806995451f * rgb[1] + 0.1073969566f * rgb[2];
+  float s = 0.0883024619f * rgb[0] + 0.2817188376f * rgb[1] + 0.6299787005f * rgb[2];
+
+  float l_ = cbrtf(fmaxf(l, 0.0f));
+  float m_ = cbrtf(fmaxf(m, 0.0f));
+  float s_ = cbrtf(fmaxf(s, 0.0f));
+
+  lab[0] = 0.2104542553f * l_ + 0.7936177850f * m_ - 0.0040720403f * s_;
+  lab[1] = 1.9779984951f * l_ - 2.4285922050f * m_ + 0.4505937099f * s_;
+  lab[2] = 0.0259040371f * l_ + 0.7827717662f * m_ - 0.8086757660f * s_;
+}
+
+static inline void oklab_to_rgb_cpu(const float lab[3], float rgb[3])
+{
+  float l_ = lab[0] + 0.3963377774f * lab[1] + 0.2158037573f * lab[2];
+  float m_ = lab[0] - 0.1055613458f * lab[1] - 0.0638541728f * lab[2];
+  float s_ = lab[0] - 0.0894841775f * lab[1] - 1.2914855480f * lab[2];
+
+  float l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+
+  rgb[0] = +4.0767416621f * l - 3.3077115913f * m + 0.2309699292f * s;
+  rgb[1] = -1.2684380046f * l + 2.6097574011f * m - 0.3413193965f * s;
+  rgb[2] = -0.0041960863f * l - 0.7034186147f * m + 1.7076147010f * s;
+}
 
 static void process_lut(dt_iop_module_t *self,
                         dt_dev_pixelpipe_iop_t *piece,
@@ -1442,13 +1514,13 @@ static void process_lut(dt_iop_module_t *self,
       g = out[k+1];
       b = out[k+2];
 
-      if(d->highlight_gain != 1.0f) 
+      if(d->highlight_gain != 1.0f && d->workflow_mode != 3) 
       {
         r *= d->highlight_gain;
         g *= d->highlight_gain;
         b *= d->highlight_gain;
       }
-      if(d->shadow_lift != 1.0f) 
+      if(d->shadow_lift != 1.0f && d->workflow_mode != 3) 
       {
         r = powf(r, d->shadow_lift);
         g = powf(g, d->shadow_lift);
@@ -1473,7 +1545,9 @@ static void process_lut(dt_iop_module_t *self,
          and derive scale k = 1 + alpha * L^2 where L = clamp(Jz,0,1).
          Then tone-map x_scaled = y_in / k and rescale result by k to
          extend the shoulder progressively. Keep alpha constant and
-         avoid changing UI or legacy/display-referred behavior. */
+         avoid changing UI or legacy/display-referred behavior. 
+         Based on JzAzBz perceptual space (Safdar et al. 2017).
+         Reference: https://www.osapublishing.org/oe/abstract.cfm?uri=oe-25-13-15131 */
       if(d->workflow_mode == 1 || d->workflow_mode == 2)
       {
         if(!has_work_profile)
@@ -1503,23 +1577,86 @@ static void process_lut(dt_iop_module_t *self,
         if(d->workflow_mode == 1)
           y_out = _aces_tone_map(x_scaled) * k_scale;
         else /* workflow_mode == 2 */
-          y_out = _aces_20_tonemap(x_scaled * 1.680f) * k_scale; //CB 20260307 1.680 (0.75ev) to better match ACES 1.0 tonemap at mid-tones
+        y_out = _aces_20_tonemap(x_scaled * ACES_EXPOSURE_ADJUST) * k_scale;
+      }
+      else if(d->workflow_mode == 3)
+      {
+        /* Mode 3: Cinematic UCS.
+           Operates in Oklab space (Björn Ottosson, 2020).
+           Provides hue-constant saturation adjustments and high-quality 
+           tonemapping using ACES 2.0 rational fit. */
+        float rgb_tmp[3] = {r, g, b};
+        float lab[3];
+        rgb_to_oklab_cpu(rgb_tmp, lab);
+
+        // 1. Balance Saturation UCS
+        const float L_ok = lab[0];
+        const float mask_ok = 1.0f / (1.0f + expf((L_ok - 0.5f) * 10.0f));
+        const float weight_ok = 2.0f * mask_ok - 1.0f;
+        // Boost saturation mostly in mid-tones (bell curve weight)
+        const float mid_weight = 1.0f - weight_ok * weight_ok;
+        const float sat_mult = (1.0f + d->saturation_boost * mid_weight) * (1.0f + d->ucs_saturation_balance * (weight_ok * weight_ok * weight_ok));
+        lab[1] *= sat_mult;
+        lab[2] *= sat_mult;
+
+        // 2. OpenDRT-style Vector Norm & Purity Compression
+        const float L_achromatic = lab[0];
+        const float chroma = hypotf(lab[1], lab[2]);
+        
+        // Calculate Vector Norm (total energy)
+        float V_norm = sqrtf(L_achromatic * L_achromatic + chroma * chroma);
+        float purity = (V_norm > 1e-6f) ? (chroma / V_norm) : 0.0f;
+
+        // Hyperbolic purity compression: prevents "neon" colors by taming extreme purity
+        float purity_comp = purity / (1.0f + 0.05f * purity);
+
+        // Prepare Norm for tonemapping
+        float V_orig = fmaxf(0.0f, powf(V_norm, OKLAB_BRILLIANCE_POWER));
+        V_orig *= (1.189f + d->highlight_gain); // CB essai: 1.257f = + 0.33ev 1.189 = +0.25ev
+        V_orig = fmaxf(0.0f, powf(V_orig, d->shadow_lift + 1.0f));
+
+        /* ACES 2.0 fit by Narkowicz/Filiberto */
+        float V_new = _aces_20_tonemap(V_orig);
+
+        // 3. Highlight Hue Sat (Saturation Gate)
+        /* Prevent color shifts by desaturating compressed highlights */
+        float compression = (V_norm > 1e-4f) ? (V_new / V_norm) : 1.0f;
+        float gate_power = 0.5f * (1.0f - d->highlight_corr);
+        float saturation_gate = CLAMP(powf(compression, gate_power), 0.0f, 1.0f);
+
+        // Reconstruct L and Chroma based on tonemapped norm and compressed purity
+        lab[0] = V_new * sqrtf(fmaxf(0.0f, 1.0f - purity_comp * purity_comp));
+        lab[1] *= (V_new * purity_comp * saturation_gate) / fmaxf(chroma, 1e-6f);
+        lab[2] *= (V_new * purity_comp * saturation_gate) / fmaxf(chroma, 1e-6f);
+
+        oklab_to_rgb_cpu(lab, rgb_tmp);
+        r = rgb_tmp[0]; g = rgb_tmp[1]; b = rgb_tmp[2];
+        y_out = lab[0];
       }
 
       gain = y_out / fmaxf(y_in, 1e-6f);
+      if(d->workflow_mode != 3) {
+        out[k] = r * gain;
+        out[k+1] = g * gain;
+        out[k+2] = b * gain;
+      } else {
+        out[k] = r; out[k+1] = g; out[k+2] = b;
+      }
 
-      out[k] = r * gain;
-      out[k+1] = g * gain;
-      out[k+2] = b * gain;
-
-      const float threshold = 0.80f;
-      if(y_out > threshold)
+      if(d->use_rolloff > 0.0f)
       {
-        float factor = (y_out - threshold) / (1.0f - threshold);
-        factor = CLAMP(factor, 0.0f, 1.0f);
-        out[k] = out[k] * (1.0f - factor) + y_out * factor;
-        out[k+1] = out[k+1] * (1.0f - factor) + y_out * factor;
-        out[k+2] = out[k+2] * (1.0f - factor) + y_out * factor;
+        const float threshold = 0.80f;
+        if(y_out > threshold)
+        {
+          float factor = (y_out - threshold) / (1.0f - threshold);
+          factor = CLAMP(factor, 0.0f, 1.0f) * d->use_rolloff;
+          /* In mode 3, L_new is bounded to [0,1] by ACES, so blend towards 1.0 (white)
+             to ensure blown highlights reach display white, not a compressed gray. */
+          const float blend_target = (d->workflow_mode == 3) ? 1.0f : y_out;
+          out[k] = out[k] * (1.0f - factor) + blend_target * factor;
+          out[k+1] = out[k+1] * (1.0f - factor) + blend_target * factor;
+          out[k+2] = out[k+2] * (1.0f - factor) + blend_target * factor;
+        }
       }
 
       if(d->ucs_saturation_balance != 0.0f || d->gamut_strength > 0.0f || d->highlight_corr != 0.0f)
@@ -1546,7 +1683,7 @@ static void process_lut(dt_iop_module_t *self,
 
         int modified = 0;
 
-        if(d->ucs_saturation_balance != 0.0f)
+        if(d->ucs_saturation_balance != 0.0f && d->workflow_mode != 3)
         {
           // Chroma-based modulation for saturation balance
           const float r_sat = out[k];
@@ -1563,7 +1700,7 @@ static void process_lut(dt_iop_module_t *self,
           const float mask_shadow = 1.0f / (1.0f + expf(n * 4.0f));
           float sat_adjust = effective_saturation * (2.0f * mask_shadow - 1.0f);
           sat_adjust *= fminf(L_ucs * 4.0f, 1.0f);
-          const float sat_factor = 1.0f + sat_adjust;
+          const float sat_factor = (1.0f + d->saturation_boost) * (1.0f + sat_adjust);
           jab[1] *= sat_factor;
           jab[2] *= sat_factor;
           modified = 1;
@@ -1579,7 +1716,7 @@ static void process_lut(dt_iop_module_t *self,
           modified = 1;
         }
 
-        if(d->highlight_corr != 0.0f)
+        if(d->highlight_corr != 0.0f && d->workflow_mode != 3)
         {
           // HIGHLIGHT HUE AND SATURATION CORRECTION (sync with OpenCL)
           // Mask starts at Jz = 0.20 and is full at Jz = 0.90. Linear transition.
@@ -1677,9 +1814,9 @@ static void process_lut(dt_iop_module_t *self,
           const float compressed_blue = gamut_threshold + range * delta / (delta + range_blue);
           const float factor_blue = compressed_blue / max_val;
 
-          // CB. Calculer la luminance actuelle du pixel (avant compression)
+          // CB. Calculate current pixel luminance (before compression)
           const float luma = r_coeff_lum * out[k] + g_coeff_lum * out[k+1] + b_coeff_lum * out[k+2];
-          // CB. Application du facteur en préservant la luminance (désaturation)
+          // CB. Applying the factor while preserving luminance (desaturation)
           out[k] = luma + (out[k] - luma) * factor;
           out[k+1] = luma + (out[k+1] - luma) * factor;
           out[k+2] = luma + (out[k+2] - luma) * factor_blue;
@@ -1688,6 +1825,15 @@ static void process_lut(dt_iop_module_t *self,
         out[k] = orig_r * (1.0f - effective_strength) + out[k] * effective_strength;
         out[k+1] = orig_g * (1.0f - effective_strength) + out[k+1] * effective_strength;
         out[k+2] = orig_b * (1.0f - effective_strength) + out[k+2] * effective_strength;
+      }
+
+      // CB. OpenDRT-style weighted red and blue correction for higher precision
+      if(d->workflow_mode > 0 && d->saturation_boost != 0.0f)
+      {
+        // Use calculated luma as the achromatic reference point (sat_L)
+        const float luma = r_coeff_lum * out[k] + g_coeff_lum * out[k+1] + b_coeff_lum * out[k+2];
+        out[k] += d->saturation_boost * (out[k] - luma); // Apply to red channel
+        out[k+2] += d->saturation_boost * (out[k+2] - luma);
       }
 
       // Final gamut check to preserve hue (exact color)
@@ -1899,7 +2045,8 @@ static void process_fusion(dt_iop_module_t *self,
       val[1] = fmaxf(val[1], 0.0f);
       val[2] = fmaxf(val[2], 0.0f);
 
-      if(d->highlight_gain != 1.0f) {
+      if(d->highlight_gain != 1.0f && d->workflow_mode != 3)
+      {
         val[0] *= d->highlight_gain;
         val[1] *= d->highlight_gain;
         val[2] *= d->highlight_gain;
@@ -1950,23 +2097,73 @@ static void process_fusion(dt_iop_module_t *self,
         if(d->workflow_mode == 1)
           y_out = _aces_tone_map(x_scaled) * k_scale;
         else
-          y_out = _aces_20_tonemap(x_scaled * 1.680f) * k_scale; //CB 20260307 1.680 (0.75ev) to better match ACES 1.0 tonemap at mid-tones
+          y_out = _aces_20_tonemap(x_scaled * ACES_EXPOSURE_ADJUST) * k_scale;
+      }
+      else if(d->workflow_mode == 3)
+      {
+        float rgb_tmp[3] = {val[0], val[1], val[2]};
+        float lab[3];
+        rgb_to_oklab_cpu(rgb_tmp, lab);
+
+        const float L_ok = lab[0];
+        const float mask_ok = 1.0f / (1.0f + expf((L_ok - 0.5f) * 10.0f));
+        const float weight_ok = 2.0f * mask_ok - 1.0f;
+        // Boost saturation mostly in mid-tones (bell curve weight)
+        const float mid_weight = 1.0f - weight_ok * weight_ok;
+        const float sat_mult = (1.0f + d->saturation_boost * mid_weight) * (1.0f + d->ucs_saturation_balance * (weight_ok * weight_ok * weight_ok));
+        lab[1] *= sat_mult;
+        lab[2] *= sat_mult;
+        
+        // 2. OpenDRT-style Vector Norm & Purity Compression
+        const float L_achromatic = lab[0];
+        const float chroma = hypotf(lab[1], lab[2]);
+        
+        // Calculate Vector Norm (total energy)
+        float V_norm = sqrtf(L_achromatic * L_achromatic + chroma * chroma);
+        float purity = (V_norm > 1e-6f) ? (chroma / V_norm) : 0.0f;
+
+        // Hyperbolic purity compression
+        float purity_comp = purity / (1.0f + 0.05f * purity);
+
+        // Prepare Norm for tonemapping
+        float V_orig = fmaxf(0.0f, powf(V_norm, OKLAB_BRILLIANCE_POWER));
+        V_orig *= (1.189f + d->highlight_gain); // CB essai: 1.257f = + 0.33ev; 1.189 = +0.25ev
+        V_orig = fmaxf(0.0f, powf(V_orig, d->shadow_lift + 1.0f));
+
+        float V_new = _aces_20_tonemap(V_orig);
+
+        float compression = (V_norm > 1e-4f) ? (V_new / V_norm) : 1.0f;
+        float gate_power = 0.5f * (1.0f - d->highlight_corr);
+        float saturation_gate = CLAMP(powf(compression, gate_power), 0.0f, 1.0f);
+
+        // Reconstruct
+        lab[0] = V_new * sqrtf(fmaxf(0.0f, 1.0f - purity_comp * purity_comp));
+        lab[1] *= (V_new * purity_comp * saturation_gate) / fmaxf(chroma, 1e-6f);
+        lab[2] *= (V_new * purity_comp * saturation_gate) / fmaxf(chroma, 1e-6f);
+
+        oklab_to_rgb_cpu(lab, rgb_tmp);
+        val[0] = rgb_tmp[0]; val[1] = rgb_tmp[1]; val[2] = rgb_tmp[2];
+        y_out = lab[0];
       }
 
       gain = y_out / fmaxf(y_in, 1e-6f);
+      if(d->workflow_mode != 3) {
+        val[0] *= gain;
+        val[1] *= gain;
+        val[2] *= gain;
+      }
 
-      val[0] *= gain;
-      val[1] *= gain;
-      val[2] *= gain;
-
-      const float threshold = 0.80f;
-      if(y_out > threshold)
+      if(d->use_rolloff > 0.0f)
       {
-        float factor = (y_out - threshold) / (1.0f - threshold);
-        factor = CLAMP(factor, 0.0f, 1.0f);
-        val[0] = val[0] * (1.0f - factor) + y_out * factor;
-        val[1] = val[1] * (1.0f - factor) + y_out * factor;
-        val[2] = val[2] * (1.0f - factor) + y_out * factor;
+        const float threshold = 0.80f;
+        if(y_out > threshold)
+        {
+          float factor = (y_out - threshold) / (1.0f - threshold);
+          factor = CLAMP(factor, 0.0f, 1.0f) * d->use_rolloff;
+          val[0] = val[0] * (1.0f - factor) + y_out * factor;
+          val[1] = val[1] * (1.0f - factor) + y_out * factor;
+          val[2] = val[2] * (1.0f - factor) + y_out * factor;
+        }
       }
 
       if(d->ucs_saturation_balance != 0.0f || d->gamut_strength > 0.0f || d->highlight_corr != 0.0f)
@@ -2012,7 +2209,7 @@ static void process_fusion(dt_iop_module_t *self,
           const float mask_shadow = 1.0f / (1.0f + expf(n * 4.0f));
           float sat_adjust = effective_saturation * (2.0f * mask_shadow - 1.0f);
           sat_adjust *= fminf(L_ucs * 4.0f, 1.0f);
-          const float sat_factor = 1.0f + sat_adjust;
+          const float sat_factor = (1.0f + d->saturation_boost) * (1.0f + sat_adjust);
           jab[1] *= sat_factor;
           jab[2] *= sat_factor;
           modified = 1;
@@ -2139,6 +2336,15 @@ static void process_fusion(dt_iop_module_t *self,
       }
       }
 
+      // CB. OpenDRT-style weighted red and blue correction for higher precision
+      if(d->workflow_mode > 0 && d->saturation_boost != 0.0f)
+      {
+        // Use calculated luma as the achromatic reference point (sat_L)
+        const float luma = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2];
+        val[0] += d->saturation_boost * (val[0] - luma); // Apply to red channel
+        val[2] += d->saturation_boost * (val[2] - luma);
+      }
+
       // Final gamut check to preserve hue (exact color)
       if(val[0] < 0.0f || val[0] > 1.0f || val[1] < 0.0f || val[1] > 1.0f || val[2] < 0.0f || val[2] > 1.0f)
       {
@@ -2202,6 +2408,7 @@ void commit_params(dt_iop_module_t *self,
   d->exposure_bias = p->exposure_bias;
   d->preserve_colors = p->preserve_colors;
   d->workflow_mode = p->workflow_mode;
+  d->use_rolloff = p->use_rolloff;
   if(p->workflow_mode > 0)
   {
     // Scene-referred: apply all parameters as set by the user.
@@ -2209,6 +2416,7 @@ void commit_params(dt_iop_module_t *self,
     d->shadow_lift            = 2.0f - p->shadow_lift;
     d->highlight_gain         = p->highlight_gain;
     d->ucs_saturation_balance = p->ucs_saturation_balance;
+    d->saturation_boost       = p->saturation_boost;
     d->gamut_strength         = p->gamut_strength;
     d->highlight_corr         = p->highlight_corr;
   }
@@ -2220,6 +2428,7 @@ void commit_params(dt_iop_module_t *self,
     d->shadow_lift            = 1.0f;
     d->highlight_gain         = 1.0f;
     d->ucs_saturation_balance = 0.0f;
+    d->saturation_boost       = 0.0f;
     d->gamut_strength         = 0.0f;
     d->highlight_corr         = 0.0f;
   }
@@ -3087,7 +3296,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
       if(!w || w == g->workflow_mode || w == g->color_look)
   {
-    if(p->workflow_mode == 1 || p->workflow_mode == 2)
+    if(p->workflow_mode >= 1)
     {
       gtk_widget_set_visible(g->cmb_preserve_colors, FALSE);
       if(p->preserve_colors != DT_RGB_NORM_NONE)
@@ -3097,16 +3306,19 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       gtk_widget_set_visible(g->node_x_slider, TRUE);
       gtk_widget_set_visible(g->node_y_slider, TRUE);
       gtk_widget_set_visible(g->logbase, FALSE);
+      gtk_widget_set_visible(g->saturation_boost, TRUE);
       gtk_widget_set_visible(g->ucs_saturation_balance, TRUE);
       gtk_widget_set_visible(g->gamut_strength, TRUE);
       gtk_widget_set_visible(g->highlight_corr, TRUE);
       gtk_widget_set_visible(g->target_gamut, TRUE);
       gtk_widget_set_visible(g->color_look, TRUE);
       gtk_widget_set_visible(g->look_opacity, p->color_look > 0);
+      gtk_widget_set_visible(g->use_rolloff, TRUE);
       gtk_widget_set_sensitive(g->shadow_lift, TRUE);
       gtk_widget_set_sensitive(g->highlight_gain, TRUE);
       gtk_widget_set_sensitive(g->node_x_slider, TRUE);
       gtk_widget_set_sensitive(g->node_y_slider, TRUE);
+      gtk_widget_set_sensitive(g->saturation_boost, TRUE);
       gtk_widget_set_sensitive(g->ucs_saturation_balance, TRUE);
       gtk_widget_set_sensitive(g->gamut_strength, TRUE);
       gtk_widget_set_sensitive(g->highlight_corr, TRUE);
@@ -3127,9 +3339,9 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       gtk_widget_set_tooltip_text(g->fusion, _("exposure fusion operates in linear scene-referred space as a luminance normalization step,\n"
                                                "providing a stable radiometric reference prior to the final tone-mapping curve.\n"
                                                "it does not perform HDR blending nor exposure compensation."));
-          if(w == g->workflow_mode)
+      if(w == g->workflow_mode)
       {
-        if(!((p->workflow_mode == 1 && g->last_workflow_mode == 2) || (p->workflow_mode == 2 && g->last_workflow_mode == 1)))
+        if(!((p->workflow_mode >= 1 && g->last_workflow_mode >= 1)))
         {
           p->shadow_lift = 1.0f;
           dt_bauhaus_slider_set(g->shadow_lift, 1.0f);
@@ -3137,6 +3349,15 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
           dt_bauhaus_slider_set(g->highlight_gain, 1.0f);
           p->ucs_saturation_balance = 0.2f;
           dt_bauhaus_slider_set(g->ucs_saturation_balance, 0.2f);
+          p->saturation_boost = 0.0f;
+          dt_bauhaus_slider_set(g->saturation_boost, 0.0f);
+          
+          if(p->workflow_mode == 3)
+          {
+            p->use_rolloff = 0.0f;
+            dt_bauhaus_slider_set(g->use_rolloff, 0.0f);
+          }
+        
           // Set default color look when switching to this workflow
           p->color_look = 0; // Neutral look
           dt_bauhaus_combobox_set(g->color_look, 0);
@@ -3150,6 +3371,12 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
           gtk_widget_queue_draw(GTK_WIDGET(g->area));
         }
+
+        if(p->workflow_mode == 3 && g->last_workflow_mode != 3 && !darktable.gui->reset)
+        {
+          p->use_rolloff = 0.0f;
+          dt_bauhaus_slider_set(g->use_rolloff, 0.0f);
+        }
         g->last_workflow_mode = p->workflow_mode;
       }
     }
@@ -3160,14 +3387,17 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       gtk_widget_set_visible(g->highlight_gain, FALSE);
       gtk_widget_set_visible(g->node_x_slider, TRUE);
       gtk_widget_set_visible(g->node_y_slider, TRUE);
+      gtk_widget_set_visible(g->saturation_boost, FALSE);
       gtk_widget_set_visible(g->ucs_saturation_balance, FALSE);
       gtk_widget_set_visible(g->gamut_strength, FALSE);
       gtk_widget_set_visible(g->highlight_corr, FALSE);
       gtk_widget_set_visible(g->target_gamut, FALSE);
       gtk_widget_set_visible(g->color_look, TRUE);
       gtk_widget_set_visible(g->look_opacity, p->color_look > 0);
+      gtk_widget_set_visible(g->use_rolloff, FALSE);
       gtk_widget_set_sensitive(g->shadow_lift, FALSE);
       gtk_widget_set_sensitive(g->highlight_gain, FALSE);
+      gtk_widget_set_sensitive(g->saturation_boost, FALSE);
       gtk_widget_set_sensitive(g->ucs_saturation_balance, FALSE);
       gtk_widget_set_sensitive(g->gamut_strength, FALSE);
       gtk_widget_set_sensitive(g->highlight_corr, FALSE);
@@ -3218,7 +3448,9 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_combobox_set(g->workflow_mode, p->workflow_mode);
   dt_bauhaus_slider_set(g->shadow_lift, p->shadow_lift);
   dt_bauhaus_slider_set(g->highlight_gain, p->highlight_gain);
+  dt_bauhaus_slider_set(g->saturation_boost, p->saturation_boost);
   dt_bauhaus_slider_set(g->ucs_saturation_balance, p->ucs_saturation_balance);
+  dt_bauhaus_slider_set(g->use_rolloff, p->use_rolloff);
   dt_bauhaus_combobox_set(g->color_look, p->color_look);
   dt_bauhaus_slider_set(g->look_opacity, p->look_opacity);
   int display_idx = (g->selected >= 0) ? g->selected : g->last_selected;
@@ -3286,6 +3518,16 @@ static void node_y_slider_callback(GtkWidget *slider, dt_iop_module_t *self)
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
   dt_dev_add_history_item_target(darktable.develop, self, TRUE, self->widget);
 }
+void gui_reset(dt_iop_module_t *self)
+{
+  dt_iop_basecurve_gui_data_t *g = self->gui_data;
+  if(g)
+  {
+    g->selected = -1;
+    g->last_selected = -1;
+  }
+  dt_iop_color_picker_reset(self, TRUE);
+}
 
 void gui_init(dt_iop_module_t *self)
 {
@@ -3347,6 +3589,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_combobox_add(g->workflow_mode, _("display"));
   dt_bauhaus_combobox_add(g->workflow_mode, _("kinematic"));
   dt_bauhaus_combobox_add(g->workflow_mode, _("dynamic"));
+  dt_bauhaus_combobox_add(g->workflow_mode, _("cinematic"));
   gtk_widget_set_tooltip_text(g->workflow_mode, _("tone mapping method applied after the curve"));
 
   g->color_look = dt_bauhaus_combobox_from_params(self, "color_look");
@@ -3380,7 +3623,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_default(g->highlight_gain, 1.0);
 
   g->shadow_lift = dt_bauhaus_slider_from_params(self, "shadow_lift");
-  dt_bauhaus_widget_set_label(g->shadow_lift, NULL, _("shadow lift"));
+  dt_bauhaus_widget_set_label(g->shadow_lift, NULL, _("shadow correction"));
   gtk_widget_set_tooltip_text(g->shadow_lift, _("adjusts the shadows brightness.\n"
                                                  "positive values lift shadows,\n"
                                                  "while negative values darken them."));
@@ -3434,6 +3677,14 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_no_show_all(g->exposure_bias, TRUE);
   gtk_widget_set_visible(g->exposure_bias, p->exposure_fusion != 0 ? TRUE : FALSE);
 
+  g->saturation_boost = dt_bauhaus_slider_from_params(self, "saturation_boost");
+  dt_bauhaus_widget_set_label(g->saturation_boost, NULL, _("saturation boost UCS"));
+  gtk_widget_set_tooltip_text(g->saturation_boost,
+                              _("globally boost or reduce color saturation within the UCS color space."));
+  dt_bauhaus_slider_set_format(g->saturation_boost, "%");
+  dt_bauhaus_slider_set_factor(g->saturation_boost, 100.0);
+  dt_bauhaus_slider_set_default(g->saturation_boost, 0.0);
+
   g->ucs_saturation_balance = dt_bauhaus_slider_from_params(self, "ucs_saturation_balance");
   dt_bauhaus_widget_set_label(g->ucs_saturation_balance, NULL, _("balance saturation ucs"));
   gtk_widget_set_tooltip_text(g->ucs_saturation_balance,
@@ -3456,6 +3707,13 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_step(g->highlight_corr, 0.001);
   gtk_widget_set_tooltip_text(g->highlight_corr, _("corrects hue and saturation in highlights to mitigate color shifts\n"
                                                    "(e.g. salmon sunsets or magenta blues)"));
+
+  g->use_rolloff = dt_bauhaus_slider_from_params(self, "use_rolloff");
+  dt_bauhaus_widget_set_label(g->use_rolloff, NULL, _("highlight roll-off"));
+  dt_bauhaus_slider_set_format(g->use_rolloff, "%");
+  dt_bauhaus_slider_set_factor(g->use_rolloff, 100.0);
+  dt_bauhaus_slider_set_default(g->use_rolloff, 1.0);
+  gtk_widget_set_tooltip_text(g->use_rolloff, _("desaturate highlights progressively starting at 80% to avoid color clipping artifacts."));
 
   g->target_gamut = dt_bauhaus_combobox_from_params(self, "target_gamut");
   dt_bauhaus_combobox_add(g->target_gamut, "sRGB (Rec.709)");

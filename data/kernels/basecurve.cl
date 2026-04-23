@@ -53,6 +53,35 @@ inline float _aces_20_tonemap(const float x)
   return clamp((x * (x + a) - b) / (x * (c * x + d) + e), 0.0f, 1.0f);
 }
 
+// --- CONVERSIONS OKLAB POUR OPENCL ---
+inline float3 rgb_to_oklab(float3 c)
+{
+  float l = 0.4122214708f * c.x + 0.5363325363f * c.y + 0.0514459929f * c.z;
+  float m = 0.2119034982f * c.x + 0.6806995451f * c.y + 0.1073969566f * c.z;
+  float s = 0.0883024619f * c.x + 0.2817188376f * c.y + 0.6299787005f * c.z;
+
+  float l_ = cbrt(fmax(l, 0.0f));
+  float m_ = cbrt(fmax(m, 0.0f));
+  float s_ = cbrt(fmax(s, 0.0f));
+
+  return (float3)(
+      0.2104542553f * l_ + 0.7936177850f * m_ - 0.0040720403f * s_,
+      1.9779984951f * l_ - 2.4285922050f * m_ + 0.4505937099f * s_,
+      0.0259040371f * l_ + 0.7827717662f * m_ - 0.8086757660f * s_);
+}
+
+inline float3 oklab_to_rgb(float3 c)
+{
+  float l_ = c.x + 0.3963377774f * c.y + 0.2158037573f * c.z;
+  float m_ = c.x - 0.1055613458f * c.y - 0.0638541728f * c.z;
+  float s_ = c.x - 0.0894841775f * c.y - 1.2914855480f * c.z;
+
+  return (float3)(
+      +4.0767416621f * (l_ * l_ * l_) - 3.3077115913f * (m_ * m_ * m_) + 0.2309699292f * (s_ * s_ * s_),
+      -1.2684380046f * (l_ * l_ * l_) + 2.6097574011f * (m_ * m_ * m_) - 0.3413193965f * (s_ * s_ * s_),
+      -0.0041960863f * (l_ * l_ * l_) - 0.7034186147f * (m_ * m_ * m_) + 1.7076147010f * (s_ * s_ * s_));
+}
+
 /*
   Primary LUT lookup.  Measures the luminance of a given pixel using a selectable function, looks up that
   luminance in the configured basecurve, and then scales each channel by the result.
@@ -349,8 +378,10 @@ basecurve_finalize(read_only image2d_t in,
                    const int width,
                    const int height, 
                    const int workflow_mode, 
+                   const float use_rolloff,
                    const float shadow_lift, 
                    const float highlight_gain,
+                   const float saturation_boost,
                    const float ucs_saturation_balance, 
                    const float gamut_strength, 
                    const float highlight_corr, 
@@ -395,10 +426,10 @@ basecurve_finalize(read_only image2d_t in,
 
   if(workflow_mode > 0 || shadow_lift != 1.0f || highlight_gain != 1.0f || ucs_saturation_balance != 0.0f || gamut_strength > 0.0f || highlight_corr != 0.0f)
   {
-    if(highlight_gain != 1.0f)
+    if(highlight_gain != 1.0f && workflow_mode != 3)
       pixel.xyz *= highlight_gain;
 
-    if(shadow_lift != 1.0f)
+    if(shadow_lift != 1.0f && workflow_mode != 3)
     {
       pixel.x = (pixel.x > 0.0f) ? pow(pixel.x, shadow_lift) : pixel.x;
       pixel.y = (pixel.y > 0.0f) ? pow(pixel.y, shadow_lift) : pixel.y;
@@ -438,18 +469,71 @@ basecurve_finalize(read_only image2d_t in,
       if(workflow_mode == 1)
         y_out = _aces_tone_map(x_scaled) * k;
       else
-        y_out = _aces_20_tonemap(x_scaled * 1.680f) * k;
+        y_out = _aces_20_tonemap(x_scaled * 2.0f) * k;
+    }
+    else if(workflow_mode == 3)
+    {
+      // Mode 3: ACES 2.0 Pure UCS (Oklab) - Pre-tonescale Brilliance
+      float3 lab = rgb_to_oklab(pixel.xyz);
+
+      // 1. Balance Saturation UCS
+      const float L_ok = lab.x;
+      const float mask_ok = 1.0f / (1.0f + dtcl_exp((L_ok - 0.5f) * 10.0f));
+      const float weight_ok = 2.0f * mask_ok - 1.0f;
+      // Boost saturation mostly in mid-tones (bell curve weight)
+      const float mid_weight = 1.0f - weight_ok * weight_ok;
+      const float sat_mult = (1.0f + saturation_boost * mid_weight) * (1.0f + ucs_saturation_balance * (weight_ok * weight_ok * weight_ok));
+      lab.y *= sat_mult;
+      lab.z *= sat_mult;
+
+      // 2. OpenDRT-style Vector Norm & Purity Compression
+      const float L_achromatic = lab.x;
+      const float chroma = length(lab.yz);
+
+      // Calculate Vector Norm (total energy)
+      float V_norm = native_sqrt(L_achromatic * L_achromatic + chroma * chroma);
+      float purity = (V_norm > 1e-6f) ? (chroma / V_norm) : 0.0f;
+
+      // Hyperbolic purity compression
+      float purity_comp = purity / (1.0f + 0.05f * purity);
+
+      // Prepare Norm for tonemapping
+      float V_orig = fmax(0.0f, pow(V_norm, 1.25f)); /* OKLAB_BRILLIANCE_POWER = 1.25 */
+      V_orig *= (1.189f + highlight_gain); // CB essai: 1.257f = + 0.33ev 1.189 = +0.25ev
+      V_orig = fmax(0.0f, pow(V_orig, shadow_lift + 1.0f));
+
+      float V_new = _aces_20_tonemap(V_orig);
+
+      // 3. Highlight Hue Sat (Saturation Gate)
+      float compression = (V_norm > 1e-4f) ? (V_new / V_norm) : 1.0f;
+      float gate_power = 0.5f * (1.0f - highlight_corr);
+      float saturation_gate = clamp(pow(compression, gate_power), 0.0f, 1.0f);
+
+      // Reconstruct L and Chroma
+      lab.x = V_new * native_sqrt(fmax(0.0f, 1.0f - purity_comp * purity_comp));
+      float chroma_scale = (V_new * purity_comp * saturation_gate) / fmax(chroma, 1e-6f);
+      lab.y *= chroma_scale;
+      lab.z *= chroma_scale;
+
+      pixel.xyz = oklab_to_rgb(lab);
+      y_out = lab.x;
     }
 
     float gain = y_out / fmax(y_in, 1e-6f);
-    pixel.xyz *= gain;
+    if(workflow_mode != 3) pixel.xyz *= gain;
 
-    const float threshold = 0.80f;
-    if(y_out > threshold)
+    if(use_rolloff > 0.0f)
     {
-      float factor = (y_out - threshold) / (1.0f - threshold);
-      factor = clamp(factor, 0.0f, 1.0f);
-      pixel.xyz = mix(pixel.xyz, (float3)y_out, factor);
+      const float threshold = 0.80f;
+      if(y_out > threshold)
+      {
+        float factor = (y_out - threshold) / (1.0f - threshold);
+        factor = clamp(factor, 0.0f, 1.0f) * use_rolloff;
+        /* In mode 3, blend towards 1.0 (white): L_new is bounded to [0,1] by ACES,
+           so y_out cannot exceed 1.0, unlike modes 1/2 where k_scale allows it. */
+        const float blend_target = (workflow_mode == 3) ? 1.0f : y_out;
+        pixel.xyz = mix(pixel.xyz, (float3)(blend_target), factor);
+      }
     }
 
     float4 jab = (float4)(0.0f);
@@ -478,7 +562,7 @@ basecurve_finalize(read_only image2d_t in,
 
       int modified = 0;
 
-      if(ucs_saturation_balance != 0.0f)
+      if(ucs_saturation_balance != 0.0f && workflow_mode != 3)
       {
         // Chroma-based modulation for saturation balance
         const float chroma = fmax(fmax(pixel.x, pixel.y), pixel.z) - fmin(fmin(pixel.x, pixel.y), pixel.z);
@@ -493,7 +577,7 @@ basecurve_finalize(read_only image2d_t in,
         
         float sat_adjust = effective_saturation * (2.0f * mask_shadow - 1.0f);
         sat_adjust *= fmin(L * 4.0f, 1.0f);
-        const float sat_factor = 1.0f + sat_adjust;
+        const float sat_factor = (1.0f + saturation_boost) * (1.0f + sat_adjust);
         jab.y *= sat_factor;
         jab.z *= sat_factor;
         modified = 1;
@@ -513,7 +597,7 @@ basecurve_finalize(read_only image2d_t in,
       // Start effect at 0.20 up to 0.90. Linear transition.
       float hl_mask = clamp((jab.x - 0.20f) / 0.70f, 0.0f, 1.0f);
 
-      if(hl_mask > 0.0f && highlight_corr != 0.0f)
+      if(hl_mask > 0.0f && highlight_corr != 0.0f && workflow_mode != 3)
       {
         // 1. Soft symmetric desaturation (0.75 factor)
         const float desat = 1.0f - (fabs(highlight_corr) * hl_mask * 0.75f);
@@ -593,15 +677,24 @@ basecurve_finalize(read_only image2d_t in,
         const float range_blue = 1.1f * range;
         const float compressed_blue = threshold + range * delta / (delta + range_blue);
         const float factor_blue = compressed_blue / max_val;
-        // CB. Calculer la luminance actuelle du pixel (avant compression)
-        // CB  utilise les coefficients de la norme RGB définie dans le fichier
+        // CB. Calculate current pixel luminance (before compression)
+        // CB. Uses the RGB norm coefficients defined in the file
         const float luma = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
-        // CB. Compresser vers la luminance (désaturation
+        // CB. Compress toward luminance (desaturation)
         pixel.x = luma + (pixel.x - luma) * factor;
         pixel.y = luma + (pixel.y - luma) * factor;
         pixel.z = luma + (pixel.z - luma) * factor_blue;
       }
       pixel = mix(orig, pixel, effective_strength);
+    }
+
+    // CB. OpenDRT-style weighted red and blue correction for higher precision
+    if(workflow_mode > 0 && saturation_boost != 0.0f)
+    {
+      // Use calculated luma as the achromatic reference point (sat_L)
+      const float luma = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
+      pixel.x += saturation_boost * (pixel.x - luma); // Apply to red channel
+      pixel.z += saturation_boost * (pixel.z - luma);
     }
 
     // Final gamut check to preserve hue
