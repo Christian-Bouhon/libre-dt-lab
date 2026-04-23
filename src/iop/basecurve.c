@@ -48,7 +48,8 @@
 #define MAXNODES 20
 
 #define ACES_EXPOSURE_ADJUST 2.0f
-#define OKLAB_BRILLIANCE_POWER 1.25f
+// Brilliance power controls the contrast curve applied to V_norm before tonemapping
+#define OKLAB_BRILLIANCE_POWER 1.10f 
 #define ROLLOFF_THRESHOLD 0.80f
 
 DT_MODULE_INTROSPECTION(8, dt_iop_basecurve_params_t)
@@ -1595,13 +1596,17 @@ static void process_lut(dt_iop_module_t *self,
         const float weight_ok = 2.0f * mask_ok - 1.0f;
         // Boost saturation mostly in mid-tones (bell curve weight)
         const float mid_weight = 1.0f - weight_ok * weight_ok;
-        const float sat_mult = (1.0f + d->saturation_boost * mid_weight) * (1.0f + d->ucs_saturation_balance * (weight_ok * weight_ok * weight_ok));
+
+        // Vibrance logic: protect already saturated colors by dampening boost
+        float chroma = hypotf(lab[1], lab[2]);
+        const float vibrance_weight = fmaxf(0.0f, 1.0f - chroma * 2.5f);
+        const float sat_mult = (1.0f + d->saturation_boost * mid_weight * vibrance_weight) * (1.0f + d->ucs_saturation_balance * (weight_ok * weight_ok * weight_ok));
         lab[1] *= sat_mult;
         lab[2] *= sat_mult;
 
         // 2. OpenDRT-style Vector Norm & Purity Compression
         const float L_achromatic = lab[0];
-        const float chroma = hypotf(lab[1], lab[2]);
+        chroma = hypotf(lab[1], lab[2]);
         
         // Calculate Vector Norm (total energy)
         float V_norm = sqrtf(L_achromatic * L_achromatic + chroma * chroma);
@@ -1612,7 +1617,7 @@ static void process_lut(dt_iop_module_t *self,
 
         // Prepare Norm for tonemapping
         float V_orig = fmaxf(0.0f, powf(V_norm, OKLAB_BRILLIANCE_POWER));
-        V_orig *= (1.110f + d->highlight_gain); // CB essai: 1.257f = + 0.33ev, 1.189 = +0.25ev 1.110 = +0.15ev
+        V_orig *= (1.189f + d->highlight_gain); // +0.25 EV exposure compensation
         V_orig = fmaxf(0.0f, powf(V_orig, d->shadow_lift + 1.0f));
 
         /* ACES 2.0 fit by Narkowicz/Filiberto */
@@ -1832,8 +1837,10 @@ static void process_lut(dt_iop_module_t *self,
       {
         // Use calculated luma as the achromatic reference point (sat_L)
         const float luma = r_coeff_lum * out[k] + g_coeff_lum * out[k+1] + b_coeff_lum * out[k+2];
-        out[k] += d->saturation_boost * (out[k] - luma); // Apply to red channel
-        out[k+2] += d->saturation_boost * (out[k+2] - luma);
+        const float prot_r = fmaxf(0.0f, 1.0f - fabsf(out[k] - luma) * 1.5f);
+        const float prot_b = fmaxf(0.0f, 1.0f - fabsf(out[k+2] - luma) * 1.5f);
+        out[k] += d->saturation_boost * (out[k] - luma) * prot_r; // Apply to red channel
+        out[k+2] += d->saturation_boost * (out[k+2] - luma) * prot_b;
       }
 
       // Final gamut check to preserve hue (exact color)
@@ -2110,13 +2117,17 @@ static void process_fusion(dt_iop_module_t *self,
         const float weight_ok = 2.0f * mask_ok - 1.0f;
         // Boost saturation mostly in mid-tones (bell curve weight)
         const float mid_weight = 1.0f - weight_ok * weight_ok;
-        const float sat_mult = (1.0f + d->saturation_boost * mid_weight) * (1.0f + d->ucs_saturation_balance * (weight_ok * weight_ok * weight_ok));
+
+        // Vibrance logic: protect already saturated colors by dampening boost
+        float chroma = hypotf(lab[1], lab[2]);
+        const float vibrance_weight = fmaxf(0.0f, 1.0f - chroma * 2.5f);
+        const float sat_mult = (1.0f + d->saturation_boost * mid_weight * vibrance_weight) * (1.0f + d->ucs_saturation_balance * (weight_ok * weight_ok * weight_ok));
         lab[1] *= sat_mult;
         lab[2] *= sat_mult;
         
         // 2. OpenDRT-style Vector Norm & Purity Compression
         const float L_achromatic = lab[0];
-        const float chroma = hypotf(lab[1], lab[2]);
+        chroma = hypotf(lab[1], lab[2]);
         
         // Calculate Vector Norm (total energy)
         float V_norm = sqrtf(L_achromatic * L_achromatic + chroma * chroma);
@@ -2127,7 +2138,7 @@ static void process_fusion(dt_iop_module_t *self,
 
         // Prepare Norm for tonemapping
         float V_orig = fmaxf(0.0f, powf(V_norm, OKLAB_BRILLIANCE_POWER));
-        V_orig *= (1.110f + d->highlight_gain); // CB essai: 1.257f = + 0.33ev; 1.189 = +0.25ev; 1.110 = +0.15ev
+        V_orig *= (1.189f + d->highlight_gain); // +0.25 EV exposure compensation
         V_orig = fmaxf(0.0f, powf(V_orig, d->shadow_lift + 1.0f));
 
         float V_new = _aces_20_tonemap(V_orig);
@@ -2160,9 +2171,10 @@ static void process_fusion(dt_iop_module_t *self,
         {
           float factor = (y_out - threshold) / (1.0f - threshold);
           factor = CLAMP(factor, 0.0f, 1.0f) * d->use_rolloff;
-          val[0] = val[0] * (1.0f - factor) + y_out * factor;
-          val[1] = val[1] * (1.0f - factor) + y_out * factor;
-          val[2] = val[2] * (1.0f - factor) + y_out * factor;
+          const float blend_target = (d->workflow_mode == 3) ? 1.0f : y_out;
+          val[0] = val[0] * (1.0f - factor) + blend_target * factor;
+          val[1] = val[1] * (1.0f - factor) + blend_target * factor;
+          val[2] = val[2] * (1.0f - factor) + blend_target * factor;
         }
       }
 
@@ -2177,22 +2189,22 @@ static void process_fusion(dt_iop_module_t *self,
         }
         else
         {
-        xyz[0] = 0.636958f * val[0] + 0.144617f * val[1] + 0.168881f * val[2];
-        xyz[1] = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2];
-        xyz[2] = 0.000000f * val[0] + 0.028073f * val[1] + 1.060985f * val[2];
+          xyz[0] = 0.636958f * val[0] + 0.144617f * val[1] + 0.168881f * val[2];
+          xyz[1] = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2];
+          xyz[2] = 0.000000f * val[0] + 0.028073f * val[1] + 1.060985f * val[2];
         }
 
-      for(int i=0; i<3; i++) xyz[i] = fmaxf(xyz[i], 0.0f);
+        for(int i=0; i<3; i++) xyz[i] = fmaxf(xyz[i], 0.0f);
 
         // XYZ to JzAzBz
         float jab[4];
-      float xyz_scaled[4];
-      for(int i=0; i<3; i++) xyz_scaled[i] = xyz[i] * 400.0f; // Scale to 400 nits for JzAzBz
-      dt_XYZ_2_JzAzBz(xyz_scaled, jab);
+        float xyz_scaled[4];
+        for(int i=0; i<3; i++) xyz_scaled[i] = xyz[i] * 400.0f;
+        dt_XYZ_2_JzAzBz(xyz_scaled, jab);
 
         int modified = 0;
 
-        if(d->ucs_saturation_balance != 0.0f)
+        if(d->ucs_saturation_balance != 0.0f && d->workflow_mode != 3)
         {
           // Chroma-based modulation for saturation balance
           const float r_sat = val[0];
@@ -2341,8 +2353,10 @@ static void process_fusion(dt_iop_module_t *self,
       {
         // Use calculated luma as the achromatic reference point (sat_L)
         const float luma = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2];
-        val[0] += d->saturation_boost * (val[0] - luma); // Apply to red channel
-        val[2] += d->saturation_boost * (val[2] - luma);
+        const float prot_r = fmaxf(0.0f, 1.0f - fabsf(val[0] - luma) * 1.5f);
+        const float prot_b = fmaxf(0.0f, 1.0f - fabsf(val[2] - luma) * 1.5f);
+        val[0] += d->saturation_boost * (val[0] - luma) * prot_r; // Apply to red channel
+        val[2] += d->saturation_boost * (val[2] - luma) * prot_b;
       }
 
       // Final gamut check to preserve hue (exact color)

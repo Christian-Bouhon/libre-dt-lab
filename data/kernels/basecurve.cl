@@ -482,13 +482,16 @@ basecurve_finalize(read_only image2d_t in,
       const float weight_ok = 2.0f * mask_ok - 1.0f;
       // Boost saturation mostly in mid-tones (bell curve weight)
       const float mid_weight = 1.0f - weight_ok * weight_ok;
-      const float sat_mult = (1.0f + saturation_boost * mid_weight) * (1.0f + ucs_saturation_balance * (weight_ok * weight_ok * weight_ok));
+      // Vibrance logic: protect already saturated colors
+      float chroma = length(lab.yz);
+      const float vibrance_weight = fmax(0.0f, 1.0f - chroma * 2.5f);
+      const float sat_mult = (1.0f + saturation_boost * mid_weight * vibrance_weight) * (1.0f + ucs_saturation_balance * (weight_ok * weight_ok * weight_ok));
       lab.y *= sat_mult;
       lab.z *= sat_mult;
 
       // 2. OpenDRT-style Vector Norm & Purity Compression
       const float L_achromatic = lab.x;
-      const float chroma = length(lab.yz);
+      chroma = length(lab.yz);
 
       // Calculate Vector Norm (total energy)
       float V_norm = native_sqrt(L_achromatic * L_achromatic + chroma * chroma);
@@ -498,8 +501,8 @@ basecurve_finalize(read_only image2d_t in,
       float purity_comp = purity / (1.0f + 0.05f * purity);
 
       // Prepare Norm for tonemapping
-      float V_orig = fmax(0.0f, pow(V_norm, 1.25f)); /* OKLAB_BRILLIANCE_POWER = 1.25 */
-      V_orig *= (1.110f + highlight_gain); // CB essai: 1.257f = + 0.33ev; 1.189 = +0.25ev; 1.110 = +0.15ev
+      float V_orig = fmax(0.0f, pow(V_norm, 1.10f)); /* OKLAB_BRILLIANCE_POWER = 1.10 */
+      V_orig *= (1.189f + highlight_gain); // +0.25 EV exposure compensation
       V_orig = fmax(0.0f, pow(V_orig, shadow_lift + 1.0f));
 
       float V_new = _aces_20_tonemap(V_orig);
@@ -693,8 +696,10 @@ basecurve_finalize(read_only image2d_t in,
     {
       // Use calculated luma as the achromatic reference point (sat_L)
       const float luma = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
-      pixel.x += saturation_boost * (pixel.x - luma); // Apply to red channel
-      pixel.z += saturation_boost * (pixel.z - luma);
+      const float prot_r = fmax(0.0f, 1.0f - fabs(pixel.x - luma) * 1.5f);
+      const float prot_b = fmax(0.0f, 1.0f - fabs(pixel.z - luma) * 1.5f);
+      pixel.x += saturation_boost * (pixel.x - luma) * prot_r; // Apply to red channel
+      pixel.z += saturation_boost * (pixel.z - luma) * prot_b;
     }
 
     // Final gamut check to preserve hue
