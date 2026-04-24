@@ -1,6 +1,8 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2010-2026 darktable developers.
+    Copyright (C) 2010-2026 darktable developers
+    Libre DT-lab Edition (C) 2026 Christian Bouhon.
+
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -13,6 +15,20 @@
 
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+
+    ---------------------------------------------------------------------------
+    Acknowledgments and Technical References (Libre DT-lab):
+
+    This basecurve module has been extended to include advanced color volume 
+    and tone management. Our thanks to the following works:
+
+    - Oklab: Björn Ottosson (2020) — "A perceptual color space for image processing"
+    - ACES 1.0: Stephen Hill / Narkowicz (2016) — Filmic tone mapping fit.
+    - ACES 2.0: Narkowicz & Filiberto (2021) — Rational RRT/ODT approximation.
+    - OpenDRT: J. Peddie — "open-display-transform" (vector norm concepts, 
+                pre-tonescale brilliance, and gamut mapping).
+    - JzAzBz: Safdar et al. (2017) — used in Kinematic and Dynamic modes.
+    ---------------------------------------------------------------------------
 */
 
 #include "bauhaus/bauhaus.h"
@@ -71,7 +87,7 @@ typedef struct dt_iop_basecurve_params_t
   float exposure_stops;   // number of stops between fusion images $MIN: 0.01 $MAX: 4.0 $DEFAULT: 1.0 $DESCRIPTION: "exposure shift"
   float exposure_bias;    // whether to do exposure-fusion with over or under-exposure $MIN: -1.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "exposure bias"
   dt_iop_rgb_norms_t preserve_colors; /* $DEFAULT: DT_RGB_NORM_LUMINANCE $DESCRIPTION: "preserve colors" */
-  int workflow_mode;      // $DEFAULT: 1
+  int workflow_mode;      // $DEFAULT: 3
   float shadow_lift;      // $MIN: 0.25 $MAX: 1.75 $DEFAULT: 1.0 $DESCRIPTION: "shadow correction"
   float highlight_gain;   // $MIN: 0.25 $MAX: 1.75 $DEFAULT: 1.0 $DESCRIPTION: "highlight gain"
   float ucs_saturation_balance; // $MIN: -0.75 $MAX: 0.75 $DEFAULT: 0.2 $DESCRIPTION: "balance saturation ucs"
@@ -298,7 +314,7 @@ int legacy_params(dt_iop_module_t *self,
     dt_iop_basecurve_params_t *n = calloc(1, sizeof(dt_iop_basecurve_params_t));
     memcpy(n, o, sizeof(dt_iop_basecurve_params_v7_t));
     // Consolidated migration from v7 to stable v8
-    n->use_rolloff = 1.0f;      // highlight roll-off default dosage (100%)
+    n->use_rolloff = 0.0f;      // highlight roll-off default dosage (0%)
     n->saturation_boost = 0.0f; // saturation boost default (neutral)
     *new_params = n;
     *new_params_size = sizeof(dt_iop_basecurve_params_t);
@@ -635,7 +651,7 @@ void reload_defaults(dt_iop_module_t *self)
 
   if(!dt_is_display_referred())
   {
-    d->workflow_mode = 1;
+    d->workflow_mode = 3;
     d->shadow_lift = 1.0f;
     d->highlight_gain = 1.0f;
     d->ucs_saturation_balance = 0.2f;
@@ -648,7 +664,7 @@ void reload_defaults(dt_iop_module_t *self)
     d->basecurve[0][0].x = 0.0f; d->basecurve[0][0].y = 0.0f;
     d->basecurve[0][1].x = 0.5f; d->basecurve[0][1].y = 0.5f;
     d->basecurve[0][2].x = 1.0f; d->basecurve[0][2].y = 1.0f;
-    d->use_rolloff = 1;
+    d->use_rolloff = 0;
   }
   else
   {
@@ -3603,7 +3619,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_combobox_add(g->workflow_mode, _("display"));
   dt_bauhaus_combobox_add(g->workflow_mode, _("kinematic"));
   dt_bauhaus_combobox_add(g->workflow_mode, _("dynamic"));
-  dt_bauhaus_combobox_add(g->workflow_mode, _("cinematic (UCS)"));
+  dt_bauhaus_combobox_add(g->workflow_mode, _("cinematic DRT"));
   gtk_widget_set_tooltip_text(g->workflow_mode, _("tone mapping method applied after the curve"));
 
   g->color_look = dt_bauhaus_combobox_from_params(self, "color_look");
@@ -3726,7 +3742,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_widget_set_label(g->use_rolloff, NULL, _("highlight roll-off"));
   dt_bauhaus_slider_set_format(g->use_rolloff, "%");
   dt_bauhaus_slider_set_factor(g->use_rolloff, 100.0);
-  dt_bauhaus_slider_set_default(g->use_rolloff, 1.0);
+  dt_bauhaus_slider_set_default(g->use_rolloff, 0.0);
   gtk_widget_set_tooltip_text(g->use_rolloff, _("desaturate highlights progressively starting at 80% to avoid color clipping artifacts."));
 
   g->target_gamut = dt_bauhaus_combobox_from_params(self, "target_gamut");

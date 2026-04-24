@@ -1,6 +1,7 @@
 /*
     This file is part of darktable,
-    copyright (c) 2016-2026 darktable developers.
+    copyright (c) 2016-2026 darktable developers
+    Libre DT-lab Edition (C) 2026 Christian Bouhon.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -14,7 +15,17 @@
 
     You should have received a copy of the GNU General Public License
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
-*/
+
+    ---------------------------------------------------------------------------
+    Acknowledgments and Technical References (Libre DT-lab):
+
+    - Oklab: Björn Ottosson (2020) — "A perceptual color space for image processing"
+    - ACES 1.0: Stephen Hill / Narkowicz (2016) — Filmic tone mapping fit.
+    - ACES 2.0: Narkowicz & Filiberto (2021) — Rational RRT/ODT approximation.
+    - OpenDRT: J. Peddie — "open-display-transform" (vector norm concepts, 
+                pre-tonescale brilliance, and gamut mapping).
+    - JzAzBz: Safdar et al. (2017) — used in Kinematic and Dynamic modes.
+    ---------------------------------------------------------------------------
 
 #include "color_conversion.h"
 #include "rgb_norms.h"
