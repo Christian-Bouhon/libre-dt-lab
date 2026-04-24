@@ -26,6 +26,7 @@
                 pre-tonescale brilliance, and gamut mapping).
     - JzAzBz: Safdar et al. (2017) — used in Kinematic and Dynamic modes.
     ---------------------------------------------------------------------------
+*/
 
 #include "color_conversion.h"
 #include "rgb_norms.h"
