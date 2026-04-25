@@ -274,7 +274,7 @@ jobs:
             libtiff:p
             libwebp:p
             libxml2:p
-            lua54:p
+            lua:p
             omp:p
             openexr:p
             openjpeg2:p
@@ -286,7 +286,7 @@ jobs:
             sqlite3:p
             webp-pixbuf-loader:p
             zlib:p
-          update: true
+          update: false
       - name: Build and install the latest compatible version of exiv2
         run: |
           git clone --branch v0.27.7 --depth 1 https://github.com/Exiv2/exiv2 src-exiv2
