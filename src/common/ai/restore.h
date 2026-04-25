@@ -114,6 +114,47 @@ dt_restore_context_t *dt_restore_ref(dt_restore_context_t *ctx);
 void dt_restore_unref(dt_restore_context_t *ctx);
 
 /**
+ * @brief Set the working color profile for the context.
+ *
+ * The AI model was trained on sRGB primaries. If the input pixels are
+ * in a different working profile (e.g. Rec.2020), we must convert to
+ * sRGB before inference and back after to avoid hue shifts. Call this
+ * before running inference on each image that may use a different
+ * working profile.
+ *
+ * If profile is NULL, the pipeline falls back to gamma-only conversion
+ * (treating working-profile numbers as if they were sRGB), which can
+ * cause color shifts for wide-gamut working profiles.
+ *
+ * Thread-safety: must not be called concurrently with
+ * dt_restore_run_patch() or dt_restore_process_tiled(). Set the
+ * profile before dispatching inference on a given image.
+ *
+ * @param ctx context handle (NULL-safe)
+ * @param profile lcms2 cmsHPROFILE handle cast to void*; NULL to disable
+ */
+void dt_restore_set_profile(dt_restore_context_t *ctx,
+                            void *profile);
+
+/**
+ * @brief Enable/disable wide-gamut pass-through for denoise.
+ *
+ * When TRUE (default): pixels that would be out of sRGB gamut pass
+ * through unchanged, preserving color but not denoising them. When
+ * FALSE: all pixels use the model output, wide-gamut colors are
+ * clipped to sRGB but everything gets denoised.
+ *
+ * Affects denoise only (scale == 1). Upscale always uses the model
+ * output because there is no pixel-to-pixel correspondence to
+ * pass through.
+ *
+ * @param ctx context handle (NULL-safe)
+ * @param preserve TRUE to enable pass-through, FALSE to denoise everything
+ */
+void dt_restore_set_preserve_wide_gamut(dt_restore_context_t *ctx,
+                                        gboolean preserve);
+
+/**
  * @brief check if a denoise model is available
  * @param env environment handle
  * @return TRUE if a denoise model is configured and present
@@ -128,13 +169,6 @@ gboolean dt_restore_denoise_available(dt_restore_env_t *env);
 gboolean dt_restore_upscale_available(dt_restore_env_t *env);
 
 /* --- tile size --- */
-
-/**
- * @brief select optimal tile size based on available memory
- * @param scale upscale factor (1 for denoise)
- * @return tile size in pixels
- */
-int dt_restore_select_tile_size(int scale);
 
 /**
  * @brief get tile overlap for a given scale factor
@@ -189,15 +223,14 @@ int dt_restore_run_patch(dt_restore_context_t *ctx,
  * completed scanlines via the row_writer callback. input is
  * float4 RGBA interleaved (from dt export).
  *
- * @param ctx loaded restore context
+ * @param ctx loaded restore context (tile_size is stored in ctx)
  * @param in_data input pixels (float4 RGBA, width * height)
  * @param width input width
  * @param height input height
  * @param scale upscale factor (1 for denoise)
  * @param row_writer callback receiving 3ch float scanlines
  * @param writer_data user data passed to row_writer
- * @param control_job job handle for progress/cancellation
- * @param tile_size tile size from dt_restore_select_tile_size
+ * @param control_job job handle for progress/cancellation (NULL-safe)
  * @return 0 on success
  */
 int dt_restore_process_tiled(dt_restore_context_t *ctx,
@@ -206,8 +239,7 @@ int dt_restore_process_tiled(dt_restore_context_t *ctx,
                              int scale,
                              dt_restore_row_writer_t row_writer,
                              void *writer_data,
-                             struct _dt_job_t *control_job,
-                             int tile_size);
+                             struct _dt_job_t *control_job);
 
 /* --- detail recovery --- */
 

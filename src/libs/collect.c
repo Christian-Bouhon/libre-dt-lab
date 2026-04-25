@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2010-2025 darktable developers.
+    Copyright (C) 2010-2026 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -164,11 +164,18 @@ static int _is_time_property(const int property);
 
 static void _populate_collect_combo(GtkWidget *w);
 
-static gint _sort_filmroll_rows(gconstpointer a, gconstpointer b)
+static gint _sort_filmroll_by_display_name(gconstpointer a, gconstpointer b)
 {
   const filmroll_row_t *ra = a;
   const filmroll_row_t *rb = b;
   return g_ascii_strcasecmp(ra->folder, rb->folder);
+}
+
+static gint _sort_filmroll_rows(gconstpointer a, gconstpointer b)
+{
+  const filmroll_row_t *ra = a;
+  const filmroll_row_t *rb = b;
+  return g_ascii_strcasecmp(ra->value, rb->value);
 }
 
 static gint _sort_filmroll_by_id(gconstpointer a, gconstpointer b)
@@ -2431,14 +2438,20 @@ static void _list_view(dt_lib_collect_rule_t *dr)
       {
         const gboolean sort_by_import_time =
           dt_conf_is_equal("plugins/collect/filmroll_sort", "import time");
+        const gboolean sort_by_folder_name = 
+          dt_conf_is_equal("plugins/collect/filmroll_sort", "folder name");
       
         if(sort_by_import_time)
         {      
           rows = g_list_sort(rows, _sort_filmroll_by_id);
         }
-        else
+        else if(sort_by_folder_name)
         {
           rows = g_list_sort(rows, _sort_filmroll_rows);
+        }
+        else
+        {
+          rows = g_list_sort(rows, _sort_filmroll_by_display_name);
         }
       
         if(sort_descending)
@@ -2895,7 +2908,12 @@ static void row_activated_with_event(GtkTreeView *view,
       gtk_tree_model_get(model, &iter2, DT_LIB_COLLECT_COL_PATH, &text2, -1);
 
       gchar *n_text;
-      n_text = g_strdup_printf("[%s;%s]", text, text2);
+      const gboolean sort_descending = dt_conf_get_bool("plugins/collect/descending");
+
+      if(sort_descending)
+        n_text = g_strdup_printf("[%s;%s]", text2, text);
+      else
+        n_text = g_strdup_printf("[%s;%s]", text, text2);
 
       g_free(text);
       g_free(text2);

@@ -167,6 +167,20 @@ changes (where available).
 - The tone equalizer now visualizes an invalid curve (solver maths)
   also for old edits.
 
+- Add `--library <path>` command-line option to darktable-cli that
+  allows specifying a `library.db` database file to read image processing
+  history stacks from instead of requiring XMP sidecar files, for people
+  who do not use XMP sidecar files.
+
+- Added display name to the available sort options for film rolls.
+
+- When creating a new workspace from the workspace dialog, settings
+  can optionally be copied from an existing workspace as a template.
+  The workspace-specific configuration is duplicated with paths,
+  labels, collection history, and similar keys cleared so the new
+  workspace keeps its own library database instead of reusing the
+  source library.
+
 ## Performance Improvements
 
 - Increased performance for OpenCL guided filter by internal tiling.
@@ -230,6 +244,9 @@ changes (where available).
 
 - Added a new option to filter images by capture month in collections
   and collection filters.
+
+- Added `--library` option to `darktable-cli` to use the image library
+  instead of XMP files for reading processing history. 
 
 ## Bug Fixes
 
@@ -312,6 +329,9 @@ changes (where available).
 
 - Fixed a rare bug which appeared when scale-pixels module was moved above
   the tone-mapper while applying a shift in "rotate and perspective" module.
+
+- Fixed white and middle-grey patches being swapped for Datacolor
+  SpyderCheckr 48 in the Color Calibration module.
 
 ## Lua
 

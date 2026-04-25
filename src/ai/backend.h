@@ -35,6 +35,12 @@ typedef enum {
   DT_AI_PROVIDER_COUNT  // must be last
 } dt_ai_provider_t;
 
+/** Sentinel for dt_ai_load_model / dt_ai_load_model_ext: read the
+ *  user's configured provider from darktablerc instead of forcing
+ *  a specific one. Not a real provider — never store in config or
+ *  the provider table. */
+#define DT_AI_PROVIDER_CONFIGURED (-1)
+
 /**
  * @brief Provider descriptor: maps enum to config/display strings.
  *
@@ -126,7 +132,39 @@ typedef struct dt_ai_model_info_t {
   const char *arch;        ///< e.g. "sam2", "segnext"
   const char *backend;     ///< Backend type (e.g. "onnx")
   int num_inputs;          ///< Number of model inputs (default 1)
+  const char *attributes;  ///< Optional attributes
 } dt_ai_model_info_t;
+
+/* --- Model "attributes" lookup ---
+ *
+ * Models declare optional behavior hints under an "attributes" object
+ * in their config.json, e.g.:
+ *   "attributes": {
+ *     "shadow_boost": true,
+ *     "tile_factor": 1.5,
+ *     "color_space": "sRGB"
+ *   }
+ *
+ * The accessors parse the stored JSON on demand. A missing key (or
+ * one of a different type) returns the supplied default — or FALSE /
+ * NULL for the bool / string variants.
+ */
+
+gboolean dt_ai_model_attribute_bool(const dt_ai_model_info_t *info,
+                                    const char *key);
+
+int dt_ai_model_attribute_int(const dt_ai_model_info_t *info,
+                              const char *key,
+                              int default_value);
+
+double dt_ai_model_attribute_double(const dt_ai_model_info_t *info,
+                                    const char *key,
+                                    double default_value);
+
+/** Returned string is newly allocated and must be freed with g_free().
+ *  Returns NULL if the key is absent or not a string. */
+char *dt_ai_model_attribute_string(const dt_ai_model_info_t *info,
+                                   const char *key);
 
 /* --- Discovery --- */
 
@@ -175,10 +213,8 @@ void dt_ai_env_destroy(dt_ai_environment_t *env);
 
 /**
  * @brief Set the default execution provider for this environment.
- *        When dt_ai_load_model / dt_ai_load_model_opts is called with
- *        DT_AI_PROVIDER_AUTO, the environment's provider is used instead.
  * @param env The environment handle.
- * @param provider The provider to use (DT_AI_PROVIDER_AUTO = platform auto-detect).
+ * @param provider The provider to use (DT_AI_PROVIDER_AUTO = probe all EPs).
  */
 void dt_ai_env_set_provider(dt_ai_environment_t *env, dt_ai_provider_t provider);
 
@@ -196,7 +232,7 @@ dt_ai_provider_t dt_ai_env_get_provider(dt_ai_environment_t *env);
  * @param env Library environment.
  * @param model_id ID of the model to load.
  * @param model_file Filename within the model directory (NULL = "model.onnx").
- * @param provider Execution provider to use for hardware acceleration.
+ * @param provider Execution provider (DT_AI_PROVIDER_CONFIGURED = use user config).
  * @return dt_ai_context_t* Context ready for inference, or NULL.
  */
 dt_ai_context_t *dt_ai_load_model(dt_ai_environment_t *env,
@@ -219,7 +255,7 @@ typedef struct {
  * @param env Library environment.
  * @param model_id ID of the model to load.
  * @param model_file Filename within the model directory (NULL = "model.onnx").
- * @param provider Execution provider to use for hardware acceleration.
+ * @param provider Execution provider (DT_AI_PROVIDER_CONFIGURED = use user config).
  * @param opt_level Graph optimization level.
  * @param dim_overrides Array of symbolic dimension overrides (NULL = none).
  * @param n_overrides Number of overrides.

@@ -222,14 +222,13 @@ typedef struct dt_iop_demosaic_global_data_t
   int kernel_markesteijn_final;
   int kernel_rcd_populate;
   int kernel_rcd_write_output;
-  int kernel_rcd_step_1_1;
-  int kernel_rcd_step_1_2;
-  int kernel_rcd_step_2_1;
-  int kernel_rcd_step_3_1;
+  int kernel_rcd_step_1;
+  int kernel_rcd_step_2;
+  int kernel_rcd_step_3;
+  int kernel_rcd_step_4_0;
   int kernel_rcd_step_4_1;
   int kernel_rcd_step_4_2;
-  int kernel_rcd_step_5_1;
-  int kernel_rcd_step_5_2;
+  int kernel_rcd_step_4_3;
   int kernel_demosaic_box3;
   int kernel_write_blended_dual;
   int gaussian_9x9_mul;
@@ -490,7 +489,7 @@ void distort_mask(dt_iop_module_t *self,
   if(roi_out->scale != roi_in->scale)
   {
     const dt_interpolation_t *itor = dt_interpolation_new(DT_INTERPOLATION_USERPREF_WARP);
-    dt_interpolation_resample_roi_1c(itor, out, roi_out, in, roi_in);
+    dt_interpolation_resample_roi_mask(itor, out, roi_out, in, roi_in);
   }
   else
     dt_iop_copy_image_roi(out, in, 1, roi_in, roi_out);
@@ -1109,9 +1108,9 @@ int process_cl(dt_iop_module_t *self,
               "tile=%.3d/%.3d, group=%.5d first=%.5d last=%.5d rows=%.4d",
                tile_nr, num_tiles, group, first_in, last_in, t_rows);
 
-        size_t insrc[]  = { 0, first_in, 0 };
-        size_t tdest[]  = { 0, 0, 0 };
-        size_t iarea[]  = { iwidth, t_rows, 1 };
+        size_t insrc[]  = { 0, first_in };
+        size_t tdest[]  = { 0, 0 };
+        size_t iarea[]  = { iwidth, t_rows };
         err = dt_opencl_enqueue_copy_image(devid, in_image, t_in, insrc, tdest, iarea);
         if(err != CL_SUCCESS) goto finish;
       }
@@ -1120,9 +1119,9 @@ int process_cl(dt_iop_module_t *self,
         err = demosaic_box3_cl(self, piece, t_in, t_high, dev_xtrans, iwidth, t_rows, filters);
       else if(method == DT_IOP_DEMOSAIC_MONO)
       {
-        size_t insrc[]  = { 0, 0, 0 };
-        size_t tdest[]  = { 0, 0, 0 };
-        size_t iarea[]  = { iwidth, t_rows, 1 };
+        size_t insrc[]  = { 0, 0 };
+        size_t tdest[]  = { 0, 0 };
+        size_t iarea[]  = { iwidth, t_rows };
         err = dt_opencl_enqueue_copy_image(devid, t_in, t_high, insrc, tdest, iarea);
       }
       else if(passthru || method == DT_IOP_DEMOSAIC_PPG)
@@ -1154,9 +1153,9 @@ int process_cl(dt_iop_module_t *self,
 
       if(tiling)
       {
-        size_t tsrc[]   = { 0, first_out, 0 };
-        size_t odest[]  = { 0, group, 0 };
-        size_t oarea[]  = { iwidth, out_height, 1 };
+        size_t tsrc[]   = { 0, first_out };
+        size_t odest[]  = { 0, group };
+        size_t oarea[]  = { iwidth, out_height };
         err = dt_opencl_enqueue_copy_image(devid, t_out, out_image, tsrc, odest, oarea);
         if(err != CL_SUCCESS) goto finish;
       }
@@ -1271,14 +1270,13 @@ void init_global(dt_iop_module_so_t *self)
   const int rcd = 31; // from programs.conf
   gd->kernel_rcd_populate = dt_opencl_create_kernel(rcd, "rcd_populate");
   gd->kernel_rcd_write_output = dt_opencl_create_kernel(rcd, "rcd_write_output");
-  gd->kernel_rcd_step_1_1 = dt_opencl_create_kernel(rcd, "rcd_step_1_1");
-  gd->kernel_rcd_step_1_2 = dt_opencl_create_kernel(rcd, "rcd_step_1_2");
-  gd->kernel_rcd_step_2_1 = dt_opencl_create_kernel(rcd, "rcd_step_2_1");
-  gd->kernel_rcd_step_3_1 = dt_opencl_create_kernel(rcd, "rcd_step_3_1");
+  gd->kernel_rcd_step_1 = dt_opencl_create_kernel(rcd, "rcd_step_1");
+  gd->kernel_rcd_step_2 = dt_opencl_create_kernel(rcd, "rcd_step_2");
+  gd->kernel_rcd_step_3 = dt_opencl_create_kernel(rcd, "rcd_step_3");
+  gd->kernel_rcd_step_4_0 = dt_opencl_create_kernel(rcd, "rcd_step_4_0");
   gd->kernel_rcd_step_4_1 = dt_opencl_create_kernel(rcd, "rcd_step_4_1");
   gd->kernel_rcd_step_4_2 = dt_opencl_create_kernel(rcd, "rcd_step_4_2");
-  gd->kernel_rcd_step_5_1 = dt_opencl_create_kernel(rcd, "rcd_step_5_1");
-  gd->kernel_rcd_step_5_2 = dt_opencl_create_kernel(rcd, "rcd_step_5_2");
+  gd->kernel_rcd_step_4_3 = dt_opencl_create_kernel(rcd, "rcd_step_4_3");
   gd->kernel_demosaic_box3 = dt_opencl_create_kernel(rcd, "demosaic_box3");
   gd->kernel_write_blended_dual  = dt_opencl_create_kernel(rcd, "write_blended_dual");
 
@@ -1336,14 +1334,13 @@ void cleanup_global(dt_iop_module_so_t *self)
   dt_opencl_free_kernel(gd->kernel_markesteijn_final);
   dt_opencl_free_kernel(gd->kernel_rcd_populate);
   dt_opencl_free_kernel(gd->kernel_rcd_write_output);
-  dt_opencl_free_kernel(gd->kernel_rcd_step_1_1);
-  dt_opencl_free_kernel(gd->kernel_rcd_step_1_2);
-  dt_opencl_free_kernel(gd->kernel_rcd_step_2_1);
-  dt_opencl_free_kernel(gd->kernel_rcd_step_3_1);
+  dt_opencl_free_kernel(gd->kernel_rcd_step_1);
+  dt_opencl_free_kernel(gd->kernel_rcd_step_2);
+  dt_opencl_free_kernel(gd->kernel_rcd_step_3);
+  dt_opencl_free_kernel(gd->kernel_rcd_step_4_0);
   dt_opencl_free_kernel(gd->kernel_rcd_step_4_1);
   dt_opencl_free_kernel(gd->kernel_rcd_step_4_2);
-  dt_opencl_free_kernel(gd->kernel_rcd_step_5_1);
-  dt_opencl_free_kernel(gd->kernel_rcd_step_5_2);
+  dt_opencl_free_kernel(gd->kernel_rcd_step_4_3);
   dt_opencl_free_kernel(gd->kernel_demosaic_box3);
   dt_opencl_free_kernel(gd->kernel_write_blended_dual);
   dt_opencl_free_kernel(gd->gaussian_9x9_mul);

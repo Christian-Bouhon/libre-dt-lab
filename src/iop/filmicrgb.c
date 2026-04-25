@@ -2231,7 +2231,7 @@ static inline cl_int reconstruct_highlights_cl(const cl_mem in, const cl_mem mas
   const int devid = piece->pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
-  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid) };
 
   // wavelets scales
   const int scales = get_scales(roi_in, piece);
@@ -2317,7 +2317,7 @@ static inline cl_int reconstruct_highlights_cl(const cl_mem in, const cl_mem mas
     if(err != CL_SUCCESS) goto error;
 
     // Take a backup copy of HF_RGB in HF_grey - only HF_RGB will be blurred
-    size_t origin[] = { 0, 0, 0 };
+    size_t origin[] = { 0, 0 };
     err = dt_opencl_enqueue_copy_image(devid, HF_RGB, HF_grey, origin, origin, sizes);
     if(err != CL_SUCCESS) goto error;
 
@@ -3262,7 +3262,7 @@ static inline void dt_cairo_draw_arrow(cairo_t *cr, const double origin_x, const
   if(show_head)
   {
     // arrow head is hard set to 45° - convert to radians
-    const float angle_arrow = 45.f / 360.f * M_PI;
+    const float angle_arrow = 45.f / 360.f * M_PI_F;
     const float angle_trunk = atan2f((destination_y - origin_y), (destination_x - origin_x));
     const float radius = DT_PIXEL_APPLY_DPI(3);
 
@@ -3661,13 +3661,13 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, dt_iop_mo
         {
           if(k == 1)
           {
-            start_angle = central_slope_angle + M_PI;
+            start_angle = central_slope_angle + M_PI_F;
             end_angle = central_slope_angle;
           }
           if(k == 3)
           {
             start_angle = central_slope_angle;
-            end_angle = start_angle + M_PI;
+            end_angle = start_angle + M_PI_F;
           }
         }
 

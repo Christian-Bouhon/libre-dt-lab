@@ -142,7 +142,7 @@ GSList *dt_masks_mouse_actions(const dt_masks_form_t *form)
 static void _set_hinter_message(const dt_masks_form_gui_t *gui,
                                 const dt_masks_form_t *form)
 {
-  char msg[256] = "";
+  char msg[512] = "";
 
   const int ftype = form->type;
 
@@ -2349,7 +2349,7 @@ float dt_masks_drag_factor(dt_masks_form_gui_t *gui,
   gui->dx = xref - gui->posx;
   gui->dy = yref - gui->posy;
 
-  const float r = sqrtf(rx * rx + ry * ry);
+  const float r = dt_fast_hypotf(rx, ry);
   const float d = (rx * deltax + ry * deltay) / r;
   const float s = fmaxf(r > 0.0f ? (r + d) / r : 0.0f, 0.0f);
 

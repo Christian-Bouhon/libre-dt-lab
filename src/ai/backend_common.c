@@ -39,7 +39,7 @@ const dt_ai_provider_desc_t dt_ai_providers[DT_AI_PROVIDER_COUNT] = {
 #endif
   },
   { DT_AI_PROVIDER_CUDA,     "CUDA",     "NVIDIA CUDA",
-#if defined(__linux__)
+#if defined(__linux__) || defined(_WIN32)
     1
 #else
     0
@@ -53,7 +53,7 @@ const dt_ai_provider_desc_t dt_ai_providers[DT_AI_PROVIDER_COUNT] = {
 #endif
   },
   { DT_AI_PROVIDER_OPENVINO, "OpenVINO", "Intel OpenVINO",
-#if defined(__linux__) || (defined(__APPLE__) && defined(__x86_64__))
+#if defined(__linux__) || defined(_WIN32) || (defined(__APPLE__) && defined(__x86_64__))
     1
 #else
     0
@@ -152,6 +152,26 @@ static void _scan_directory(dt_ai_environment_t *env, const char *root_path)
               info->num_inputs = json_object_has_member(obj, "num_inputs")
                 ? (int)json_object_get_int_member(obj, "num_inputs")
                 : 1;
+
+              // capture optional "attributes" object as a JSON string;
+              // accessors (e.g. dt_ai_model_attribute_bool) parse on demand
+              info->attributes = NULL;
+              if(json_object_has_member(obj, "attributes"))
+              {
+                JsonNode *attr_node = json_object_get_member(obj, "attributes");
+                if(attr_node && JSON_NODE_HOLDS_OBJECT(attr_node))
+                {
+                  JsonGenerator *gen = json_generator_new();
+                  json_generator_set_root(gen, attr_node);
+                  gchar *s = json_generator_to_data(gen, NULL);
+                  if(s)
+                  {
+                    _store_string(env, s, &info->attributes);
+                    g_free(s);
+                  }
+                  g_object_unref(gen);
+                }
+              }
 
               env->models = g_list_prepend(env->models, info);
               g_hash_table_insert(
@@ -368,10 +388,10 @@ dt_ai_context_t *dt_ai_load_model_ext(dt_ai_environment_t *env,
     return NULL;
   }
 
-  // resolve AUTO: re-read from config so preference changes take effect
-  // immediately without requiring app restart.  Read config before acquiring
-  // env->lock to avoid lock-ordering issues with darktable's config lock
-  if(provider == DT_AI_PROVIDER_AUTO)
+  // resolve CONFIGURED: read the user's provider preference from config.
+  // read config before acquiring env->lock to avoid lock-ordering issues
+  // with darktable's config lock
+  if(provider == DT_AI_PROVIDER_CONFIGURED)
   {
     char *prov_str = dt_conf_get_string(DT_AI_CONF_PROVIDER);
     provider = dt_ai_provider_from_string(prov_str);
@@ -420,6 +440,93 @@ dt_ai_context_t *dt_ai_load_model_ext(dt_ai_environment_t *env,
   g_free(model_dir);
   g_free(backend_copy);
   return ctx;
+}
+
+// model attribute lookup — parses the JSON-encoded attributes string
+// on demand; callers pass info from dt_ai_get_model_info_by_id()
+//
+// _attribute_node returns the parsed JsonParser plus a borrowed JsonNode*
+// for the named key; caller must g_object_unref the returned parser;
+// returns NULL parser if the attribute set is absent or the key is missing
+static JsonParser *_attribute_node(const dt_ai_model_info_t *info,
+                                   const char *key,
+                                   JsonNode **out_node)
+{
+  *out_node = NULL;
+  if(!info || !info->attributes || !key) return NULL;
+  JsonParser *parser = json_parser_new();
+  if(!json_parser_load_from_data(parser, info->attributes, -1, NULL))
+  {
+    g_object_unref(parser);
+    return NULL;
+  }
+  JsonNode *root = json_parser_get_root(parser);
+  if(!root || !JSON_NODE_HOLDS_OBJECT(root))
+  {
+    g_object_unref(parser);
+    return NULL;
+  }
+  JsonObject *obj = json_node_get_object(root);
+  if(!json_object_has_member(obj, key))
+  {
+    g_object_unref(parser);
+    return NULL;
+  }
+  *out_node = json_object_get_member(obj, key);
+  return parser;
+}
+
+gboolean dt_ai_model_attribute_bool(const dt_ai_model_info_t *info,
+                                    const char *key)
+{
+  JsonNode *v = NULL;
+  JsonParser *p = _attribute_node(info, key, &v);
+  gboolean result = FALSE;
+  if(v && JSON_NODE_HOLDS_VALUE(v))
+    result = json_node_get_boolean(v);
+  if(p) g_object_unref(p);
+  return result;
+}
+
+int dt_ai_model_attribute_int(const dt_ai_model_info_t *info,
+                              const char *key,
+                              int default_value)
+{
+  JsonNode *v = NULL;
+  JsonParser *p = _attribute_node(info, key, &v);
+  int result = default_value;
+  if(v && JSON_NODE_HOLDS_VALUE(v))
+    result = (int)json_node_get_int(v);
+  if(p) g_object_unref(p);
+  return result;
+}
+
+double dt_ai_model_attribute_double(const dt_ai_model_info_t *info,
+                                    const char *key,
+                                    double default_value)
+{
+  JsonNode *v = NULL;
+  JsonParser *p = _attribute_node(info, key, &v);
+  double result = default_value;
+  if(v && JSON_NODE_HOLDS_VALUE(v))
+    result = json_node_get_double(v);
+  if(p) g_object_unref(p);
+  return result;
+}
+
+char *dt_ai_model_attribute_string(const dt_ai_model_info_t *info,
+                                   const char *key)
+{
+  JsonNode *v = NULL;
+  JsonParser *p = _attribute_node(info, key, &v);
+  char *result = NULL;
+  if(v && JSON_NODE_HOLDS_VALUE(v))
+  {
+    const char *s = json_node_get_string(v);
+    if(s) result = g_strdup(s);
+  }
+  if(p) g_object_unref(p);
+  return result;
 }
 
 // provider string conversion

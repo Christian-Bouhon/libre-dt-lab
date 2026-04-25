@@ -252,7 +252,7 @@ static inline float _detail_mask_threshold(const float level,
                                            const gboolean detail)
 {
   // this does some range calculation for smoother ui experience
-  return 0.005f * (detail ? powf(level, 2.0f) : 1.0f - powf(fabs(level), 0.5f ));
+  return 0.005f * (detail ? sqrf(level) : 1.0f - sqrtf(fabs(level)));
 }
 
 static void _refine_with_detail_mask(dt_iop_module_t *self,
@@ -273,8 +273,12 @@ static void _refine_with_detail_mask(dt_iop_module_t *self,
   float *lum = dt_masks_calc_detail_mask(piece, threshold, detail);
   if(lum == NULL) goto error;
 
+  // src_hash encodes what the thresholded mask depends on (scharr data + slider value),
+  // so the distortion cache is invalidated when the details slider changes.
+  const dt_hash_t src_hash = dt_hash(p->scharr.hash, &level, sizeof(level));
+
   // here we have the slightly blurred full detail mask available
-  float *warp_mask = dt_dev_distort_detail_mask(piece, lum, self);
+  float *warp_mask = dt_dev_distort_detail_mask(piece, lum, self, src_hash);
   dt_free_align(lum);
 
   if(warp_mask == NULL) goto error;
@@ -815,8 +819,12 @@ static void _refine_with_detail_mask_cl(dt_iop_module_t *self,
   out = NULL;
   blur = NULL;
 
+  // src_hash encodes what the thresholded mask depends on (scharr data + slider value),
+  // so the distortion cache is invalidated when the details slider changes.
+  const dt_hash_t src_hash = dt_hash(p->scharr.hash, &level, sizeof(level));
+
   // here we have the slightly blurred full detail mask available
-  float *warp_mask = dt_dev_distort_detail_mask(piece, lum, self);
+  float *warp_mask = dt_dev_distort_detail_mask(piece, lum, self, src_hash);
   dt_free_align(lum);
   if(warp_mask == NULL)
   {
@@ -987,8 +995,8 @@ gboolean dt_develop_blend_process_cl(dt_iop_module_t *self,
   dt_colorspaces_iccprofile_info_cl_t *work_profile_info_cl = NULL;
   cl_float *work_profile_lut_cl = NULL;
 
-  size_t origin[] = { 0, 0, 0 };
-  size_t region[] = { owidth, oheight, 1 };
+  size_t origin[] = { 0, 0 };
+  size_t region[] = { owidth, oheight };
 
   // parameters, for every channel the 4 limits + pre-computed
   // increasing slope and decreasing slope
@@ -1171,7 +1179,7 @@ gboolean dt_develop_blend_process_cl(dt_iop_module_t *self,
           cl_mem dev_guide = dt_opencl_alloc_device(devid, owidth, oheight, sizeof(float) * ch);
           if(dev_guide == NULL) goto error;
 
-          size_t origin_1[] = { dx, dy, 0 };
+          size_t origin_1[] = { dx, dy };
           err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_guide, origin, origin_1, region);
           if(err != CL_SUCCESS)
           {
@@ -1478,7 +1486,7 @@ void tiling_callback_blendop(dt_iop_module_t *self,
       if(devid > DT_DEVICE_CPU)
       {
         /* OpenCL feathering does simple internal tiling for less mem pressure,
-           we still need some mem here for this. 
+           we still need some mem here for this.
         */
         tiling->factor_cl = MAX(tiling->factor, 1.0f);
       }

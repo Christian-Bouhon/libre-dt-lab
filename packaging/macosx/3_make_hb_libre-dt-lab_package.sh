@@ -28,6 +28,13 @@ dtExecDir="$dtWorkingDir"/Contents/MacOS
 dtExecutables=$(echo "$dtExecDir"/libre-dt-lab{,-chart,-cli,-cltest,-generate-cache,-rs-identify,-curve-tool,-noiseprofile})
 homebrewHome=$(brew --prefix)
 
+# Extract darktable version number and commit
+dt_version_full=$(cat ../../build/bin/version_gen.c | grep darktable_package_version | cut -d'"' -f2)
+dt_version=$(echo $dt_version_full | cut -d'+' -f1)
+dt_commit=$(echo $dt_version_full | cut -d'+' -f2 | cut -d'~' -f1)
+if [[ "$dt_version" = "$dt_commit" ]]; then
+  dt_commit="0"
+fi
 
 # Install direct and transitive dependencies
 function install_dependencies {

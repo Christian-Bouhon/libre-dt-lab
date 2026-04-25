@@ -147,12 +147,6 @@ static void _vng_lininterpolate(float *out,
    I've extended the basic idea to work with non-Bayer filter arrays.
    Gradients are numbered clockwise from NW=0 to W=7.
 */
-static void _copy_abovezero(float *to, float *from, const int pixels)
-{
-  static dt_aligned_pixel_t zero = { 0.0f, 0.0f, 0.0f, 0.0f};
-  for(int i = 0; i < pixels; i++)
-    dt_vector_max(&to[i*4], zero, &from[i*4]);
-}
 
 static const signed char terms[]
       = { -2, -2, +0, -1, 1, 0x01, -2, -2, +0, +0, 2, 0x01, -2, -1, -1, +0, 1, 0x01, -2, -1, +0, -1, 1, 0x02,
@@ -191,6 +185,7 @@ static void vng_interpolate(float *out,
   const int prow = is_xtrans ? 6 : 8;
   const int pcol = is_xtrans ? 6 : 2;
   const int colors = is_xtrans ? 3 : 4;
+  const gboolean mix_greens = !is_xtrans && !is_4bayer;
 
   // separate out G1 and G2 in RGGB Bayer patterns
   uint32_t filters4 = filters;
@@ -310,21 +305,21 @@ static void vng_interpolate(float *out,
       }
     }
     if(row > 3) /* Write buffer to image */
-      _copy_abovezero(out + 4 * ((row - 2) * width + 2), (float *)(brow[0] + 2), width - 4);
+      dt_iop_image_copy(out + 4 * ((row - 2) * width + 2), (float *)(brow[0] + 2), (width - 4)*4);
 
     // rotate ring buffer
     for(int g = 0; g < 4; g++) brow[(g - 1) & 3] = brow[g];
   }
   // copy the final two rows to the image
-  _copy_abovezero(out + (4 * ((height - 4) * width + 2)), (float *)(brow[0] + 2), width - 4);
-  _copy_abovezero(out + (4 * ((height - 3) * width + 2)), (float *)(brow[1] + 2), width - 4);
+  dt_iop_image_copy(out + (4 * ((height - 4) * width + 2)), (float *)(brow[0] + 2), (width - 4)*4);
+  dt_iop_image_copy(out + (4 * ((height - 3) * width + 2)), (float *)(brow[1] + 2), (width - 4)*4);
   dt_free_align(buffer);
 
 finish:
   DT_OMP_FOR()
   for(size_t i = 0; i < (size_t)width * height * 4; i+=4)
   {
-    if(!is_xtrans)
+    if(mix_greens)
     {
       out[i+1] = 0.5f * (out[i+1] + out[i+3]);
       out[i+3] = 0.0f;
@@ -495,8 +490,8 @@ static cl_int process_vng_cl(const dt_iop_module_t *self,
     err = dt_opencl_local_buffer_opt(devid, gd->kernel_vng_lin_interpolate, &locopt);
     if(err != CL_SUCCESS) goto finish;
 
-    size_t sizes[3] = { ROUNDUP(width, locopt.sizex), ROUNDUP(height, locopt.sizey), 1 };
-    size_t local[3] = { locopt.sizex, locopt.sizey, 1 };
+    size_t sizes[2] = { ROUNDUP(width, locopt.sizex), ROUNDUP(height, locopt.sizey) };
+    size_t local[2] = { locopt.sizex, locopt.sizey };
     err = dt_opencl_enqueue_kernel_2d_local_args(devid, gd->kernel_vng_lin_interpolate, sizes, local,
         CLARG(dev_in), CLARG(tmp_out),
         CLARG(width), CLARG(height), CLARG(border),
@@ -518,8 +513,8 @@ static cl_int process_vng_cl(const dt_iop_module_t *self,
   err = dt_opencl_local_buffer_opt(devid, gd->kernel_vng_interpolate, &locopt);
   if(err != CL_SUCCESS) goto finish;
 
-  size_t sizes[3] = { ROUNDUP(width, locopt.sizex), ROUNDUP(height, locopt.sizey), 1 };
-  size_t local[3] = { locopt.sizex, locopt.sizey, 1 };
+  size_t sizes[2] = { ROUNDUP(width, locopt.sizex), ROUNDUP(height, locopt.sizey) };
+  size_t local[2] = { locopt.sizex, locopt.sizey };
   err = dt_opencl_enqueue_kernel_2d_local_args(devid, gd->kernel_vng_interpolate, sizes, local,
         CLARG(dev_tmp), CLARG(dev_out),
         CLARG(width), CLARG(height), CLARG(filters4),

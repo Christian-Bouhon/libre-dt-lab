@@ -1,6 +1,6 @@
 /*
   This file is part of darktable,
-  Copyright (C) 2016-2025 darktable developers.
+  Copyright (C) 2016-2026 darktable developers.
 
   darktable is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -685,7 +685,7 @@ static inline void vec3norm(float *dst, const float *const v)
 // dst and v may be the same
 static inline void vec3lnorm(float *dst, const float *const v)
 {
-  const float sq = sqrtf(v[0] * v[0] + v[1] * v[1]);
+  const float sq = dt_fast_hypotf(v[0], v[1]);
 
   // special handling for a point vector of the image center
   const float f = sq > 0.0f ? 1.0f / sq : 1.0f;
@@ -3458,14 +3458,14 @@ void process(dt_iop_module_t *self,
                                 (float)piece->buf_in.height };
 
     const float ivec[2] = { points[2] - points[0], points[3] - points[1] };
-    const float ivecl = sqrtf(ivec[0] * ivec[0] + ivec[1] * ivec[1]);
+    const float ivecl = dt_fast_hypotf(ivec[0], ivec[1]);
 
     // where do they go?
     dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2);
 
     const float ovec[2] = { points[2] - points[0], points[3] - points[1] };
-    const float ovecl = sqrtf(ovec[0] * ovec[0] + ovec[1] * ovec[1]);
+    const float ovecl = dt_fast_hypotf(ovec[0], ovec[1]);
 
     // angle between input vector and output vector
     const float alpha = acosf(CLAMP((ivec[0] * ovec[0] + ivec[1] * ovec[1]) / (ivecl * ovecl),
@@ -3596,14 +3596,14 @@ int process_cl(dt_iop_module_t *self,
                                 (float)piece->buf_in.height };
 
     const float ivec[2] = { points[2] - points[0], points[3] - points[1] };
-    const float ivecl = sqrtf(ivec[0] * ivec[0] + ivec[1] * ivec[1]);
+    const float ivecl = dt_fast_hypotf(ivec[0], ivec[1]);
 
     // where do they go?
     dt_dev_distort_backtransform_plus(self->dev, self->dev->preview_pipe, self->iop_order,
                                       DT_DEV_TRANSFORM_DIR_FORW_EXCL, points, 2);
 
     const float ovec[2] = { points[2] - points[0], points[3] - points[1] };
-    const float ovecl = sqrtf(ovec[0] * ovec[0] + ovec[1] * ovec[1]);
+    const float ovecl = dt_fast_hypotf(ovec[0], ovec[1]);
 
     // angle between input vector and output vector
     const float alpha =
@@ -3652,8 +3652,8 @@ int process_cl(dt_iop_module_t *self,
   // if module is set to neutral parameters we just copy input->output and are done
   if(_isneutral(d))
   {
-    size_t origin[] = { 0, 0, 0 };
-    size_t region[] = { roi_out->width, roi_out->height, 1 };
+    size_t origin[] = { 0, 0 };
+    size_t region[] = { roi_out->width, roi_out->height };
     err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, origin, origin, region);
     if(err != CL_SUCCESS) goto error;
     return CL_SUCCESS;
@@ -5209,7 +5209,7 @@ int scrolled(dt_iop_module_t *self,
       near_delta = dt_conf_get_float("plugins/darkroom/ashift/near_delta_draw");
     else
       near_delta = dt_conf_get_float("plugins/darkroom/ashift/near_delta");
-    const float amount = up ? 0.8f : 1.25f;
+    const float amount = up ? 1.25f : 0.8f;
     near_delta = MAX(4.0f, MIN(near_delta * amount, 100.0f));
     if(g->current_structure_method == ASHIFT_METHOD_QUAD
        || g->current_structure_method == ASHIFT_METHOD_LINES)
