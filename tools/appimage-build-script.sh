@@ -46,7 +46,7 @@ sed -i 's/\/usr\/bin\///' ../AppDir/usr/share/applications/org.libre-dt-lab.libr
 # data is located on the build host, but for now we'll rely on the user of this
 # script to read this comment and act accordingly.
 mkdir -p ../AppDir/usr/share/lensfun
-cp -a /var/lib/lensfun-updates/* ../AppDir/usr/share/lensfun
+cp -a /var/lib/lensfun-updates/* ../AppDir/usr/share/lensfun 2>/dev/null || true
 
 # Include gphoto2 driver libraries. We also have to set the CAMLIBS
 # environment variable in AppRun.wrapped accordingly when starting

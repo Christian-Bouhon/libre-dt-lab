@@ -1500,7 +1500,7 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
       else if(wf_basecurve)                                                                                       \
       {                                                                                                           \
         AM("basecurve/highlight gain");                                                                           \
-        AM("basecurve/shadow lift");                                                                              \
+        AM("basecurve/shadow correction");                                                                              \
         AM("basecurve/color look");                                                                               \
       }                                                                                                           \
       AM("channelmixerrgb/temperature");                                                                          \

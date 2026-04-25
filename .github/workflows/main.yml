@@ -171,7 +171,7 @@ jobs:
           popd
       - name: Update Lensfun data
         run: |
-          sudo lensfun-update-data
+          sudo lensfun-update-data || true
       - name: Build and Install
         run: |
           cd src
