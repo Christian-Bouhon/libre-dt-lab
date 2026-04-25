@@ -20,11 +20,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, ubuntu-24.04-arm]
+        os: [ubuntu-22.04, ubuntu-24.04-arm]
         branch:
           - { code: master, label: gitmaster }
         include:
-          - os: ubuntu-24.04
+          - os: ubuntu-22.04
             compiler: { compiler: GNU12, CC: gcc-12, CXX: g++-12, packages: gcc-12 g++-12 }
           - os: ubuntu-24.04-arm
             compiler: { compiler: GNU14, CC: gcc-14, CXX: g++-14, packages: gcc-14 g++-14 }
@@ -197,7 +197,7 @@ jobs:
           echo "Fichiers prêts pour l'upload :"
           ls -lh
       - name: Package upload
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           path: ${{ github.workspace }}/src/build/*.AppImage*
           name: artifact-appimage-${{ runner.arch }}
@@ -353,7 +353,7 @@ jobs:
           echo "VERSION=$(git describe --tags --match release-* | sed 's/^release-//;s/-/+/;s/-/~/;s/rc/~rc/')" >> $GITHUB_ENV
           ([[ ${MSYSTEM_CARCH} == x86_64 ]] && echo "SYSTEM=win64" || echo "SYSTEM=woa64") >> $GITHUB_ENV
       - name: Package upload
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           path: |
             ${{ env.BUILD_DIR }}/libre-dt-lab-*.exe
@@ -370,7 +370,7 @@ jobs:
       matrix:
         build:
           - { os: macos-14,       xcode: 16.2, deployment: 14.0 } # AppleClang 16, arm64
-          - { os: macos-15-intel, xcode: 26.3, deployment: 15.0 } # AppleClang 17, x86_64
+          - { os: macos-13,       xcode: 15.2, deployment: 13.0 } # Intel Macs (Standard)
         compiler:
           - { compiler: XCode,   CC: cc, CXX: c++ }
         btype: [ Release ]
@@ -438,7 +438,7 @@ jobs:
         run: |
           ./src/packaging/macosx/4_make_hb_libre-dt-lab_dmg.sh
       - name: Package upload
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           path: ${{ env.INSTALL_PREFIX }}/libre-dt-lab-*.dmg
           name: artifact-macos-${{ runner.arch }}
@@ -474,7 +474,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Download artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
       - name: Get current date and set as environment variable
         run: |
           # Format date as YYYYMMDD
