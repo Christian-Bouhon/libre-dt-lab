@@ -71,6 +71,7 @@ Contrast is modeled through three complementary components:
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
+#include "develop/pixelpipe.h"
 #include "gui/accelerators.h"
 #include "gui/draw.h"
 #include "dtgtk/paint.h"
@@ -703,7 +704,7 @@ static void spatial_contrast_process(dt_iop_module_t *self,
           compute_smoothed_luminance_mask(in, luminance_smoothed_micro, width, height, d, d->radius_micro, base_eps * fmaxf(d->f_mult_micro, 0.5f));
         g->luminance_valid = TRUE;
         dt_iop_gui_leave_critical_section(self);
-        dt_dev_pixelpipe_cache_invalidate_later(piece->pipe, self->iop_order);
+        dt_dev_pixelpipe_cache_invalidate_later(piece->pipe, self->iop_order, "contrast: ");
       }
     }
     else
