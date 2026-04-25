@@ -688,8 +688,9 @@ void init_presets(dt_iop_module_so_t *self)
   self->pref_based_presets = TRUE;
 
   const gboolean is_display_referred = dt_is_display_referred();
+  const gboolean is_basecurve_scene_referred = dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (basecurve)");
 
-  if(!is_display_referred)
+  if(is_basecurve_scene_referred)
   {
     dt_gui_presets_add_generic
       (_("scene-referred default"), self->op, self->version(),
