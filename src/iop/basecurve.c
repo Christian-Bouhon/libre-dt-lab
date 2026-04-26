@@ -68,7 +68,7 @@
 #define OKLAB_BRILLIANCE_POWER 1.10f 
 #define ROLLOFF_THRESHOLD 0.80f
 
-DT_MODULE_INTROSPECTION(8, dt_iop_basecurve_params_t)
+DT_MODULE_INTROSPECTION(9, dt_iop_basecurve_params_t)
 
 typedef struct dt_iop_basecurve_node_t
 {
@@ -318,7 +318,40 @@ int legacy_params(dt_iop_module_t *self,
     n->saturation_boost = 0.0f; // saturation boost default (neutral)
     *new_params = n;
     *new_params_size = sizeof(dt_iop_basecurve_params_t);
-    *new_version = 8;
+    *new_version = 9;
+    return 0;
+  }
+  if(old_version == 8)
+  {
+    typedef struct dt_iop_basecurve_params_v8_t
+    {
+      dt_iop_basecurve_node_t basecurve[3][MAXNODES];
+      int basecurve_nodes[3];
+      int basecurve_type[3];
+      int exposure_fusion;
+      float exposure_stops;
+      float exposure_bias;
+      dt_iop_rgb_norms_t preserve_colors;
+      int workflow_mode;
+      float shadow_lift;
+      float highlight_gain;
+      float ucs_saturation_balance;
+      float saturation_boost;
+      float gamut_strength;
+      float highlight_corr;
+      int target_gamut;
+      int color_look;
+      float look_opacity;
+      float use_rolloff;
+    } dt_iop_basecurve_params_v8_t;
+
+    const dt_iop_basecurve_params_v8_t *o = (dt_iop_basecurve_params_v8_t *)old_params;
+    dt_iop_basecurve_params_t *n = calloc(1, sizeof(dt_iop_basecurve_params_t));
+    memcpy(n, o, sizeof(dt_iop_basecurve_params_v8_t));
+
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_basecurve_params_t);
+    *new_version = 9;
     return 0;
   }
   return 1;
