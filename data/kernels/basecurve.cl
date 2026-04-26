@@ -19,12 +19,23 @@
     ---------------------------------------------------------------------------
     Acknowledgments and Technical References (Libre DT-lab):
 
-    - Oklab: Björn Ottosson (2020) — "A perceptual color space for image processing"
-    - ACES 1.0: Stephen Hill / Narkowicz (2016) — Filmic tone mapping fit.
-    - ACES 2.0: Narkowicz & Filiberto (2021) — Rational RRT/ODT approximation.
-    - OpenDRT: J. Peddie — "open-display-transform" (vector norm concepts, 
-                pre-tonescale brilliance, and gamut mapping).
-    - JzAzBz: Safdar et al. (2017) — used in Kinematic and Dynamic modes.
+    This basecurve module has been extended to include advanced color volume 
+    and tone management. Our thanks to the following works:
+
+    - Oklab color space : Björn Ottosson (2020), A perceptual color space for image processing
+      https://bottosson.github.io/posts/oklab/
+        
+    - ACES tonal curve : approximation (Modes 1, 2 & 3) : Stephen Hill / BakingLab, RRTAndODTFit approximation
+      https://github.com/TheRealMJP/BakingLab/blob/master/BakingLab/ACES.hlsl
+        
+    - ACES 1.0 tonal curve : approximation (Mode 1 : Kinematic) : Krzysztof Narkowicz (2016), ACES Filmic Tone Mapping Curve 
+      https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
+        
+    - JzAzBz (used in the Kinematic and Dynamic modes of the same module) : Muhammad Safdar et al. (2017), Perceptually uniform color space for image signals including high dynamic range and wide gamut , Optics Express 
+      https://opg.optica.org/oe/fulltext.cfm?uri=oe-25-13-15131
+        
+    - OpenDRT (source of inspiration for the vector norm and pre-tonescale Brilliance) : Jed Smith 
+      https://github.com/jedypod/open-display-transform
     ---------------------------------------------------------------------------
 */
 
@@ -47,12 +58,14 @@ inline float _aces_tone_map(const float x)
 
   return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0f, 1.0f);
 }
-/*
-  Narkowicz & Filiberto (2021) rational approximation of the ACES 2.0 RRT curve.
-  More precise than the basic Narkowicz 2016 fit, with a softer shoulder.
-  The pre-scale factor (x * 1.680) in the caller adjusts the exposure point.
-  Does NOT implement the full ACES pipeline (no color space transform, no D60 whitepoint).
-  Reference: https://github.com/h3r2tic/tony-mc-mapface (Narkowicz/Filiberto fit)
+
+/* 
+   Stephen Hill / BakingLab rational approximation of the ACES RRT+ODT pipeline.
+   Coefficients fitted to the full ACES Reference Rendering Transform + Output Device Transform.
+   More accurate than the Narkowicz 2016 fit, with a softer shoulder and better color handling.
+   Ref: https://github.com/TheRealMJP/BakingLab/blob/master/BakingLab/ACES.hlsl
+   NOTE: Does NOT implement the full ACES pipeline (no AP1 color space transform,
+   no D60 whitepoint). Used here as a luminance-only tone curve. 
 */
 inline float _aces_20_tonemap(const float x)
 {
@@ -65,7 +78,7 @@ inline float _aces_20_tonemap(const float x)
   return clamp((x * (x + a) - b) / (x * (c * x + d) + e), 0.0f, 1.0f);
 }
 
-// --- CONVERSIONS OKLAB POUR OPENCL ---
+// --- OKLAB CONVERSIONS FOR OPENCL ---
 inline float3 rgb_to_oklab(float3 c)
 {
   float l = 0.4122214708f * c.x + 0.5363325363f * c.y + 0.0514459929f * c.z;
@@ -485,7 +498,7 @@ basecurve_finalize(read_only image2d_t in,
     }
     else if(workflow_mode == 3)
     {
-      // Mode 3: ACES 2.0 Pure UCS (Oklab) - Pre-tonescale Brilliance
+      // Mode 3: ACES RRTAndODTFit approximation Pure UCS (Oklab) - Pre-tonescale Brilliance
       float3 lab = rgb_to_oklab(pixel.xyz);
 
       // 1. Balance Saturation UCS
@@ -692,10 +705,10 @@ basecurve_finalize(read_only image2d_t in,
         const float range_blue = 1.1f * range;
         const float compressed_blue = threshold + range * delta / (delta + range_blue);
         const float factor_blue = compressed_blue / max_val;
-        // CB. Calculate current pixel luminance (before compression)
-        // CB. Uses the RGB norm coefficients defined in the file
+
+        // Calculate current pixel luminance (before compression) 
+        // using the RGB luma coefficients defined above.
         const float luma = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
-        // CB. Compress toward luminance (desaturation)
         pixel.x = luma + (pixel.x - luma) * factor;
         pixel.y = luma + (pixel.y - luma) * factor;
         pixel.z = luma + (pixel.z - luma) * factor_blue;
@@ -703,10 +716,9 @@ basecurve_finalize(read_only image2d_t in,
       pixel = mix(orig, pixel, effective_strength);
     }
 
-    // CB. OpenDRT-style weighted red and blue correction for higher precision
+    // OpenDRT-style weighted red and blue correction for higher precision.
     if(workflow_mode > 0 && saturation_boost != 0.0f)
     {
-      // Use calculated luma as the achromatic reference point (sat_L)
       const float luma = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
       const float prot_r = fmax(0.0f, 1.0f - fabs(pixel.x - luma) * 1.5f);
       const float prot_b = fmax(0.0f, 1.0f - fabs(pixel.z - luma) * 1.5f);

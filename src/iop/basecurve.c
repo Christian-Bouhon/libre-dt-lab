@@ -22,12 +22,20 @@
     This basecurve module has been extended to include advanced color volume 
     and tone management. Our thanks to the following works:
 
-    - Oklab: Björn Ottosson (2020) — "A perceptual color space for image processing"
-    - ACES 1.0: Stephen Hill / Narkowicz (2016) — Filmic tone mapping fit.
-    - ACES 2.0: Narkowicz & Filiberto (2021) — Rational RRT/ODT approximation.
-    - OpenDRT: J. Peddie — "open-display-transform" (vector norm concepts, 
-                pre-tonescale brilliance, and gamut mapping).
-    - JzAzBz: Safdar et al. (2017) — used in Kinematic and Dynamic modes.
+    - Oklab color space : Björn Ottosson (2020), A perceptual color space for image processing
+      https://bottosson.github.io/posts/oklab/
+        
+    - ACES tonal curve : approximation (Modes 1, 2 & 3) : Stephen Hill / BakingLab, RRTAndODTFit approximation
+      https://github.com/TheRealMJP/BakingLab/blob/master/BakingLab/ACES.hlsl
+        
+    - ACES 1.0 tonal curve : approximation (Mode 1 : Kinematic) : Krzysztof Narkowicz (2016), ACES Filmic Tone Mapping Curve 
+      https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
+        
+    - JzAzBz (used in the Kinematic and Dynamic modes of the same module) : Muhammad Safdar et al. (2017), Perceptually uniform color space for image signals including high dynamic range and wide gamut , Optics Express 
+      https://opg.optica.org/oe/fulltext.cfm?uri=oe-25-13-15131
+        
+    - OpenDRT (source of inspiration for the vector norm and pre-tonescale Brilliance) : Jed Smith 
+      https://github.com/jedypod/open-display-transform
     ---------------------------------------------------------------------------
 */
 
@@ -1252,12 +1260,13 @@ static inline float _aces_tone_map(const float x)
 
   return CLAMP((x * (a * x + b)) / (x * (c * x + d) + e), 0.0f, 1.0f);
 }
-/*
-  Narkowicz & Filiberto (2021) rational approximation of the ACES 2.0 RRT curve.
-  More precise than the basic Narkowicz 2016 fit, with a softer shoulder.
-  The pre-scale factor (x * 1.680) in the caller adjusts the exposure point (0.75EV).
-  Does NOT implement the full ACES pipeline (no color space transform, no D60 whitepoint).
-  Reference: https://github.com/h3r2tic/tony-mc-mapface (Narkowicz/Filiberto fit)
+/* 
+   Stephen Hill / BakingLab rational approximation of the ACES RRT+ODT pipeline.
+   Coefficients fitted to the full ACES Reference Rendering Transform + Output Device Transform.
+   More accurate than the Narkowicz 2016 fit, with a softer shoulder and better color handling.
+   Ref: https://github.com/TheRealMJP/BakingLab/blob/master/BakingLab/ACES.hlsl
+   NOTE: Does NOT implement the full ACES pipeline (no AP1 color space transform,
+   no D60 whitepoint). Used here as a luminance-only tone curve. 
 */
 static inline float _aces_20_tonemap(const float x)
 {
@@ -1471,7 +1480,7 @@ static inline void gauss_reduce(
       detail[k] = input[k] - detail[k];
   }
 }
-// --- CONVERSIONS OKLAB POUR C (CPU) ---
+// --- OKLAB CONVERSIONS FOR C (CPU) ---
 static inline void rgb_to_oklab_cpu(const float rgb[3], float lab[3])
 {
   float l = 0.4122214708f * rgb[0] + 0.5363325363f * rgb[1] + 0.0514459929f * rgb[2];
@@ -1635,7 +1644,8 @@ static void process_lut(dt_iop_module_t *self,
         /* Mode 3: Cinematic UCS.
            Operates in Oklab space (Björn Ottosson, 2020).
            Provides hue-constant saturation adjustments and high-quality 
-           tonemapping using ACES 2.0 rational fit. */
+           tonemapping using ACES RRTAndODTFit approximation. 
+        */
         float rgb_tmp[3] = {r, g, b};
         float lab[3];
         rgb_to_oklab_cpu(rgb_tmp, lab);
@@ -1670,11 +1680,11 @@ static void process_lut(dt_iop_module_t *self,
         V_orig *= (1.189f + d->highlight_gain); // +0.25 EV exposure compensation
         V_orig = fmaxf(0.0f, powf(V_orig, d->shadow_lift + 1.0f));
 
-        /* ACES 2.0 fit by Narkowicz/Filiberto */
+        // ACES RRTAndODTFit approximation
         float V_new = _aces_20_tonemap(V_orig);
 
         // 3. Highlight Hue Sat (Saturation Gate)
-        /* Prevent color shifts by desaturating compressed highlights */
+        // Prevent color shifts by desaturating compressed highlights
         float compression = (V_norm > 1e-4f) ? (V_new / V_norm) : 1.0f;
         float gate_power = 0.5f * (1.0f - d->highlight_corr);
         float saturation_gate = CLAMP(powf(compression, gate_power), 0.0f, 1.0f);
@@ -1869,9 +1879,9 @@ static void process_lut(dt_iop_module_t *self,
           const float compressed_blue = gamut_threshold + range * delta / (delta + range_blue);
           const float factor_blue = compressed_blue / max_val;
 
-          // CB. Calculate current pixel luminance (before compression)
+          // Calculate current pixel luminance (before compression)
           const float luma = r_coeff_lum * out[k] + g_coeff_lum * out[k+1] + b_coeff_lum * out[k+2];
-          // CB. Applying the factor while preserving luminance (desaturation)
+          // Applying the factor while preserving luminance (desaturation)
           out[k] = luma + (out[k] - luma) * factor;
           out[k+1] = luma + (out[k+1] - luma) * factor;
           out[k+2] = luma + (out[k+2] - luma) * factor_blue;
@@ -1882,7 +1892,7 @@ static void process_lut(dt_iop_module_t *self,
         out[k+2] = orig_b * (1.0f - effective_strength) + out[k+2] * effective_strength;
       }
 
-      // CB. OpenDRT-style weighted red and blue correction for higher precision
+      // OpenDRT-style weighted red and blue correction for higher precision
       if(d->workflow_mode > 0 && d->saturation_boost != 0.0f)
       {
         // Use calculated luma as the achromatic reference point (sat_L)
@@ -2384,9 +2394,9 @@ static void process_fusion(dt_iop_module_t *self,
           const float compressed_blue = gamut_threshold + range * delta / (delta + range_blue);
           const float factor_blue = compressed_blue / max_val;
 
-          // CB. Calculer la luminance actuelle du pixel (avant compression)
+          // Calculate current pixel luminance (before compression)
           const float luma = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2];
-          // CB. Application du facteur en préservant la luminance (désaturation)
+          // Applying the factor while preserving luminance (desaturation)
           val[0] = luma + (val[0] - luma) * factor;
           val[1] = luma + (val[1] - luma) * factor;
           val[2] = luma + (val[2] - luma) * factor_blue;
@@ -2398,7 +2408,7 @@ static void process_fusion(dt_iop_module_t *self,
       }
       }
 
-      // CB. OpenDRT-style weighted red and blue correction for higher precision
+      // OpenDRT-style weighted red and blue correction for higher precision
       if(d->workflow_mode > 0 && d->saturation_boost != 0.0f)
       {
         // Use calculated luma as the achromatic reference point (sat_L)
