@@ -406,6 +406,7 @@ basecurve_finalize(read_only image2d_t in,
                    const float use_rolloff,
                    const float shadow_lift, 
                    const float highlight_gain,
+                   const float contrast_brilliance_power,
                    const float saturation_boost,
                    const float ucs_saturation_balance, 
                    const float gamut_strength, 
@@ -526,7 +527,7 @@ basecurve_finalize(read_only image2d_t in,
       float purity_comp = purity / (1.0f + 0.05f * purity);
 
       // Prepare Norm for tonemapping
-      float V_orig = fmax(0.0f, pow(V_norm, 1.10f)); /* OKLAB_BRILLIANCE_POWER = 1.10 */
+      float V_orig = fmax(0.0f, pow(V_norm, contrast_brilliance_power));
       V_orig *= (1.189f + highlight_gain); // +0.25 EV exposure compensation
       V_orig = fmax(0.0f, pow(V_orig, shadow_lift + 1.0f));
 

@@ -72,11 +72,9 @@
 #define MAXNODES 20
 
 #define ACES_EXPOSURE_ADJUST 2.0f
-// Brilliance power controls the contrast curve applied to V_norm before tonemapping
-#define OKLAB_BRILLIANCE_POWER 1.10f 
 #define ROLLOFF_THRESHOLD 0.80f
 
-DT_MODULE_INTROSPECTION(9, dt_iop_basecurve_params_t)
+DT_MODULE_INTROSPECTION(10, dt_iop_basecurve_params_t)
 
 typedef struct dt_iop_basecurve_node_t
 {
@@ -106,6 +104,7 @@ typedef struct dt_iop_basecurve_params_t
   int color_look;         // $DEFAULT: 0 $DESCRIPTION: "color look style"
   float look_opacity;     // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "look opacity"
   float use_rolloff;      // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "highlight roll-off"
+  float contrast_brilliance_power; // $MIN: 1.0 $MAX: 2.0 $DEFAULT: 1.1 $DESCRIPTION: "contrast correction"
 } dt_iop_basecurve_params_t;
 
 static const float color_looks[11][9] = {
@@ -356,10 +355,22 @@ int legacy_params(dt_iop_module_t *self,
     const dt_iop_basecurve_params_v8_t *o = (dt_iop_basecurve_params_v8_t *)old_params;
     dt_iop_basecurve_params_t *n = calloc(1, sizeof(dt_iop_basecurve_params_t));
     memcpy(n, o, sizeof(dt_iop_basecurve_params_v8_t));
+    n->contrast_brilliance_power = 1.10f;
 
     *new_params = n;
     *new_params_size = sizeof(dt_iop_basecurve_params_t);
-    *new_version = 9;
+    *new_version = 10;
+    return 0;
+  }
+  if(old_version == 9)
+  {
+    const dt_iop_basecurve_params_t *o = (dt_iop_basecurve_params_t *)old_params;
+    dt_iop_basecurve_params_t *n = calloc(1, sizeof(dt_iop_basecurve_params_t));
+    memcpy(n, o, sizeof(dt_iop_basecurve_params_t));
+    n->contrast_brilliance_power = 1.10f;
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_basecurve_params_t);
+    *new_version = 10;
     return 0;
   }
   return 1;
@@ -383,6 +394,7 @@ typedef struct dt_iop_basecurve_gui_data_t
   GtkWidget *ucs_saturation_balance;
   GtkWidget *saturation_boost;
   GtkWidget *use_rolloff;
+  GtkWidget *contrast_brilliance_power;
   GtkWidget *gamut_strength;
   GtkWidget *highlight_corr;
   GtkWidget *target_gamut;
@@ -491,6 +503,7 @@ typedef struct dt_iop_basecurve_data_t
   int color_look;
   float look_opacity;
   float use_rolloff;
+  float contrast_brilliance_power;
 } dt_iop_basecurve_data_t;
 
 typedef struct dt_iop_basecurve_global_data_t
@@ -1091,7 +1104,8 @@ int process_cl_fusion(dt_iop_module_t *self,
   // Apply shadow_lift and tone mapping here if needed
   err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_basecurve_finalize, width, height,
       CLARG(dev_in), CLARG(dev_comb[0]), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(d->workflow_mode),
-      CLARGFLOAT(d->use_rolloff), CLARGFLOAT(d->shadow_lift), CLARGFLOAT(d->highlight_gain), CLARGFLOAT(d->saturation_boost), CLARGFLOAT(d->ucs_saturation_balance),
+      CLARGFLOAT(d->use_rolloff), CLARGFLOAT(d->shadow_lift), CLARGFLOAT(d->highlight_gain), CLARGFLOAT(d->contrast_brilliance_power),
+      CLARGFLOAT(d->saturation_boost), CLARGFLOAT(d->ucs_saturation_balance),
       CLARGFLOAT(d->gamut_strength), CLARGFLOAT(d->highlight_corr), CLARG(d->target_gamut), CLARGFLOAT(d->look_opacity),
       CLARG(look_mat_buf), CLARGFLOAT(alpha), CLARG(dev_profile_info), CLARG(use_work_profile));
 
@@ -1187,7 +1201,8 @@ int process_cl_lut(dt_iop_module_t *self,
   {
     err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_basecurve_finalize, width, height,
         CLARG(dev_in), CLARG(dev_tmp), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(d->workflow_mode),
-      CLARGFLOAT(d->use_rolloff), CLARGFLOAT(d->shadow_lift), CLARGFLOAT(d->highlight_gain), CLARGFLOAT(d->saturation_boost), CLARGFLOAT(d->ucs_saturation_balance),
+      CLARGFLOAT(d->use_rolloff), CLARGFLOAT(d->shadow_lift), CLARGFLOAT(d->highlight_gain), CLARGFLOAT(d->contrast_brilliance_power),
+      CLARGFLOAT(d->saturation_boost), CLARGFLOAT(d->ucs_saturation_balance),
         CLARGFLOAT(d->gamut_strength), CLARGFLOAT(d->highlight_corr), CLARG(d->target_gamut),
         CLARGFLOAT(d->look_opacity), CLARG(look_mat_buf), CLARGFLOAT(alpha), CLARG(dev_profile_info), CLARG(use_work_profile));
     if(err != CL_SUCCESS) goto error;
@@ -1676,7 +1691,7 @@ static void process_lut(dt_iop_module_t *self,
         float purity_comp = purity / (1.0f + 0.05f * purity);
 
         // Prepare Norm for tonemapping
-        float V_orig = fmaxf(0.0f, powf(V_norm, OKLAB_BRILLIANCE_POWER));
+        float V_orig = fmaxf(0.0f, powf(V_norm, d->contrast_brilliance_power));
         V_orig *= (1.189f + d->highlight_gain); // +0.25 EV exposure compensation
         V_orig = fmaxf(0.0f, powf(V_orig, d->shadow_lift + 1.0f));
 
@@ -2197,7 +2212,7 @@ static void process_fusion(dt_iop_module_t *self,
         float purity_comp = purity / (1.0f + 0.05f * purity);
 
         // Prepare Norm for tonemapping
-        float V_orig = fmaxf(0.0f, powf(V_norm, OKLAB_BRILLIANCE_POWER));
+        float V_orig = fmaxf(0.0f, powf(V_norm, d->contrast_brilliance_power));
         V_orig *= (1.189f + d->highlight_gain); // +0.25 EV exposure compensation
         V_orig = fmaxf(0.0f, powf(V_orig, d->shadow_lift + 1.0f));
 
@@ -2489,6 +2504,7 @@ void commit_params(dt_iop_module_t *self,
     // Intentional inversion: slider right (>1.0) -> exponent < 1.0 -> lightens shadows
     d->shadow_lift            = 2.0f - p->shadow_lift;
     d->highlight_gain         = p->highlight_gain;
+  d->contrast_brilliance_power       = p->contrast_brilliance_power;
     d->ucs_saturation_balance = p->ucs_saturation_balance;
     d->saturation_boost       = p->saturation_boost;
     d->gamut_strength         = p->gamut_strength;
@@ -2501,6 +2517,7 @@ void commit_params(dt_iop_module_t *self,
     // highlight_gain=0 (black image) or shadow_lift=2.0 (wrong gamma).
     d->shadow_lift            = 1.0f;
     d->highlight_gain         = 1.0f;
+    d->contrast_brilliance_power       = 1.10f;
     d->ucs_saturation_balance = 0.0f;
     d->saturation_boost       = 0.0f;
     d->gamut_strength         = 0.0f;
@@ -2743,6 +2760,7 @@ void init(dt_iop_module_t *self)
   d->basecurve_nodes[0] = 2;
   d->shadow_lift = 1.0f;
   d->highlight_gain = 1.0f;
+  d->contrast_brilliance_power = 1.10f;
 }
 
 void init_global(dt_iop_module_so_t *self)
@@ -3377,6 +3395,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
         dt_bauhaus_combobox_set(g->cmb_preserve_colors, DT_RGB_NORM_NONE);
       gtk_widget_set_visible(g->shadow_lift, TRUE);
       gtk_widget_set_visible(g->highlight_gain, TRUE);
+      gtk_widget_set_visible(g->contrast_brilliance_power, p->workflow_mode == 3);
       gtk_widget_set_visible(g->node_x_slider, TRUE);
       gtk_widget_set_visible(g->node_y_slider, TRUE);
       gtk_widget_set_visible(g->logbase, FALSE);
@@ -3390,6 +3409,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       gtk_widget_set_visible(g->use_rolloff, TRUE);
       gtk_widget_set_sensitive(g->shadow_lift, TRUE);
       gtk_widget_set_sensitive(g->highlight_gain, TRUE);
+      gtk_widget_set_sensitive(g->contrast_brilliance_power, p->workflow_mode == 3);
       gtk_widget_set_sensitive(g->node_x_slider, TRUE);
       gtk_widget_set_sensitive(g->node_y_slider, TRUE);
       gtk_widget_set_sensitive(g->saturation_boost, TRUE);
@@ -3421,6 +3441,8 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
           dt_bauhaus_slider_set(g->shadow_lift, 1.0f);
           p->highlight_gain = 1.0f;
           dt_bauhaus_slider_set(g->highlight_gain, 1.0f);
+          p->contrast_brilliance_power = 1.10f;
+          dt_bauhaus_slider_set(g->contrast_brilliance_power, 1.10f);
           p->ucs_saturation_balance = 0.2f;
           dt_bauhaus_slider_set(g->ucs_saturation_balance, 0.2f);
           p->saturation_boost = 0.0f;
@@ -3459,6 +3481,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       gtk_widget_set_visible(g->cmb_preserve_colors, TRUE);
       gtk_widget_set_visible(g->shadow_lift, FALSE);
       gtk_widget_set_visible(g->highlight_gain, FALSE);
+      gtk_widget_set_visible(g->contrast_brilliance_power, FALSE);
       gtk_widget_set_visible(g->node_x_slider, TRUE);
       gtk_widget_set_visible(g->node_y_slider, TRUE);
       gtk_widget_set_visible(g->saturation_boost, FALSE);
@@ -3471,6 +3494,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       gtk_widget_set_visible(g->use_rolloff, FALSE);
       gtk_widget_set_sensitive(g->shadow_lift, FALSE);
       gtk_widget_set_sensitive(g->highlight_gain, FALSE);
+      gtk_widget_set_sensitive(g->contrast_brilliance_power, FALSE);
       gtk_widget_set_sensitive(g->saturation_boost, FALSE);
       gtk_widget_set_sensitive(g->ucs_saturation_balance, FALSE);
       gtk_widget_set_sensitive(g->gamut_strength, FALSE);
@@ -3522,6 +3546,7 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_combobox_set(g->workflow_mode, p->workflow_mode);
   dt_bauhaus_slider_set(g->shadow_lift, p->shadow_lift);
   dt_bauhaus_slider_set(g->highlight_gain, p->highlight_gain);
+  dt_bauhaus_slider_set(g->contrast_brilliance_power, p->contrast_brilliance_power);
   dt_bauhaus_slider_set(g->saturation_boost, p->saturation_boost);
   dt_bauhaus_slider_set(g->ucs_saturation_balance, p->ucs_saturation_balance);
   dt_bauhaus_slider_set(g->use_rolloff, p->use_rolloff);
@@ -3706,6 +3731,13 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_factor(g->shadow_lift, 100.0);
   dt_bauhaus_slider_set_offset(g->shadow_lift, -100.0);
   dt_bauhaus_slider_set_default(g->shadow_lift, 1.0);
+
+  g->contrast_brilliance_power = dt_bauhaus_slider_from_params(self, "contrast_brilliance_power");
+  dt_bauhaus_widget_set_label(g->contrast_brilliance_power, NULL, _("contrast correction"));
+  dt_bauhaus_slider_set_soft_range(g->contrast_brilliance_power, 1.0, 2.0);
+  dt_bauhaus_slider_set_digits(g->contrast_brilliance_power, 2);
+  dt_bauhaus_slider_set_default(g->contrast_brilliance_power, 1.10);
+  gtk_widget_set_tooltip_text(g->contrast_brilliance_power, _("adjust the brilliance (contrast) in Oklab space for cinematic DRT."));
 
   g->node_x_slider = dt_bauhaus_slider_new_with_range(self, 0.0f, 1.0f, 0, 0.5f, 3);
   dt_bauhaus_widget_set_label(g->node_x_slider, NULL, _("node x position"));
