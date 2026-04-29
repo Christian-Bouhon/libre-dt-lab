@@ -702,6 +702,7 @@ void reload_defaults(dt_iop_module_t *self)
   }
 
   d->target_gamut = 2;
+  d->contrast_brilliance_power = 1.10f;
 
   if(!dt_is_display_referred())
   {
