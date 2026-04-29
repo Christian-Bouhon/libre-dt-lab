@@ -97,7 +97,7 @@ typedef struct dt_iop_basecurve_params_t
   float shadow_lift;      // $MIN: 0.25 $MAX: 1.75 $DEFAULT: 1.0 $DESCRIPTION: "shadow correction"
   float highlight_gain;   // $MIN: 0.25 $MAX: 1.75 $DEFAULT: 1.0 $DESCRIPTION: "highlight gain"
   float ucs_saturation_balance; // $MIN: -0.75 $MAX: 0.75 $DEFAULT: 0.2 $DESCRIPTION: "balance saturation ucs"
-  float saturation_boost; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "saturation boost UCS"
+  float saturation_boost; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "saturation boost ucs"
   float gamut_strength;   // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "gamut compression"
   float highlight_corr;   // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "highlight hue/sat"
   int target_gamut;       // $DEFAULT: 2 $DESCRIPTION: "target gamut"
@@ -383,6 +383,9 @@ typedef struct dt_iop_basecurve_gui_data_t
   GtkDrawingArea *area;
   GtkWidget *fusion, *exposure_step, *exposure_bias, *shadow_lift, *highlight_gain;
   GtkWidget *node_x_slider, *node_y_slider;
+  GtkWidget *node_sliders_box;    // container for node sliders, hidden by default
+  GtkWidget *btn_toggle_sliders;  // pencil button in graph overlay to toggle sliders
+  gboolean   node_sliders_visible; // current visibility state
   GtkWidget *cmb_preserve_colors;
   GtkWidget *workflow_mode;
   double mouse_x, mouse_y;
@@ -3568,6 +3571,7 @@ void gui_update(dt_iop_module_t *self)
   g->last_workflow_mode = p->workflow_mode;
   g->look_selected_first_time = (p->color_look != 0);
   g->in_gui_update = FALSE;
+  g->node_sliders_visible = FALSE;
   gui_changed(self, NULL, NULL);
 
   // gui curve is read directly from params during expose event.
@@ -3629,6 +3633,13 @@ void gui_reset(dt_iop_module_t *self)
   dt_iop_color_picker_reset(self, TRUE);
 }
 
+static void _toggle_node_sliders_callback(GtkWidget *btn, dt_iop_module_t *self)
+{
+  dt_iop_basecurve_gui_data_t *g = self->gui_data;
+  g->node_sliders_visible = !g->node_sliders_visible;
+  gtk_widget_set_visible(g->node_sliders_box, g->node_sliders_visible);
+}
+
 void gui_init(dt_iop_module_t *self)
 {
   dt_iop_basecurve_gui_data_t *g = IOP_GUI_ALLOC(basecurve);
@@ -3681,6 +3692,16 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(btn_compute_bright), "clicked", G_CALLBACK(_compute_bright_callback), self);
   gtk_box_pack_start(GTK_BOX(box_btns), btn_compute_bright, FALSE, FALSE, 0);
   dt_action_define_iop(self, NULL, N_("compute for bright scenes"), btn_compute_bright, &dt_action_def_button);
+
+  /* Eye button: toggle node x/y sliders below the graph */
+  g->btn_toggle_sliders = dtgtk_button_new(dtgtk_cairo_paint_eye_toggle, 0, NULL);
+  gtk_widget_set_tooltip_text(g->btn_toggle_sliders,
+                              _("show/hide node position sliders below the curve graph"));
+  g_signal_connect(G_OBJECT(g->btn_toggle_sliders), "clicked",
+                   G_CALLBACK(_toggle_node_sliders_callback), self);
+  gtk_box_pack_start(GTK_BOX(box_btns), g->btn_toggle_sliders, FALSE, FALSE, 0);
+  dt_action_define_iop(self, NULL, N_("toggle node sliders"),
+                       g->btn_toggle_sliders, &dt_action_def_button);
 
   g->cmb_preserve_colors = dt_bauhaus_combobox_from_params(self, "preserve_colors");
   gtk_widget_set_tooltip_text(g->cmb_preserve_colors, _("method to preserve colors when applying contrast"));
@@ -3757,8 +3778,14 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->node_x_slider), "value-changed", G_CALLBACK(node_x_slider_callback), self);
   g_signal_connect(G_OBJECT(g->node_y_slider), "value-changed", G_CALLBACK(node_y_slider_callback), self);
 
-  gtk_box_pack_start(GTK_BOX(self->widget), g->node_x_slider, TRUE, TRUE, 0);
-  gtk_box_pack_start(GTK_BOX(self->widget), g->node_y_slider, TRUE, TRUE, 0);
+  /* Node sliders box: hidden by default, inserted at position 1 (just below the graph) */
+  g->node_sliders_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+  gtk_box_pack_start(GTK_BOX(g->node_sliders_box), g->node_x_slider, TRUE, TRUE, 0);
+  gtk_box_pack_start(GTK_BOX(g->node_sliders_box), g->node_y_slider, TRUE, TRUE, 0);
+  gtk_widget_set_no_show_all(g->node_sliders_box, TRUE);
+  gtk_widget_hide(g->node_sliders_box);
+  gtk_box_pack_start(GTK_BOX(self->widget), g->node_sliders_box, FALSE, FALSE, 0);
+  gtk_box_reorder_child(GTK_BOX(self->widget), g->node_sliders_box, 1);
 
   g->fusion = dt_bauhaus_combobox_from_params(self, "exposure_fusion");
   dt_bauhaus_combobox_add(g->fusion, _("none"));
@@ -3785,7 +3812,7 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_visible(g->exposure_bias, p->exposure_fusion != 0 ? TRUE : FALSE);
 
   g->saturation_boost = dt_bauhaus_slider_from_params(self, "saturation_boost");
-  dt_bauhaus_widget_set_label(g->saturation_boost, NULL, _("saturation boost UCS"));
+  dt_bauhaus_widget_set_label(g->saturation_boost, NULL, _("saturation boost ucs"));
   gtk_widget_set_tooltip_text(g->saturation_boost,
                               _("globally boost or reduce color saturation within the UCS color space."));
   dt_bauhaus_slider_set_format(g->saturation_boost, "%");
@@ -3795,7 +3822,7 @@ void gui_init(dt_iop_module_t *self)
   g->ucs_saturation_balance = dt_bauhaus_slider_from_params(self, "ucs_saturation_balance");
   dt_bauhaus_widget_set_label(g->ucs_saturation_balance, NULL, _("balance saturation ucs"));
   gtk_widget_set_tooltip_text(g->ucs_saturation_balance,
-                              _("balances saturation between shadows and highlights (JzAzBz space).\n"
+                              _("balances saturation between shadows and highlights (JzAzBz in modes 1 & 2, Oklab in mode 3).\n"
                                 " move right to boost shadow saturation while taming highlights.\n"
                                 " move left to boost highlight saturation while taming shadows.\n"
                                 " ideal for making dark colors pop without clipping speculars."));
