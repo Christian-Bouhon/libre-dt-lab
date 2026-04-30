@@ -626,7 +626,7 @@ basecurve_finalize(read_only image2d_t in,
       // Start effect at 0.20 up to 0.90. Linear transition.
       float hl_mask = clamp((jab.x - 0.20f) / 0.70f, 0.0f, 1.0f);
 
-      if(hl_mask > 0.0f && highlight_corr != 0.0f && workflow_mode != 3)
+      if(hl_mask > 0.0f && highlight_corr != 0.0f)
       {
         // 1. Soft symmetric desaturation (0.75 factor)
         const float desat = 1.0f - (fabs(highlight_corr) * hl_mask * 0.75f);

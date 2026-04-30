@@ -1800,7 +1800,7 @@ static void process_lut(dt_iop_module_t *self,
           modified = 1;
         }
 
-        if(d->highlight_corr != 0.0f && d->workflow_mode != 3)
+        if(d->highlight_corr != 0.0f)
         {
           // HIGHLIGHT HUE AND SATURATION CORRECTION (sync with OpenCL)
           // Mask starts at Jz = 0.20 and is full at Jz = 0.90. Linear transition.
