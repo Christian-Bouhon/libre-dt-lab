@@ -197,7 +197,7 @@ jobs:
           echo "Fichiers prêts pour l'upload :"
           ls -lh
       - name: Package upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           path: ${{ github.workspace }}/src/build/*.AppImage*
           name: artifact-appimage-${{ runner.arch }}
@@ -353,7 +353,7 @@ jobs:
           echo "VERSION=$(git describe --tags --match release-* | sed 's/^release-//;s/-/+/;s/-/~/;s/rc/~rc/')" >> $GITHUB_ENV
           ([[ ${MSYSTEM_CARCH} == x86_64 ]] && echo "SYSTEM=win64" || echo "SYSTEM=woa64") >> $GITHUB_ENV
       - name: Package upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           path: |
             ${{ env.BUILD_DIR }}/libre-dt-lab-*.exe
@@ -438,7 +438,7 @@ jobs:
         run: |
           ./src/packaging/macosx/4_make_hb_libre-dt-lab_dmg.sh
       - name: Package upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           path: ${{ env.INSTALL_PREFIX }}/libre-dt-lab-*.dmg
           name: artifact-macos-${{ runner.arch }}
