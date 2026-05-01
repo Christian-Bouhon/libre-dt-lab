@@ -34,7 +34,8 @@
     - JzAzBz (used in the Kinematic and Dynamic modes of the same module) : Muhammad Safdar et al. (2017), Perceptually uniform color space for image signals including high dynamic range and wide gamut , Optics Express 
       https://opg.optica.org/oe/fulltext.cfm?uri=oe-25-13-15131
         
-    - OpenDRT (source of inspiration for the vector norm and pre-tonescale Brilliance) : Jed Smith 
+    - Gamut compression & OpenDRT (source of inspiration for the vector norm and pre-tonescale Brilliance) : Jed Smith 
+      https://github.com/jedypod/gamut-compress
       https://github.com/jedypod/open-display-transform
     ---------------------------------------------------------------------------
 */
@@ -523,8 +524,10 @@ basecurve_finalize(read_only image2d_t in,
       float V_norm = native_sqrt(L_achromatic * L_achromatic + chroma * chroma);
       float purity = (V_norm > 1e-6f) ? (chroma / V_norm) : 0.0f;
 
-      // Hyperbolic purity compression
-      float purity_comp = purity / (1.0f + 0.05f * purity);
+      // Knee-based purity compression: protects natural colors (purity < 0.5)
+      // and only tames extreme "neon" colors above the threshold.
+      const float p_thresh = 0.5f;
+      float purity_comp = (purity > p_thresh) ? p_thresh + (purity - p_thresh) / (1.0f + 0.2f * (purity - p_thresh)) : purity;
 
       // Prepare Norm for tonemapping
       float V_orig = fmax(0.0f, pow(V_norm, contrast_brilliance_power));
@@ -622,9 +625,11 @@ basecurve_finalize(read_only image2d_t in,
         modified = 1;
       }
 
-      // HIGH SENSITIVITY CORRECTION
-      // Start effect at 0.20 up to 0.90. Linear transition.
-      float hl_mask = clamp((jab.x - 0.20f) / 0.70f, 0.0f, 1.0f);
+      // HIGHLIGHT HUE AND SATURATION CORRECTION (sync with C)
+      // Mask starts at Jz = 0.22 (just above midtones) and is full at Jz = 0.68 (very high lights)
+      // Note: Due to the 0.75 desaturation factor in the formula, the perceived effect 
+      // reaches ~90-95% at full slider value in extreme highlights.
+      float hl_mask = clamp((jab.x - 0.22f) / 0.68f, 0.0f, 1.0f);
 
       if(hl_mask > 0.0f && highlight_corr != 0.0f)
       {
@@ -633,8 +638,8 @@ basecurve_finalize(read_only image2d_t in,
         jab.y *= desat;
         jab.z *= desat;
 
-        // 2. Controlled Hue Rotation (2.0 factor)
-        const float angle = highlight_corr * hl_mask * 2.0f;
+        // 2. Controlled Hue Rotation (1.5 factor)
+        const float angle = highlight_corr * hl_mask * 1.5f;
         const float ca = native_cos(angle);
         const float sa = native_sin(angle);
         const float az = jab.y;
@@ -682,39 +687,32 @@ basecurve_finalize(read_only image2d_t in,
 
     if(gamut_strength > 0.0f)
     {
-      float4 orig = pixel;
-
-      float Y_rgb = 0.2126f * pixel.x + 0.7152f * pixel.y + 0.0722f * pixel.z;
-      float lum_weight = clamp((Y_rgb - 0.5f) / (0.9f - 0.5f), 0.0f, 1.0f);
+      // Jed Smith style gamut compression
+      const float luma = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
+      
+      // Raise threshold to 0.75 to protect mid-highs and use a smooth quadratic falloff
+      float lum_weight = clamp((luma - 0.75f) / (0.20f), 0.0f, 1.0f); // 0.20f is 0.95 - 0.75
       lum_weight = lum_weight * lum_weight * (3.0f - 2.0f * lum_weight);
       float effective_strength = gamut_strength * lum_weight;
 
-      float limit = 0.72f;
-      if(target_gamut == 1) limit = 0.80f;
-      else if(target_gamut == 2) limit = 1.00f;
-
-      float threshold = limit * (1.0f - (effective_strength * 0.10f));
-      float max_val = fmax(pixel.x, fmax(pixel.y, pixel.z));
-
-      if(max_val > threshold)
+      if(effective_strength > 0.0f)
       {
-        const float range = limit - threshold;
-        const float delta = max_val - threshold;
-        const float compressed = threshold + range * delta / (delta + range);
-        const float factor = compressed / max_val;
+        float limit = (target_gamut == 1) ? 0.95f : (target_gamut == 2 ? 1.05f : 0.90f);
+        float threshold = limit * 0.80f;
+        
+        float3 dist = pixel.xyz - luma;
+        float max_dist = fmax(dist.x, fmax(dist.y, dist.z));
 
-        const float range_blue = 1.1f * range;
-        const float compressed_blue = threshold + range * delta / (delta + range_blue);
-        const float factor_blue = compressed_blue / max_val;
-
-        // Calculate current pixel luminance (before compression) 
-        // using the RGB luma coefficients defined above.
-        const float luma = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
-        pixel.x = luma + (pixel.x - luma) * factor;
-        pixel.y = luma + (pixel.y - luma) * factor;
-        pixel.z = luma + (pixel.z - luma) * factor_blue;
+        if(luma + max_dist > threshold)
+        {
+          float v = luma + max_dist - threshold;
+          float s = limit - threshold;
+          float compressed_v = threshold + (s * v) / (v + s);
+          float factor = fmax(0.0f, (compressed_v - luma) / fmax(max_dist, 1e-6f));
+          
+          pixel.xyz = luma + dist * (1.0f + effective_strength * (factor - 1.0f));
+        }
       }
-      pixel = mix(orig, pixel, effective_strength);
     }
 
     // OpenDRT-style weighted red and blue correction for higher precision.
