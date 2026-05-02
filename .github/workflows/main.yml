@@ -507,7 +507,7 @@ jobs:
 
             The `*.AppImage.zsync` file is not intended to be downloaded and used locally. Just ignore it. This file contains technical information required by AppImage auto-updaters such as [AppImageUpdate](https://appimage.github.io/AppImageUpdate/).
 
-            The Windows package `*-win64.exe` requires at least Windows 10. The `*-woa64.exe` package requires at least Windows 11.
+            The Windows package `*-win64.exe` requires at least Windows 10. The `*-woa64.exe` package requires at least "Windows 11 for ARM devices".
 
             The macOS package `*-arm64.dmg` requires at least macOS 14.0 (Sonoma). The `*-x86_64.dmg` package requires at least macOS 15.0 (Sequoia).
 

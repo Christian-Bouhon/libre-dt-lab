@@ -407,12 +407,19 @@ basecurve_finalize(read_only image2d_t in,
                    const float use_rolloff,
                    const float shadow_lift, 
                    const float highlight_gain,
-                   const float contrast_brilliance_power,
-                   const float saturation_boost,
-                   const float ucs_saturation_balance, 
-                   const float gamut_strength, 
-                   const float highlight_corr, 
-                   const int target_gamut, 
+const float contrast_brilliance_power,
+                    const float saturation_boost,
+                    const float ucs_saturation_balance, 
+                    const float gamut_strength, 
+                    const float purity_boost, 
+                    const float highlight_corr, 
+                    const float gamut_threshold_c,
+                    const float gamut_threshold_m,
+                    const float gamut_threshold_y,
+                    const float gamut_limit_c,
+                    const float gamut_limit_m,
+                    const float gamut_limit_y,
+                    const int target_gamut,
                    const float look_opacity, 
                    const float16 look_mat, 
                    const float alpha,
@@ -447,9 +454,15 @@ basecurve_finalize(read_only image2d_t in,
   }
 
   // Define coefficients at top level for scope consistency
-  const float r_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[3] : 0.2627f;
-  const float g_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[4] : 0.6780f;
-  const float b_coeff = (use_work_profile != 0 && profile_info != 0) ? profile_info->matrix_in[5] : 0.0593f;
+  // Use target_gamut (0=sRGB, 1=AdobeRGB, 2=Rec.2020) for accurate luminance weights
+  float r_coeff, g_coeff, b_coeff;
+  if(target_gamut == 0) { // sRGB (Rec.709)
+    r_coeff = 0.2126f; g_coeff = 0.7152f; b_coeff = 0.0722f;
+  } else if(target_gamut == 1) { // AdobeRGB
+    r_coeff = 0.2974f; g_coeff = 0.6273f; b_coeff = 0.0753f;
+  } else { // Rec.2020 (default)
+    r_coeff = 0.2627f; g_coeff = 0.6780f; b_coeff = 0.0593f;
+  }
 
   if(workflow_mode > 0 || shadow_lift != 1.0f || highlight_gain != 1.0f || ucs_saturation_balance != 0.0f || gamut_strength > 0.0f || highlight_corr != 0.0f)
   {
@@ -626,12 +639,15 @@ basecurve_finalize(read_only image2d_t in,
       }
 
       // HIGHLIGHT HUE AND SATURATION CORRECTION (sync with C)
-      // Mask starts at Jz = 0.22 (just above midtones) and is full at Jz = 0.68 (very high lights)
-      // Note: Due to the 0.75 desaturation factor in the formula, the perceived effect 
-      // reaches ~90-95% at full slider value in extreme highlights.
-      float hl_mask = clamp((jab.x - 0.22f) / 0.68f, 0.0f, 1.0f);
+      // Guard: skip computation if highlight_corr is zero (optimization)
+      if(highlight_corr != 0.0f)
+      {
+        // Mask starts at Jz = 0.22 (just above midtones) and is full at Jz = 0.68 (very high lights)
+        // Note: Due to the 0.75 desaturation factor in the formula, the perceived effect 
+        // reaches ~90-95% at full slider value in extreme highlights.
+        float hl_mask = clamp((jab.x - 0.22f) / 0.68f, 0.0f, 1.0f);
 
-      if(hl_mask > 0.0f && highlight_corr != 0.0f)
+        if(hl_mask > 0.0f)
       {
         // 1. Soft symmetric desaturation (0.75 factor)
         const float desat = 1.0f - (fabs(highlight_corr) * hl_mask * 0.75f);
@@ -648,6 +664,7 @@ basecurve_finalize(read_only image2d_t in,
         jab.y = az * ca - bz * sa;
         jab.z = az * sa + bz * ca;
         modified = 1;
+      }
       }
 
       if(jab.x > 0.95f)
@@ -681,37 +698,81 @@ basecurve_finalize(read_only image2d_t in,
             pixel.xyz = lum + factor * (pixel.xyz - lum);
           }
         }
-        pixel.xyz = clamp(pixel.xyz, 0.0f, 1.0f);
       }
     }
 
     if(gamut_strength > 0.0f)
     {
-      // Jed Smith style gamut compression
-      const float luma = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
-      
-      // Raise threshold to 0.75 to protect mid-highs and use a smooth quadratic falloff
-      float lum_weight = clamp((luma - 0.75f) / (0.20f), 0.0f, 1.0f); // 0.20f is 0.95 - 0.75
-      lum_weight = lum_weight * lum_weight * (3.0f - 2.0f * lum_weight);
-      float effective_strength = gamut_strength * lum_weight;
+      // Jed Smith per-channel gamut compression (no lum_weight, with blend)
+      // Save original values for blending
+      float orig_x = pixel.x, orig_y = pixel.y, orig_z = pixel.z;
 
-      if(effective_strength > 0.0f)
+      const float th_c = 1.0f - gamut_threshold_c;
+      const float th_m = 1.0f - gamut_threshold_m;
+      const float th_y = 1.0f - gamut_threshold_y;
+
+      const float lim_c = 1.0f + gamut_limit_c;
+      const float lim_m = 1.0f + gamut_limit_m;
+      const float lim_y = 1.0f + gamut_limit_y;
+
+      const float s_c = (1.0f - th_c) / sqrt(fmax(1.001f, lim_c) - 1.0f);
+      const float s_m = (1.0f - th_m) / sqrt(fmax(1.001f, lim_m) - 1.0f);
+      const float s_y = (1.0f - th_y) / sqrt(fmax(1.001f, lim_y) - 1.0f);
+
+      const float ac = fmax(pixel.x, fmax(pixel.y, pixel.z));
+
+      if(ac > 0.0f)
       {
-        float limit = (target_gamut == 1) ? 0.95f : (target_gamut == 2 ? 1.05f : 0.90f);
-        float threshold = limit * 0.80f;
-        
-        float3 dist = pixel.xyz - luma;
-        float max_dist = fmax(dist.x, fmax(dist.y, dist.z));
+        /* d_r/g/b = cyan/magenta/yellow distances (complementary channels) */
+        const float d_r = (ac - pixel.x) / ac; // cyan distance
+        const float d_g = (ac - pixel.y) / ac; // magenta distance
+        const float d_b = (ac - pixel.z) / ac; // yellow distance
 
-        if(luma + max_dist > threshold)
-        {
-          float v = luma + max_dist - threshold;
-          float s = limit - threshold;
-          float compressed_v = threshold + (s * v) / (v + s);
-          float factor = fmax(0.0f, (compressed_v - luma) / fmax(max_dist, 1e-6f));
-          
-          pixel.xyz = luma + dist * (1.0f + effective_strength * (factor - 1.0f));
-        }
+        float cd_r, cd_g, cd_b;
+
+        if(d_r < th_c)
+          cd_r = d_r;
+        else
+          cd_r = s_c * sqrt(d_r - th_c + s_c*s_c*0.25f) - s_c * sqrt(s_c*s_c*0.25f) + th_c;
+
+        if(d_g < th_m)
+          cd_g = d_g;
+        else
+          cd_g = s_m * sqrt(d_g - th_m + s_m*s_m*0.25f) - s_m * sqrt(s_m*s_m*0.25f) + th_m;
+
+        if(d_b < th_y)
+          cd_b = d_b;
+        else
+          cd_b = s_y * sqrt(d_b - th_y + s_y*s_y*0.25f) - s_y * sqrt(s_y*s_y*0.25f) + th_y;
+
+        // Compressed RGB
+        float comp_x = ac - cd_r * ac;
+        float comp_y = ac - cd_g * ac;
+        float comp_z = ac - cd_b * ac;
+
+        // Blend between original and compressed (Jed Smith style)
+        float blend = gamut_strength; // 0.0 = original, 1.0 = full compression
+        pixel.x = orig_x * (1.0f - blend) + comp_x * blend;
+        pixel.y = orig_y * (1.0f - blend) + comp_y * blend;
+        pixel.z = orig_z * (1.0f - blend) + comp_z * blend;
+      }
+    }
+
+    if(purity_boost != 0.0f)
+    {
+      const float luma_p = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
+      pixel.xyz += purity_boost * (pixel.xyz - (float3)(luma_p));
+      if(any(pixel.xyz < (float3)(0.0f)) || any(pixel.xyz > (float3)(1.0f)))
+      {
+        float t_p = 1.0f;
+        if(pixel.x < 0.0f) t_p = fmin(t_p, luma_p / (luma_p - pixel.x));
+        if(pixel.y < 0.0f) t_p = fmin(t_p, luma_p / (luma_p - pixel.y));
+        if(pixel.z < 0.0f) t_p = fmin(t_p, luma_p / (luma_p - pixel.z));
+        if(pixel.x > 1.0f) t_p = fmin(t_p, (1.0f - luma_p) / (pixel.x - luma_p));
+        if(pixel.y > 1.0f) t_p = fmin(t_p, (1.0f - luma_p) / (pixel.y - luma_p));
+        if(pixel.z > 1.0f) t_p = fmin(t_p, (1.0f - luma_p) / (pixel.z - luma_p));
+        t_p = fmax(0.0f, t_p);
+        pixel.xyz = (float3)(luma_p) + t_p * (pixel.xyz - (float3)(luma_p));
       }
     }
 

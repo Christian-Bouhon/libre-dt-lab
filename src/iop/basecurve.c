@@ -75,7 +75,7 @@
 #define ACES_EXPOSURE_ADJUST 2.0f
 #define ROLLOFF_THRESHOLD 0.80f
 
-DT_MODULE_INTROSPECTION(10, dt_iop_basecurve_params_t)
+DT_MODULE_INTROSPECTION(11, dt_iop_basecurve_params_t)
 
 typedef struct dt_iop_basecurve_node_t
 {
@@ -101,11 +101,18 @@ typedef struct dt_iop_basecurve_params_t
   float saturation_boost; // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "saturation boost ucs"
   float gamut_strength;   // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "gamut compression"
   float highlight_corr;   // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "highlight hue/sat"
-  int target_gamut;       // $DEFAULT: 2 $DESCRIPTION: "target gamut"
+  int color_space;       // $DEFAULT: 2 $DESCRIPTION: "color space"
   int color_look;         // $DEFAULT: 0 $DESCRIPTION: "color look style"
   float look_opacity;     // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "look opacity"
   float use_rolloff;      // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "highlight roll-off"
   float contrast_brilliance_power; // $MIN: 1.0 $MAX: 2.0 $DEFAULT: 1.1 $DESCRIPTION: "contrast correction"
+  float purity_boost;  // $MIN: -0.5 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "purity boost"
+  float gamut_threshold_c; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.15 $DESCRIPTION: "threshold cyan"
+  float gamut_threshold_m; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.15 $DESCRIPTION: "threshold magenta"
+  float gamut_threshold_y; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.15 $DESCRIPTION: "threshold yellow"
+  float gamut_limit_c;     // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.20 $DESCRIPTION: "limit cyan"
+  float gamut_limit_m;     // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.30 $DESCRIPTION: "limit magenta"
+  float gamut_limit_y;     // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.20 $DESCRIPTION: "limit yellow"
 } dt_iop_basecurve_params_t;
 
 static const float color_looks[11][9] = {
@@ -288,7 +295,7 @@ int legacy_params(dt_iop_module_t *self,
     n->ucs_saturation_balance = 0.0f;
     n->gamut_strength = 0.0f;
     n->highlight_corr = 0.0f;
-    n->target_gamut = 2;
+    n->color_space = 2;
     n->color_look = 0;
     n->look_opacity = 1.0f;
 
@@ -314,7 +321,7 @@ int legacy_params(dt_iop_module_t *self,
       float ucs_saturation_balance;
       float gamut_strength;
       float highlight_corr;
-      int target_gamut;
+      int color_space;
       int color_look;
       float look_opacity;
     } dt_iop_basecurve_params_v7_t;
@@ -347,7 +354,7 @@ int legacy_params(dt_iop_module_t *self,
       float saturation_boost;
       float gamut_strength;
       float highlight_corr;
-      int target_gamut;
+      int color_space;
       int color_look;
       float look_opacity;
       float use_rolloff;
@@ -369,9 +376,42 @@ int legacy_params(dt_iop_module_t *self,
     dt_iop_basecurve_params_t *n = calloc(1, sizeof(dt_iop_basecurve_params_t));
     memcpy(n, o, sizeof(dt_iop_basecurve_params_t));
     n->contrast_brilliance_power = 1.10f;
+    n->purity_boost = 0.0f;
     *new_params = n;
     *new_params_size = sizeof(dt_iop_basecurve_params_t);
     *new_version = 10;
+    return 0;
+  }
+  if(old_version == 10)
+  {
+    dt_iop_basecurve_params_t *n = (dt_iop_basecurve_params_t *)calloc(1, sizeof(dt_iop_basecurve_params_t));
+    memcpy(n, old_params, sizeof(dt_iop_basecurve_params_t) - sizeof(float));
+    n->purity_boost = 0.0f;
+    n->gamut_threshold_c = 0.15f;
+    n->gamut_threshold_m = 0.15f;
+    n->gamut_threshold_y = 0.15f;
+    n->gamut_limit_c = 0.20f;
+    n->gamut_limit_m = 0.30f;
+    n->gamut_limit_y = 0.20f;
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_basecurve_params_t);
+    *new_version = 11;
+    return 0;
+  }
+  if(old_version == 11)
+  {
+    const dt_iop_basecurve_params_t *o = (dt_iop_basecurve_params_t *)old_params;
+    dt_iop_basecurve_params_t *n = calloc(1, sizeof(dt_iop_basecurve_params_t));
+    memcpy(n, o, sizeof(dt_iop_basecurve_params_t));
+    n->gamut_threshold_c = 0.15f;
+    n->gamut_threshold_m = 0.15f;
+    n->gamut_threshold_y = 0.15f;
+    n->gamut_limit_c = 0.20f;
+    n->gamut_limit_m = 0.30f;
+    n->gamut_limit_y = 0.20f;
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_basecurve_params_t);
+    *new_version = 12;
     return 0;
   }
   return 1;
@@ -389,6 +429,7 @@ typedef struct dt_iop_basecurve_gui_data_t
   gboolean   node_sliders_visible; // current visibility state
   GtkWidget *cmb_preserve_colors;
   GtkWidget *workflow_mode;
+  GtkWidget *default_workflow;
   double mouse_x, mouse_y;
   int selected;
   int last_selected;
@@ -401,9 +442,13 @@ typedef struct dt_iop_basecurve_gui_data_t
   GtkWidget *contrast_brilliance_power;
   GtkWidget *gamut_strength;
   GtkWidget *highlight_corr;
-  GtkWidget *target_gamut;
+  GtkWidget *color_space;
   GtkWidget *color_look;
   GtkWidget *look_opacity;
+  GtkWidget *purity_boost;
+  GtkWidget *gamut_threshold_c, *gamut_threshold_m, *gamut_threshold_y;
+  GtkWidget *gamut_limit_c, *gamut_limit_m, *gamut_limit_y;
+  dt_gui_collapsible_section_t gamut_section;
   int last_workflow_mode;
   gboolean look_selected_first_time;
   gboolean in_gui_update; // TRUE while gui_update is running, prevents slider callbacks from adding spurious history
@@ -503,11 +548,18 @@ typedef struct dt_iop_basecurve_data_t
   float saturation_boost;
   float gamut_strength;
   float highlight_corr;
-  int target_gamut;
+  int color_space;
   int color_look;
   float look_opacity;
   float use_rolloff;
   float contrast_brilliance_power;
+  float purity_boost;
+  float gamut_threshold_c;
+  float gamut_threshold_m;
+  float gamut_threshold_y;
+  float gamut_limit_c;
+  float gamut_limit_m;
+  float gamut_limit_y;
 } dt_iop_basecurve_data_t;
 
 typedef struct dt_iop_basecurve_global_data_t
@@ -705,12 +757,21 @@ void reload_defaults(dt_iop_module_t *self)
     d->exposure_bias = 1.0f;
   }
 
-  d->target_gamut = 2;
+  d->color_space = 2;
   d->contrast_brilliance_power = 1.10f;
+  d->gamut_threshold_c = 0.15f;
+  d->gamut_threshold_m = 0.15f;
+  d->gamut_threshold_y = 0.15f;
+  d->gamut_limit_c = 0.20f;
+  d->gamut_limit_m = 0.30f;
+  d->gamut_limit_y = 0.20f;
 
   if(!dt_is_display_referred())
   {
-    d->workflow_mode = 3;
+    int def_work = dt_conf_get_int("plugins/darkroom/basecurve/default_workflow");
+    if(!dt_conf_key_exists("plugins/darkroom/basecurve/default_workflow") || def_work < 1)
+      def_work = 3;
+    d->workflow_mode = def_work;
     d->shadow_lift = 1.0f;
     d->highlight_gain = 1.0f;
     d->ucs_saturation_balance = 0.2f;
@@ -1111,7 +1172,10 @@ int process_cl_fusion(dt_iop_module_t *self,
       CLARG(dev_in), CLARG(dev_comb[0]), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(d->workflow_mode),
       CLARGFLOAT(d->use_rolloff), CLARGFLOAT(d->shadow_lift), CLARGFLOAT(d->highlight_gain), CLARGFLOAT(d->contrast_brilliance_power),
       CLARGFLOAT(d->saturation_boost), CLARGFLOAT(d->ucs_saturation_balance),
-      CLARGFLOAT(d->gamut_strength), CLARGFLOAT(d->highlight_corr), CLARG(d->target_gamut), CLARGFLOAT(d->look_opacity),
+      CLARGFLOAT(d->gamut_strength), CLARGFLOAT(d->purity_boost), CLARGFLOAT(d->highlight_corr),
+      CLARGFLOAT(d->gamut_threshold_c), CLARGFLOAT(d->gamut_threshold_m), CLARGFLOAT(d->gamut_threshold_y),
+      CLARGFLOAT(d->gamut_limit_c), CLARGFLOAT(d->gamut_limit_m), CLARGFLOAT(d->gamut_limit_y),
+      CLARG(d->color_space), CLARGFLOAT(d->look_opacity),
       CLARG(look_mat_buf), CLARGFLOAT(alpha), CLARG(dev_profile_info), CLARG(use_work_profile));
 
 error:
@@ -1208,7 +1272,10 @@ int process_cl_lut(dt_iop_module_t *self,
         CLARG(dev_in), CLARG(dev_tmp), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(d->workflow_mode),
       CLARGFLOAT(d->use_rolloff), CLARGFLOAT(d->shadow_lift), CLARGFLOAT(d->highlight_gain), CLARGFLOAT(d->contrast_brilliance_power),
       CLARGFLOAT(d->saturation_boost), CLARGFLOAT(d->ucs_saturation_balance),
-        CLARGFLOAT(d->gamut_strength), CLARGFLOAT(d->highlight_corr), CLARG(d->target_gamut),
+        CLARGFLOAT(d->gamut_strength), CLARGFLOAT(d->purity_boost), CLARGFLOAT(d->highlight_corr),
+        CLARGFLOAT(d->gamut_threshold_c), CLARGFLOAT(d->gamut_threshold_m), CLARGFLOAT(d->gamut_threshold_y),
+        CLARGFLOAT(d->gamut_limit_c), CLARGFLOAT(d->gamut_limit_m), CLARGFLOAT(d->gamut_limit_y),
+        CLARG(d->color_space),
         CLARGFLOAT(d->look_opacity), CLARG(look_mat_buf), CLARGFLOAT(alpha), CLARG(dev_profile_info), CLARG(use_work_profile));
     if(err != CL_SUCCESS) goto error;
   }
@@ -1542,9 +1609,21 @@ static void process_lut(dt_iop_module_t *self,
   const dt_iop_order_iccprofile_info_t *const work_profile = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
 
   const gboolean has_work_profile = (work_profile != NULL) && dt_is_valid_colormatrix(work_profile->matrix_in[0][0]);
-  const float r_coeff_lum = has_work_profile ? work_profile->matrix_in[1][0] : 0.2627f;
-  const float g_coeff_lum = has_work_profile ? work_profile->matrix_in[1][1] : 0.6780f;
-  const float b_coeff_lum = has_work_profile ? work_profile->matrix_in[1][2] : 0.0593f;
+
+  // Coefficients de luminance selon color_space (0=sRGB, 1=AdobeRGB, 2=Rec.2020)
+  float r_coeff_lum, g_coeff_lum, b_coeff_lum;
+  switch(d->color_space)
+  {
+    case 0: // sRGB (Rec.709)
+      r_coeff_lum = 0.2126f; g_coeff_lum = 0.7152f; b_coeff_lum = 0.0722f;
+      break;
+    case 1: // AdobeRGB
+      r_coeff_lum = 0.2974f; g_coeff_lum = 0.6273f; b_coeff_lum = 0.0753f;
+      break;
+    default: // Rec.2020 (défaut)
+      r_coeff_lum = 0.2627f; g_coeff_lum = 0.6780f; b_coeff_lum = 0.0593f;
+      break;
+  }
 
   const size_t wd = roi_in->width, ht = roi_in->height;
 
@@ -1876,38 +1955,78 @@ static void process_lut(dt_iop_module_t *self,
       }
       if(d->gamut_strength > 0.0f)
       {
-        // Jed Smith style gamut compression
-        // Compresses distance from achromatic axis to preserve hue
-        const float luma = r_coeff_lum * out[k] + g_coeff_lum * out[k+1] + b_coeff_lum * out[k+2];
+        // Jed Smith per-channel gamut compression (no lum_weight, with blend)
+        // Save original values for blending
+        const float orig_r = out[k], orig_g = out[k+1], orig_b = out[k+2];
 
-        // Raise threshold to 0.75 to protect mid-highs and use a smooth quadratic falloff
-        float lum_weight = CLAMP((luma - 0.75f) / (0.95f - 0.75f), 0.0f, 1.0f);
-        lum_weight = lum_weight * lum_weight * (3.0f - 2.0f * lum_weight);
-        const float effective_strength = d->gamut_strength * lum_weight;
+        const float th_c = 1.0f - d->gamut_threshold_c;
+        const float th_m = 1.0f - d->gamut_threshold_m;
+        const float th_y = 1.0f - d->gamut_threshold_y;
 
-        if(effective_strength > 0.0f)
+        const float lim_c = 1.0f + d->gamut_limit_c;
+        const float lim_m = 1.0f + d->gamut_limit_m;
+        const float lim_y = 1.0f + d->gamut_limit_y;
+
+        const float s_c = (1.0f - th_c) / sqrtf(fmaxf(1.001f, lim_c) - 1.0f);
+        const float s_m = (1.0f - th_m) / sqrtf(fmaxf(1.001f, lim_m) - 1.0f);
+        const float s_y = (1.0f - th_y) / sqrtf(fmaxf(1.001f, lim_y) - 1.0f);
+
+        const float ac = fmaxf(out[k], fmaxf(out[k+1], out[k+2]));
+
+        if(ac > 0.0f)
         {
-          float limit = 0.90f;
-          if(d->target_gamut == 1) limit = 0.95f;
-          else if(d->target_gamut == 2) limit = 1.05f; // Add slight headroom
+          const float d_r = (ac - out[k]) / ac;
+          const float d_g = (ac - out[k+1]) / ac;
+          const float d_b = (ac - out[k+2]) / ac;
 
-          const float threshold = limit * 0.80f;
-          const float dist_r = out[k] - luma;
-          const float dist_g = out[k+1] - luma;
-          const float dist_b = out[k+2] - luma;
-          const float max_dist = fmaxf(dist_r, fmaxf(dist_g, dist_b));
+          float cd_r, cd_g, cd_b;
 
-          if(luma + max_dist > threshold)
-          {
-            const float v = luma + max_dist - threshold;
-            const float s = limit - threshold;
-            const float compressed_v = threshold + (s * v) / (v + s);
-            const float factor = fmaxf(0.0f, (compressed_v - luma) / fmaxf(max_dist, 1e-6f));
+          if(d_r < th_c)
+            cd_r = d_r;
+          else
+            cd_r = s_c * sqrtf(d_r - th_c + s_c*s_c*0.25f) - s_c * sqrtf(s_c*s_c*0.25f) + th_c;
 
-            out[k]   = luma + dist_r * (1.0f + effective_strength * (factor - 1.0f));
-            out[k+1] = luma + dist_g * (1.0f + effective_strength * (factor - 1.0f));
-            out[k+2] = luma + dist_b * (1.0f + effective_strength * (factor - 1.0f));
-          }
+          if(d_g < th_m)
+            cd_g = d_g;
+          else
+            cd_g = s_m * sqrtf(d_g - th_m + s_m*s_m*0.25f) - s_m * sqrtf(s_m*s_m*0.25f) + th_m;
+
+          if(d_b < th_y)
+            cd_b = d_b;
+          else
+            cd_b = s_y * sqrtf(d_b - th_y + s_y*s_y*0.25f) - s_y * sqrtf(s_y*s_y*0.25f) + th_y;
+
+          // Compressed RGB
+          float comp_r = ac - cd_r * ac;
+          float comp_g = ac - cd_g * ac;
+          float comp_b = ac - cd_b * ac;
+
+          // Blend between original and compressed (Jed Smith style: mix(rgb, crgb, strength))
+          float blend = d->gamut_strength; // 0.0 = original, 1.0 = full compression
+          out[k]   = orig_r * (1.0f - blend) + comp_r * blend;
+          out[k+1] = orig_g * (1.0f - blend) + comp_g * blend;
+          out[k+2] = orig_b * (1.0f - blend) + comp_b * blend;
+        }
+      }
+
+      if(d->purity_boost != 0.0f)
+      {
+        const float luma_p = r_coeff_lum * out[k] + g_coeff_lum * out[k+1] + b_coeff_lum * out[k+2];
+        out[k]   += d->purity_boost * (out[k]   - luma_p);
+        out[k+1] += d->purity_boost * (out[k+1] - luma_p);
+        out[k+2] += d->purity_boost * (out[k+2] - luma_p);
+        if(out[k] < 0.0f || out[k] > 1.0f || out[k+1] < 0.0f || out[k+1] > 1.0f
+           || out[k+2] < 0.0f || out[k+2] > 1.0f)
+        {
+          const float t_p = fmaxf(0.0f, fminf(
+            (out[k] < 0.0f) ? luma_p / fmaxf(luma_p - out[k], 1e-6f) : ((out[k] > 1.0f) ? (1.0f - luma_p) / fmaxf(out[k] - luma_p, 1e-6f) : 1.0f),
+            fminf(
+              (out[k+1] < 0.0f) ? luma_p / fmaxf(luma_p - out[k+1], 1e-6f) : ((out[k+1] > 1.0f) ? (1.0f - luma_p) / fmaxf(out[k+1] - luma_p, 1e-6f) : 1.0f),
+              (out[k+2] < 0.0f) ? luma_p / fmaxf(luma_p - out[k+2], 1e-6f) : ((out[k+2] > 1.0f) ? (1.0f - luma_p) / fmaxf(out[k+2] - luma_p, 1e-6f) : 1.0f)
+            )));
+          out[k]   = luma_p + t_p * (out[k]   - luma_p);
+          out[k+1] = luma_p + t_p * (out[k+1] - luma_p);
+          out[k+2] = luma_p + t_p * (out[k+2] - luma_p);
         }
       }
 
@@ -1957,9 +2076,21 @@ static void process_fusion(dt_iop_module_t *self,
     = dt_ioppr_get_pipe_current_profile_info(self, piece->pipe);
 
   const gboolean has_work_profile = (work_profile != NULL) && dt_is_valid_colormatrix(work_profile->matrix_in[0][0]);
-  const float r_coeff_lum = has_work_profile ? work_profile->matrix_in[1][0] : 0.2627f;
-  const float g_coeff_lum = has_work_profile ? work_profile->matrix_in[1][1] : 0.6780f;
-  const float b_coeff_lum = has_work_profile ? work_profile->matrix_in[1][2] : 0.0593f;
+
+  // Coefficients de luminance selon color_space (0=sRGB, 1=AdobeRGB, 2=Rec.2020)
+  float r_coeff_lum, g_coeff_lum, b_coeff_lum;
+  switch(d->color_space)
+  {
+    case 0: // sRGB (Rec.709)
+      r_coeff_lum = 0.2126f; g_coeff_lum = 0.7152f; b_coeff_lum = 0.0722f;
+      break;
+    case 1: // AdobeRGB
+      r_coeff_lum = 0.2974f; g_coeff_lum = 0.6273f; b_coeff_lum = 0.0753f;
+      break;
+    default: // Rec.2020 (défaut)
+      r_coeff_lum = 0.2627f; g_coeff_lum = 0.6780f; b_coeff_lum = 0.0593f;
+      break;
+  }
 
   // allocate temporary buffer for wavelet transform + blending
   const int wd = roi_in->width, ht = roi_in->height;
@@ -2390,39 +2521,80 @@ static void process_fusion(dt_iop_module_t *self,
 
       if(d->gamut_strength > 0.0f)
       {
-        // Jed Smith style gamut compression for fusion path
-        const float luma = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2];
+        // Jed Smith per-channel gamut compression (no lum_weight, with blend) for fusion path
+        // Save original values for blending
+        const float orig_r = val[0], orig_g = val[1], orig_b = val[2];
 
-        // Raise threshold to 0.75 to protect mid-highs and use a smooth quadratic falloff
-        float lum_weight = CLAMP((luma - 0.75f) / (0.95f - 0.75f), 0.0f, 1.0f);
-        lum_weight = lum_weight * lum_weight * (3.0f - 2.0f * lum_weight);
-        const float effective_strength = d->gamut_strength * lum_weight;
+        const float th_c = 1.0f - d->gamut_threshold_c;
+        const float th_m = 1.0f - d->gamut_threshold_m;
+        const float th_y = 1.0f - d->gamut_threshold_y;
 
-        if(effective_strength > 0.0f)
+        const float lim_c = 1.0f + d->gamut_limit_c;
+        const float lim_m = 1.0f + d->gamut_limit_m;
+        const float lim_y = 1.0f + d->gamut_limit_y;
+
+        const float s_c = (1.0f - th_c) / sqrtf(fmaxf(1.001f, lim_c) - 1.0f);
+        const float s_m = (1.0f - th_m) / sqrtf(fmaxf(1.001f, lim_m) - 1.0f);
+        const float s_y = (1.0f - th_y) / sqrtf(fmaxf(1.001f, lim_y) - 1.0f);
+
+        const float ac = fmaxf(val[0], fmaxf(val[1], val[2]));
+
+        if(ac > 0.0f)
         {
-          float limit = 0.90f;
-          if(d->target_gamut == 1) limit = 0.95f;
-          else if(d->target_gamut == 2) limit = 1.05f;
+          const float d_r = (ac - val[0]) / ac;
+          const float d_g = (ac - val[1]) / ac;
+          const float d_b = (ac - val[2]) / ac;
 
-          const float threshold = limit * 0.80f;
-          const float dist_r = val[0] - luma;
-          const float dist_g = val[1] - luma;
-          const float dist_b = val[2] - luma;
-          const float max_dist = fmaxf(dist_r, fmaxf(dist_g, dist_b));
+          float cd_r, cd_g, cd_b;
 
-          if(luma + max_dist > threshold)
-          {
-            const float v = luma + max_dist - threshold;
-            const float s = limit - threshold;
-            const float compressed_v = threshold + (s * v) / (v + s);
-            const float factor = fmaxf(0.0f, (compressed_v - luma) / fmaxf(max_dist, 1e-6f));
+          if(d_r < th_c)
+            cd_r = d_r;
+          else
+            cd_r = s_c * sqrtf(d_r - th_c + s_c*s_c*0.25f) - s_c * sqrtf(s_c*s_c*0.25f) + th_c;
 
-            val[0] = luma + dist_r * (1.0f + effective_strength * (factor - 1.0f));
-            val[1] = luma + dist_g * (1.0f + effective_strength * (factor - 1.0f));
-            val[2] = luma + dist_b * (1.0f + effective_strength * (factor - 1.0f));
-          }
+          if(d_g < th_m)
+            cd_g = d_g;
+          else
+            cd_g = s_m * sqrtf(d_g - th_m + s_m*s_m*0.25f) - s_m * sqrtf(s_m*s_m*0.25f) + th_m;
+
+          if(d_b < th_y)
+            cd_b = d_b;
+          else
+            cd_b = s_y * sqrtf(d_b - th_y + s_y*s_y*0.25f) - s_y * sqrtf(s_y*s_y*0.25f) + th_y;
+
+          // Compressed RGB
+          float comp_r = ac - cd_r * ac;
+          float comp_g = ac - cd_g * ac;
+          float comp_b = ac - cd_b * ac;
+
+          // Blend between original and compressed (Jed Smith style: mix(rgb, crgb, strength))
+          float blend = d->gamut_strength; // 0.0 = original, 1.0 = full compression
+          val[0] = orig_r * (1.0f - blend) + comp_r * blend;
+          val[1] = orig_g * (1.0f - blend) + comp_g * blend;
+          val[2] = orig_b * (1.0f - blend) + comp_b * blend;
         }
       }
+      }
+
+      if(d->purity_boost != 0.0f)
+      {
+        const float luma_p = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2];
+        val[0] += d->purity_boost * (val[0] - luma_p);
+        val[1] += d->purity_boost * (val[1] - luma_p);
+        val[2] += d->purity_boost * (val[2] - luma_p);
+        if(val[0] < 0.0f || val[0] > 1.0f || val[1] < 0.0f || val[1] > 1.0f
+           || val[2] < 0.0f || val[2] > 1.0f)
+        {
+          const float t_p = fmaxf(0.0f, fminf(
+            (val[0] < 0.0f) ? luma_p / (luma_p - val[0]) : ((val[0] > 1.0f) ? (1.0f - luma_p) / (val[0] - luma_p) : 1.0f),
+            fminf(
+              (val[1] < 0.0f) ? luma_p / (luma_p - val[1]) : ((val[1] > 1.0f) ? (1.0f - luma_p) / (val[1] - luma_p) : 1.0f),
+              (val[2] < 0.0f) ? luma_p / (luma_p - val[2]) : ((val[2] > 1.0f) ? (1.0f - luma_p) / (val[2] - luma_p) : 1.0f)
+            )));
+          val[0] = luma_p + t_p * (val[0] - luma_p);
+          val[1] = luma_p + t_p * (val[1] - luma_p);
+          val[2] = luma_p + t_p * (val[2] - luma_p);
+        }
       }
 
       // OpenDRT-style weighted red and blue correction for higher precision
@@ -2507,6 +2679,13 @@ void commit_params(dt_iop_module_t *self,
     d->shadow_lift            = 2.0f - p->shadow_lift;
     d->highlight_gain         = p->highlight_gain;
   d->contrast_brilliance_power       = p->contrast_brilliance_power;
+  d->purity_boost                    = p->purity_boost;
+  d->gamut_threshold_c       = p->gamut_threshold_c;
+  d->gamut_threshold_m       = p->gamut_threshold_m;
+  d->gamut_threshold_y       = p->gamut_threshold_y;
+  d->gamut_limit_c          = p->gamut_limit_c;
+  d->gamut_limit_m          = p->gamut_limit_m;
+  d->gamut_limit_y          = p->gamut_limit_y;
     d->ucs_saturation_balance = p->ucs_saturation_balance;
     d->saturation_boost       = p->saturation_boost;
     d->gamut_strength         = p->gamut_strength;
@@ -2520,12 +2699,19 @@ void commit_params(dt_iop_module_t *self,
     d->shadow_lift            = 1.0f;
     d->highlight_gain         = 1.0f;
     d->contrast_brilliance_power       = 1.10f;
+    d->purity_boost                    = 0.0f;
+    d->gamut_threshold_c       = 0.15f;
+    d->gamut_threshold_m       = 0.15f;
+    d->gamut_threshold_y       = 0.15f;
+    d->gamut_limit_c          = 0.20f;
+    d->gamut_limit_m          = 0.30f;
+    d->gamut_limit_y          = 0.20f;
     d->ucs_saturation_balance = 0.0f;
     d->saturation_boost       = 0.0f;
     d->gamut_strength         = 0.0f;
     d->highlight_corr         = 0.0f;
   }
-  d->target_gamut = p->target_gamut;
+  d->color_space = p->color_space;
   d->color_look = p->color_look;
   d->look_opacity = p->look_opacity;
 
@@ -2763,6 +2949,12 @@ void init(dt_iop_module_t *self)
   d->shadow_lift = 1.0f;
   d->highlight_gain = 1.0f;
   d->contrast_brilliance_power = 1.10f;
+  d->gamut_threshold_c = 0.15f;
+  d->gamut_threshold_m = 0.15f;
+  d->gamut_threshold_y = 0.15f;
+  d->gamut_limit_c = 0.20f;
+  d->gamut_limit_m = 0.30f;
+  d->gamut_limit_y = 0.20f;
 }
 
 void init_global(dt_iop_module_so_t *self)
@@ -3400,12 +3592,12 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       gtk_widget_set_visible(g->contrast_brilliance_power, p->workflow_mode == 3);
       gtk_widget_set_visible(g->node_x_slider, TRUE);
       gtk_widget_set_visible(g->node_y_slider, TRUE);
-      gtk_widget_set_visible(g->logbase, FALSE);
       gtk_widget_set_visible(g->saturation_boost, TRUE);
       gtk_widget_set_visible(g->ucs_saturation_balance, TRUE);
+      gtk_widget_set_visible(g->gamut_section.expander, TRUE); // Rendre visible la section gamut
       gtk_widget_set_visible(g->gamut_strength, TRUE);
       gtk_widget_set_visible(g->highlight_corr, TRUE);
-      gtk_widget_set_visible(g->target_gamut, TRUE);
+      gtk_widget_set_visible(g->color_space, TRUE);
       gtk_widget_set_visible(g->color_look, TRUE);
       gtk_widget_set_visible(g->look_opacity, p->color_look > 0);
       gtk_widget_set_visible(g->use_rolloff, TRUE);
@@ -3418,9 +3610,14 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       gtk_widget_set_sensitive(g->ucs_saturation_balance, TRUE);
       gtk_widget_set_sensitive(g->gamut_strength, TRUE);
       gtk_widget_set_sensitive(g->highlight_corr, TRUE);
-      gtk_widget_set_sensitive(g->target_gamut, TRUE);
+      gtk_widget_set_sensitive(g->color_space, TRUE);
       gtk_widget_set_sensitive(g->color_look, TRUE);
       gtk_widget_set_sensitive(g->look_opacity, p->color_look > 0);
+      if(w == g->color_space)
+      {
+        /* color_space now only controls luminance coefficients, not gamut threshold/limit.
+           The 6 gamut sliders are independent of color_space selection. */
+      }
       if(w == g->color_look)
       {
         // Only reset opacity to 100% if a look is selected for the first time.
@@ -3449,7 +3646,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
           dt_bauhaus_slider_set(g->ucs_saturation_balance, 0.2f);
           p->saturation_boost = 0.0f;
           dt_bauhaus_slider_set(g->saturation_boost, 0.0f);
-          
+
           if(p->workflow_mode == 3)
           {
             p->use_rolloff = 0.0f;
@@ -3488,9 +3685,8 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       gtk_widget_set_visible(g->node_y_slider, TRUE);
       gtk_widget_set_visible(g->saturation_boost, FALSE);
       gtk_widget_set_visible(g->ucs_saturation_balance, FALSE);
-      gtk_widget_set_visible(g->gamut_strength, FALSE);
-      gtk_widget_set_visible(g->highlight_corr, FALSE);
-      gtk_widget_set_visible(g->target_gamut, FALSE);
+      gtk_widget_set_visible(g->gamut_section.expander, FALSE); // Masquer la section gamut en mode display
+      gtk_widget_set_visible(g->highlight_corr, FALSE); // Masquer highlight hue/sat en mode display
       gtk_widget_set_visible(g->color_look, TRUE);
       gtk_widget_set_visible(g->look_opacity, p->color_look > 0);
       gtk_widget_set_visible(g->use_rolloff, FALSE);
@@ -3501,7 +3697,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       gtk_widget_set_sensitive(g->ucs_saturation_balance, FALSE);
       gtk_widget_set_sensitive(g->gamut_strength, FALSE);
       gtk_widget_set_sensitive(g->highlight_corr, FALSE);
-      gtk_widget_set_sensitive(g->target_gamut, FALSE);
+      gtk_widget_set_sensitive(g->color_space, FALSE);
       gtk_widget_set_sensitive(g->color_look, TRUE);
       gtk_widget_set_sensitive(g->look_opacity, p->color_look > 0);
       gtk_widget_set_sensitive(g->node_x_slider, TRUE);
@@ -3539,12 +3735,21 @@ void gui_update(dt_iop_module_t *self)
   dt_iop_basecurve_gui_data_t *g = self->gui_data;
   g->in_gui_update = TRUE;
 
+  dt_gui_update_collapsible_section(&g->gamut_section);
+
   gtk_widget_set_visible(g->exposure_step, p->exposure_fusion != 0);
   gtk_widget_set_visible(g->exposure_bias, p->exposure_fusion != 0);
 
   dt_bauhaus_slider_set(g->gamut_strength, p->gamut_strength);
+  dt_bauhaus_slider_set(g->purity_boost, p->purity_boost);
+  dt_bauhaus_slider_set(g->gamut_threshold_c, p->gamut_threshold_c);
+  dt_bauhaus_slider_set(g->gamut_threshold_m, p->gamut_threshold_m);
+  dt_bauhaus_slider_set(g->gamut_threshold_y, p->gamut_threshold_y);
+  dt_bauhaus_slider_set(g->gamut_limit_c, p->gamut_limit_c);
+  dt_bauhaus_slider_set(g->gamut_limit_m, p->gamut_limit_m);
+  dt_bauhaus_slider_set(g->gamut_limit_y, p->gamut_limit_y);
   dt_bauhaus_slider_set(g->highlight_corr, p->highlight_corr);
-  dt_bauhaus_combobox_set(g->target_gamut, p->target_gamut);
+  dt_bauhaus_combobox_set(g->color_space, p->color_space);
   dt_bauhaus_combobox_set(g->workflow_mode, p->workflow_mode);
   dt_bauhaus_slider_set(g->shadow_lift, p->shadow_lift);
   dt_bauhaus_slider_set(g->highlight_gain, p->highlight_gain);
@@ -3554,6 +3759,11 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->use_rolloff, p->use_rolloff);
   dt_bauhaus_combobox_set(g->color_look, p->color_look);
   dt_bauhaus_slider_set(g->look_opacity, p->look_opacity);
+
+  int def_work = dt_conf_get_int("plugins/darkroom/basecurve/default_workflow");
+  if(!dt_conf_key_exists("plugins/darkroom/basecurve/default_workflow") || def_work < 1) def_work = 3;
+  dt_bauhaus_combobox_set(g->default_workflow, def_work - 1);
+
   int display_idx = (g->selected >= 0) ? g->selected : g->last_selected;
   if(display_idx < 0 || display_idx >= p->basecurve_nodes[0])
   {
@@ -3581,6 +3791,13 @@ static void logbase_callback(GtkWidget *slider, dt_iop_module_t *self)
   dt_iop_basecurve_gui_data_t *g = self->gui_data;
   g->loglogscale = eval_grey(dt_bauhaus_slider_get(g->logbase));
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
+}
+
+static void default_workflow_callback(GtkWidget *combo, dt_iop_module_t *self)
+{
+  if(darktable.gui->reset) return;
+  // index 0 -> kinematic(1), 1 -> dynamic(2), 2 -> cinematic DRT(3)
+  dt_conf_set_int("plugins/darkroom/basecurve/default_workflow", dt_bauhaus_combobox_get(combo) + 1);
 }
 
 static void node_x_slider_callback(GtkWidget *slider, dt_iop_module_t *self)
@@ -3654,6 +3871,7 @@ void gui_init(dt_iop_module_t *self)
   g->loglogscale = 0;
   g->look_selected_first_time = FALSE;
   g->in_gui_update = FALSE;
+  g->last_workflow_mode = p->workflow_mode;
 
   g->area = GTK_DRAWING_AREA(dt_ui_resize_wrap(NULL, 0, "plugins/darkroom/basecurve/graph_height"));
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->area), _("abscissa: input, ordinate: output. works on RGB channels"));
@@ -3847,14 +4065,32 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_default(g->use_rolloff, 0.0);
   gtk_widget_set_tooltip_text(g->use_rolloff, _("desaturate highlights progressively starting at 80% to avoid color clipping artifacts."));
 
-  g->target_gamut = dt_bauhaus_combobox_from_params(self, "target_gamut");
-  dt_bauhaus_combobox_add(g->target_gamut, "sRGB (Rec.709)");
-  dt_bauhaus_combobox_add(g->target_gamut, "AdobeRGB");
-  dt_bauhaus_combobox_add(g->target_gamut, "Rec.2020");
-  gtk_widget_set_tooltip_text(g->target_gamut, _("select the destination color space (sRGB, AdobeRGB,\n" 
-                                                  "or Rec.2020). this sets the legal boundary for color saturation."));
+  dt_gui_new_collapsible_section(&g->gamut_section, "plugins/darkroom/basecurve/expand_gamut",
+                                 _("gamut and options"), GTK_BOX(self->widget), DT_ACTION(self));
+  gtk_widget_set_tooltip_text(g->gamut_section.expander,
+                     _("This section controls gamut compression to manage out-of-gamut colors in scene-referred modes.\n"
+                       "It is particularly suited for Kinematic and Dynamic workflows which operate in the JzAzBz UCS color space.\n"
+                       "For Cinematic DRT mode, gamut handling is not required as it is already processed in Oklab space,\n"
+                       "but external sliders remain available and functional. You can combine internal Oklab compression \n"
+                       "with Jed Smith (JzAzBz) compression for specific treatments."));
+
+  GtkWidget *main_box = self->widget;
+  self->widget = GTK_WIDGET(g->gamut_section.container);
 
   g->gamut_strength = dt_bauhaus_slider_from_params(self, "gamut_strength");
+  g->purity_boost = dt_bauhaus_slider_from_params(self, "purity_boost");
+  dt_bauhaus_widget_set_label(g->purity_boost, NULL, _("purity boost"));
+  dt_bauhaus_slider_set_format(g->purity_boost, "%");
+  dt_bauhaus_slider_set_factor(g->purity_boost, 100.0);
+  dt_bauhaus_slider_set_digits(g->purity_boost, 1);
+  dt_bauhaus_slider_set_soft_range(g->purity_boost, -0.5, 1.0);
+  dt_bauhaus_slider_set_default(g->purity_boost, 0.0);
+  dt_bauhaus_slider_set_step(g->purity_boost, 0.005);
+  gtk_widget_set_tooltip_text(g->purity_boost,
+    _("boosts color purity after gamut compression.\n"
+      "stays within gamut via hue-preserving clamp.\n"
+      "negative values add extra compression."));
+
   dt_bauhaus_widget_set_label(g->gamut_strength, NULL, _("compression smoothness"));
   gtk_widget_set_tooltip_text(g->gamut_strength,
                               _("defines how high in the highlights the compression starts.\n"
@@ -3866,6 +4102,88 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_digits(g->gamut_strength, 1);
   dt_bauhaus_slider_set_step(g->gamut_strength, 0.001);
   dt_bauhaus_slider_set_soft_range(g->gamut_strength, 0.0, 1.0);
+
+  g->gamut_threshold_c = dt_bauhaus_slider_from_params(self, "gamut_threshold_c");
+  dt_bauhaus_widget_set_label(g->gamut_threshold_c, NULL, _("threshold cyan"));
+  dt_bauhaus_slider_set_format(g->gamut_threshold_c, "%");
+  dt_bauhaus_slider_set_factor(g->gamut_threshold_c, 100.0);
+  dt_bauhaus_slider_set_digits(g->gamut_threshold_c, 1);
+  dt_bauhaus_slider_set_default(g->gamut_threshold_c, 0.15);
+  dt_bauhaus_slider_set_step(g->gamut_threshold_c, 0.005);
+  gtk_widget_set_tooltip_text(g->gamut_threshold_c,
+    _("percentage of core gamut to protect from compression.\n"
+      "higher values protect more colors but may leave out-of-gamut colors unhandled."));
+
+  g->gamut_threshold_m = dt_bauhaus_slider_from_params(self, "gamut_threshold_m");
+  dt_bauhaus_widget_set_label(g->gamut_threshold_m, NULL, _("threshold magenta"));
+  dt_bauhaus_slider_set_format(g->gamut_threshold_m, "%");
+  dt_bauhaus_slider_set_factor(g->gamut_threshold_m, 100.0);
+  dt_bauhaus_slider_set_digits(g->gamut_threshold_m, 1);
+  dt_bauhaus_slider_set_default(g->gamut_threshold_m, 0.15);
+  dt_bauhaus_slider_set_step(g->gamut_threshold_m, 0.005);
+  gtk_widget_set_tooltip_text(g->gamut_threshold_m, _("protect core gamut for magenta/green hues"));
+
+  g->gamut_threshold_y = dt_bauhaus_slider_from_params(self, "gamut_threshold_y");
+  dt_bauhaus_widget_set_label(g->gamut_threshold_y, NULL, _("threshold yellow"));
+  dt_bauhaus_slider_set_format(g->gamut_threshold_y, "%");
+  dt_bauhaus_slider_set_factor(g->gamut_threshold_y, 100.0);
+  dt_bauhaus_slider_set_digits(g->gamut_threshold_y, 1);
+  dt_bauhaus_slider_set_default(g->gamut_threshold_y, 0.15);
+  dt_bauhaus_slider_set_step(g->gamut_threshold_y, 0.005);
+  gtk_widget_set_tooltip_text(g->gamut_threshold_y, _("protect core gamut for yellow/blue hues"));
+
+  g->gamut_limit_c = dt_bauhaus_slider_from_params(self, "gamut_limit_c");
+  dt_bauhaus_widget_set_label(g->gamut_limit_c, NULL, _("limit cyan"));
+  dt_bauhaus_slider_set_format(g->gamut_limit_c, "%");
+  dt_bauhaus_slider_set_factor(g->gamut_limit_c, 100.0);
+  dt_bauhaus_slider_set_digits(g->gamut_limit_c, 1);
+  dt_bauhaus_slider_set_default(g->gamut_limit_c, 0.20);
+  dt_bauhaus_slider_set_step(g->gamut_limit_c, 0.005);
+  gtk_widget_set_tooltip_text(g->gamut_limit_c,
+    _("distance limit for cyan/red channel compression.\n"
+      "higher values compress more, creating more saturated results."));
+
+  g->gamut_limit_m = dt_bauhaus_slider_from_params(self, "gamut_limit_m");
+  dt_bauhaus_widget_set_label(g->gamut_limit_m, NULL, _("limit magenta"));
+  dt_bauhaus_slider_set_format(g->gamut_limit_m, "%");
+  dt_bauhaus_slider_set_factor(g->gamut_limit_m, 100.0);
+  dt_bauhaus_slider_set_digits(g->gamut_limit_m, 1);
+  dt_bauhaus_slider_set_default(g->gamut_limit_m, 0.30);
+  dt_bauhaus_slider_set_step(g->gamut_limit_m, 0.005);
+  gtk_widget_set_tooltip_text(g->gamut_limit_m, _("distance limit for magenta/green channel"));
+
+  g->gamut_limit_y = dt_bauhaus_slider_from_params(self, "gamut_limit_y");
+  dt_bauhaus_widget_set_label(g->gamut_limit_y, NULL, _("limit yellow"));
+  dt_bauhaus_slider_set_format(g->gamut_limit_y, "%");
+  dt_bauhaus_slider_set_factor(g->gamut_limit_y, 100.0);
+  dt_bauhaus_slider_set_digits(g->gamut_limit_y, 1);
+  dt_bauhaus_slider_set_default(g->gamut_limit_y, 0.20);
+  dt_bauhaus_slider_set_step(g->gamut_limit_y, 0.005);
+  gtk_widget_set_tooltip_text(g->gamut_limit_y, _("distance limit for yellow/blue channel"));
+
+  g->color_space = dt_bauhaus_combobox_from_params(self, "color_space");
+  dt_bauhaus_combobox_add(g->color_space, "sRGB (Rec.709)");
+  dt_bauhaus_combobox_add(g->color_space, "AdobeRGB");
+  dt_bauhaus_combobox_add(g->color_space, "Rec.2020");
+  gtk_widget_set_tooltip_text(g->color_space, _("select the color space for luminance calculation.\n"
+                                                  "This affects how brightness is computed for tone-mapping.\n"
+                                                  "It does NOT control gamut compression - use the separate sliders for that.\n"
+                                                  "\n"
+                                                  "sRGB (Rec.709): standard coefficients, narrow gamut\n"
+                                                  "AdobeRGB: medium gamut coefficients\n"
+                                                  "Rec.2020: widest gamut, recommended for HDR/ACES workflows"));
+
+  g->default_workflow = dt_bauhaus_combobox_new(self);
+  dt_bauhaus_widget_set_label(g->default_workflow, NULL, _("default workflow"));
+  // removed display from default preferences to avoid UI visibility issues
+  dt_bauhaus_combobox_add(g->default_workflow, _("kinematic"));
+  dt_bauhaus_combobox_add(g->default_workflow, _("dynamic"));
+  dt_bauhaus_combobox_add(g->default_workflow, _("cinematic DRT"));
+  gtk_widget_set_tooltip_text(g->default_workflow, _("select the default workflow mode used when resetting the module in scene-referred mode."));
+  g_signal_connect(G_OBJECT(g->default_workflow), "value-changed", G_CALLBACK(default_workflow_callback), self);
+  dt_gui_box_add(self->widget, g->default_workflow);
+
+  self->widget = main_box;
 
   g->logbase = dt_bauhaus_slider_new_with_range(self, 0.0f, 40.0f, 0, 0.0f, 2);
   dt_bauhaus_widget_set_label(g->logbase, NULL, N_("scale for graph"));
