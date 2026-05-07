@@ -1596,6 +1596,378 @@ static inline void oklab_to_rgb_cpu(const float lab[3], float rgb[3])
   rgb[2] = -0.0041960863f * l - 0.7034186147f * m + 1.7076147010f * s;
 }
 
+static void apply_postprocess(float *rgb, dt_iop_basecurve_data_t *const d,
+                              const dt_iop_order_iccprofile_info_t *const work_profile,
+                              const gboolean has_work_profile,
+                              const float r_coeff_lum, const float g_coeff_lum, const float b_coeff_lum)
+{
+  float *const out = rgb;
+  const float *const mat = (d->color_look > 0) ? color_looks[d->color_look] : NULL;
+
+  float r = out[0];
+  float g = out[1];
+  float b = out[2];
+
+  r = fmaxf(-1e6f, fminf(r, 1e6f));
+  g = fmaxf(-1e6f, fminf(g, 1e6f));
+  b = fmaxf(-1e6f, fminf(b, 1e6f));
+
+  if(mat)
+  {
+    const float tr = r * mat[0] + g * mat[1] + b * mat[2];
+    const float tg = r * mat[3] + g * mat[4] + b * mat[5];
+    const float tb = r * mat[6] + g * mat[7] + b * mat[8];
+
+    out[0] = r * (1.0f - d->look_opacity) + tr * d->look_opacity;
+    out[1] = g * (1.0f - d->look_opacity) + tg * d->look_opacity;
+    out[2] = b * (1.0f - d->look_opacity) + tb * d->look_opacity;
+
+    out[0] = fmaxf(out[0], 0.0f);
+    out[1] = fmaxf(out[1], 0.0f);
+    out[2] = fmaxf(out[2], 0.0f);
+
+    r = out[0];
+    g = out[1];
+    b = out[2];
+  }
+
+  if(d->highlight_gain != 1.0f && d->workflow_mode != 3)
+  {
+    r *= d->highlight_gain;
+    g *= d->highlight_gain;
+    b *= d->highlight_gain;
+  }
+  if(d->shadow_lift != 1.0f && d->workflow_mode != 3)
+  {
+    r = powf(r, d->shadow_lift);
+    g = powf(g, d->shadow_lift);
+    b = powf(b, d->shadow_lift);
+  }
+
+  dt_aligned_pixel_t xyz = { 0 };
+  float y_in, y_out, gain;
+
+  if(has_work_profile)
+  {
+    dt_aligned_pixel_t pix = { r, g, b, 0.0f };
+    dt_apply_transposed_color_matrix(pix, work_profile->matrix_in_transposed, xyz);
+    y_in = xyz[1];
+  }
+  else
+  {
+    y_in = r_coeff_lum * r + g_coeff_lum * g + b_coeff_lum * b;
+  }
+  y_out = y_in;
+
+  if(d->workflow_mode == 1 || d->workflow_mode == 2)
+  {
+    if(!has_work_profile)
+    {
+      xyz[0] = 0.636958f * r + 0.144617f * g + 0.168881f * b;
+      xyz[1] = y_in;
+      xyz[2] = 0.000000f * r + 0.028073f * g + 1.060985f * b;
+    }
+    for(int i = 0; i < 3; i++) xyz[i] = fmaxf(xyz[i], 0.0f);
+
+    float xyz_scaled[4] = { xyz[0] * 400.0f, xyz[1] * 400.0f, xyz[2] * 400.0f, 0.0f };
+    float jab[4] = { 0 };
+    dt_XYZ_2_JzAzBz(xyz_scaled, jab);
+
+    const float L = fminf(fmaxf(jab[0], 0.0f), 1.0f);
+    const float alpha = 0.6f;
+    const float k_scale = 1.0f + alpha * L * L;
+    const float x_scaled = y_in / k_scale;
+
+    if(d->workflow_mode == 1)
+      y_out = _aces_tone_map(x_scaled) * k_scale;
+    else
+      y_out = _aces_20_tonemap(x_scaled * ACES_EXPOSURE_ADJUST) * k_scale;
+  }
+  else if(d->workflow_mode == 3)
+  {
+    float rgb_tmp[3] = { r, g, b };
+    float lab[3];
+    rgb_to_oklab_cpu(rgb_tmp, lab);
+
+    const float L_ok = lab[0];
+    const float mask_ok = 1.0f / (1.0f + expf((L_ok - 0.5f) * 10.0f));
+    const float weight_ok = 2.0f * mask_ok - 1.0f;
+    const float mid_weight = 1.0f - weight_ok * weight_ok;
+
+    float chroma = hypotf(lab[1], lab[2]);
+    const float vibrance_weight = fmaxf(0.0f, 1.0f - chroma * 2.5f);
+    const float sat_mult = (1.0f + d->saturation_boost * mid_weight * vibrance_weight) * (1.0f + d->ucs_saturation_balance * (weight_ok * weight_ok * weight_ok));
+    lab[1] *= sat_mult;
+    lab[2] *= sat_mult;
+
+    const float L_achromatic = lab[0];
+    chroma = hypotf(lab[1], lab[2]);
+
+    float V_norm = sqrtf(L_achromatic * L_achromatic + chroma * chroma);
+    float purity = (V_norm > 1e-6f) ? (chroma / V_norm) : 0.0f;
+
+    const float p_thresh = 0.5f;
+    float purity_comp = (purity > p_thresh) ? p_thresh + (purity - p_thresh) / (1.0f + 0.2f * (purity - p_thresh)) : purity;
+
+    float V_orig = fmaxf(0.0f, powf(V_norm, d->contrast_brilliance_power));
+    V_orig *= (1.189f + d->highlight_gain);
+    V_orig = fmaxf(0.0f, powf(V_orig, d->shadow_lift + 1.0f));
+
+    float V_new = _aces_20_tonemap(V_orig);
+
+    float compression = (V_norm > 1e-4f) ? (V_new / V_norm) : 1.0f;
+    float gate_power = 0.5f * (1.0f - d->highlight_corr);
+    float saturation_gate = CLAMP(powf(compression, gate_power), 0.0f, 1.0f);
+
+    lab[0] = V_new * sqrtf(fmaxf(0.0f, 1.0f - purity_comp * purity_comp));
+    lab[1] *= (V_new * purity_comp * saturation_gate) / fmaxf(chroma, 1e-6f);
+    lab[2] *= (V_new * purity_comp * saturation_gate) / fmaxf(chroma, 1e-6f);
+
+    oklab_to_rgb_cpu(lab, rgb_tmp);
+    r = rgb_tmp[0]; g = rgb_tmp[1]; b = rgb_tmp[2];
+    y_out = lab[0];
+  }
+
+  gain = y_out / fmaxf(y_in, 1e-6f);
+  if(d->workflow_mode != 3) {
+    r *= gain;
+    g *= gain;
+    b *= gain;
+  }
+
+  if(d->use_rolloff > 0.0f)
+  {
+    const float threshold = 0.80f;
+    if(y_out > threshold)
+    {
+      float factor = (y_out - threshold) / (1.0f - threshold);
+      factor = CLAMP(factor, 0.0f, 1.0f) * d->use_rolloff;
+      const float blend_target = (d->workflow_mode == 3) ? 1.0f : y_out;
+      r = r * (1.0f - factor) + blend_target * factor;
+      g = g * (1.0f - factor) + blend_target * factor;
+      b = b * (1.0f - factor) + blend_target * factor;
+    }
+  }
+
+  if(d->ucs_saturation_balance != 0.0f || d->gamut_strength > 0.0f || d->highlight_corr != 0.0f)
+  {
+    if(has_work_profile)
+    {
+      dt_aligned_pixel_t pix = { r, g, b, 0.0f };
+      dt_apply_transposed_color_matrix(pix, work_profile->matrix_in_transposed, xyz);
+    }
+    else
+    {
+      xyz[0] = 0.636958f * r + 0.144617f * g + 0.168881f * b;
+      xyz[1] = r_coeff_lum * r + g_coeff_lum * g + b_coeff_lum * b;
+      xyz[2] = 0.000000f * r + 0.028073f * g + 1.060985f * b;
+    }
+
+    for(int i = 0; i < 3; i++) xyz[i] = fmaxf(xyz[i], 0.0f);
+
+    float jab[4];
+    float xyz_scaled[4];
+    for(int i = 0; i < 3; i++) xyz_scaled[i] = xyz[i] * 400.0f;
+    dt_XYZ_2_JzAzBz(xyz_scaled, jab);
+
+    int modified = 0;
+
+    if(d->ucs_saturation_balance != 0.0f && d->workflow_mode != 3)
+    {
+      const float chroma = fmaxf(fmaxf(r, g), b) - fminf(fminf(r, g), b);
+      const float effective_saturation = d->ucs_saturation_balance * fminf(chroma * 2.0f, 1.0f);
+
+      const float Y_ucs = xyz[1];
+      const float L_ucs = powf(fmaxf(Y_ucs, 0.0f), 0.5f);
+      const float fulcrum = 0.65f;
+      const float n = (L_ucs - fulcrum) / fulcrum;
+      const float mask_shadow = 1.0f / (1.0f + expf(n * 4.0f));
+      float sat_adjust = effective_saturation * (2.0f * mask_shadow - 1.0f);
+      sat_adjust *= fminf(L_ucs * 4.0f, 1.0f);
+      const float sat_factor = (1.0f + d->saturation_boost) * (1.0f + sat_adjust);
+      jab[1] *= sat_factor;
+      jab[2] *= sat_factor;
+      modified = 1;
+    }
+
+    if(d->gamut_strength > 0.0f)
+    {
+      const float Y_gam = xyz[1];
+      const float L_gam = powf(fmaxf(Y_gam, 0.0f), 0.5f);
+      const float chroma_factor = 1.0f - d->gamut_strength * (0.2f + 0.2f * L_gam);
+      jab[1] *= chroma_factor;
+      jab[2] *= chroma_factor;
+      modified = 1;
+    }
+
+    if(d->highlight_corr != 0.0f)
+    {
+      float hl_mask = CLAMP((jab[0] - 0.22f) / 0.68f, 0.0f, 1.0f);
+      if(dt_isnan(hl_mask)) hl_mask = 0.0f;
+      if(hl_mask > 0.0f)
+      {
+        const float desat = 1.0f - (fabsf(d->highlight_corr) * hl_mask * 0.75f);
+        jab[1] *= desat;
+        jab[2] *= desat;
+
+        const float angle = d->highlight_corr * hl_mask * 1.5f;
+        const float ca = cosf(angle);
+        const float sa = sinf(angle);
+        const float az = jab[1];
+        const float bz = jab[2];
+        jab[1] = az * ca - bz * sa;
+        jab[2] = az * sa + bz * ca;
+        modified = 1;
+      }
+    }
+
+    if(jab[0] > 0.95f)
+    {
+      const float desat = CLAMP((1.0f - jab[0]) * 20.0f, 0.0f, 1.0f);
+      jab[1] *= desat;
+      jab[2] *= desat;
+      modified = 1;
+    }
+
+    if(modified)
+    {
+      dt_JzAzBz_2_XYZ(jab, xyz_scaled);
+      for(int i = 0; i < 3; i++) xyz[i] = xyz_scaled[i] / 400.0f;
+
+      dt_aligned_pixel_t pix_xyz = { xyz[0], xyz[1], xyz[2], 0.0f };
+      dt_aligned_pixel_t pix_rgb;
+      if(has_work_profile)
+      {
+        dt_apply_transposed_color_matrix(pix_xyz, work_profile->matrix_out_transposed, pix_rgb);
+      }
+      else
+      {
+        pix_rgb[0] =  1.716651f * xyz[0] - 0.355671f * xyz[1] - 0.253366f * xyz[2];
+        pix_rgb[1] = -0.666684f * xyz[0] + 1.616481f * xyz[1] + 0.015768f * xyz[2];
+        pix_rgb[2] =  0.017640f * xyz[0] - 0.042770f * xyz[1] + 0.942103f * xyz[2];
+      }
+      r = pix_rgb[0];
+      g = pix_rgb[1];
+      b = pix_rgb[2];
+
+      float min_val = fminf(r, fminf(g, b));
+      if(min_val < 0.0f)
+      {
+        float lum = r_coeff_lum * r + g_coeff_lum * g + b_coeff_lum * b;
+        if(lum > 0.0f)
+        {
+          float factor = lum / (lum - min_val);
+          r = lum + factor * (r - lum);
+          g = lum + factor * (g - lum);
+          b = lum + factor * (b - lum);
+        }
+      }
+    }
+  }
+
+  if(d->gamut_strength > 0.0f)
+  {
+    const float orig_r = r, orig_g = g, orig_b = b;
+
+    const float th_c = 1.0f - d->gamut_threshold_c;
+    const float th_m = 1.0f - d->gamut_threshold_m;
+    const float th_y = 1.0f - d->gamut_threshold_y;
+
+    const float lim_c = 1.0f + d->gamut_limit_c;
+    const float lim_m = 1.0f + d->gamut_limit_m;
+    const float lim_y = 1.0f + d->gamut_limit_y;
+
+    const float s_c = (1.0f - th_c) / sqrtf(fmaxf(1.001f, lim_c) - 1.0f);
+    const float s_m = (1.0f - th_m) / sqrtf(fmaxf(1.001f, lim_m) - 1.0f);
+    const float s_y = (1.0f - th_y) / sqrtf(fmaxf(1.001f, lim_y) - 1.0f);
+
+    const float ac = fmaxf(r, fmaxf(g, b));
+
+    if(ac > 0.0f)
+    {
+      const float d_r = (ac - r) / ac;
+      const float d_g = (ac - g) / ac;
+      const float d_b = (ac - b) / ac;
+
+      float cd_r, cd_g, cd_b;
+
+      if(d_r < th_c)
+        cd_r = d_r;
+      else
+        cd_r = s_c * sqrtf(d_r - th_c + s_c * s_c * 0.25f) - s_c * sqrtf(s_c * s_c * 0.25f) + th_c;
+
+      if(d_g < th_m)
+        cd_g = d_g;
+      else
+        cd_g = s_m * sqrtf(d_g - th_m + s_m * s_m * 0.25f) - s_m * sqrtf(s_m * s_m * 0.25f) + th_m;
+
+      if(d_b < th_y)
+        cd_b = d_b;
+      else
+        cd_b = s_y * sqrtf(d_b - th_y + s_y * s_y * 0.25f) - s_y * sqrtf(s_y * s_y * 0.25f) + th_y;
+
+      float comp_r = ac - cd_r * ac;
+      float comp_g = ac - cd_g * ac;
+      float comp_b = ac - cd_b * ac;
+
+      float blend = d->gamut_strength;
+      r = orig_r * (1.0f - blend) + comp_r * blend;
+      g = orig_g * (1.0f - blend) + comp_g * blend;
+      b = orig_b * (1.0f - blend) + comp_b * blend;
+    }
+  }
+
+  if(d->purity_boost != 0.0f)
+  {
+    const float luma_p = r_coeff_lum * r + g_coeff_lum * g + b_coeff_lum * b;
+    r += d->purity_boost * (r - luma_p);
+    g += d->purity_boost * (g - luma_p);
+    b += d->purity_boost * (b - luma_p);
+    if(r < 0.0f || r > 1.0f || g < 0.0f || g > 1.0f || b < 0.0f || b > 1.0f)
+    {
+      const float t_p = fmaxf(0.0f, fminf(
+        (r < 0.0f) ? luma_p / fmaxf(luma_p - r, 1e-6f) : ((r > 1.0f) ? (1.0f - luma_p) / fmaxf(r - luma_p, 1e-6f) : 1.0f),
+        fminf(
+          (g < 0.0f) ? luma_p / fmaxf(luma_p - g, 1e-6f) : ((g > 1.0f) ? (1.0f - luma_p) / fmaxf(g - luma_p, 1e-6f) : 1.0f),
+          (b < 0.0f) ? luma_p / fmaxf(luma_p - b, 1e-6f) : ((b > 1.0f) ? (1.0f - luma_p) / fmaxf(b - luma_p, 1e-6f) : 1.0f)
+        )));
+      r = luma_p + t_p * (r - luma_p);
+      g = luma_p + t_p * (g - luma_p);
+      b = luma_p + t_p * (b - luma_p);
+    }
+  }
+
+  if(d->workflow_mode > 0 && d->saturation_boost != 0.0f)
+  {
+    const float luma = r_coeff_lum * r + g_coeff_lum * g + b_coeff_lum * b;
+    const float prot_r = fmaxf(0.0f, 1.0f - fabsf(r - luma) * 1.5f);
+    const float prot_b = fmaxf(0.0f, 1.0f - fabsf(b - luma) * 1.5f);
+    r += d->saturation_boost * (r - luma) * prot_r;
+    b += d->saturation_boost * (b - luma) * prot_b;
+  }
+
+  if(r < 0.0f || r > 1.0f || g < 0.0f || g > 1.0f || b < 0.0f || b > 1.0f)
+  {
+    const float luma = r_coeff_lum * r + g_coeff_lum * g + b_coeff_lum * b;
+    const float target_luma = CLAMP(luma, 0.0f, 1.0f);
+    float t = 1.0f;
+    if(r < 0.0f) t = fminf(t, target_luma / (target_luma - r));
+    if(g < 0.0f) t = fminf(t, target_luma / (target_luma - g));
+    if(b < 0.0f) t = fminf(t, target_luma / (target_luma - b));
+    if(r > 1.0f) t = fminf(t, (1.0f - target_luma) / (r - target_luma));
+    if(g > 1.0f) t = fminf(t, (1.0f - target_luma) / (g - target_luma));
+    if(b > 1.0f) t = fminf(t, (1.0f - target_luma) / (b - target_luma));
+    t = fmaxf(0.0f, t);
+    r = target_luma + t * (r - target_luma);
+    g = target_luma + t * (g - target_luma);
+    b = target_luma + t * (b - target_luma);
+  }
+
+  out[0] = r;
+  out[1] = g;
+  out[2] = b;
+}
+
 static void process_lut(dt_iop_module_t *self,
                         dt_dev_pixelpipe_iop_t *piece,
                         const void *const ivoid,
@@ -1635,429 +2007,11 @@ static void process_lut(dt_iop_module_t *self,
   if(d->color_look > 0 || d->workflow_mode > 0 || d->shadow_lift != 1.0f || d->highlight_gain != 1.0f
      || d->ucs_saturation_balance != 0.0f || d->gamut_strength > 0.0f || d->highlight_corr != 0.0f)
   {
-    const float *mat = (d->color_look > 0) ? color_looks[d->color_look] : NULL;
     const size_t npixels = (size_t)wd * ht;
     DT_OMP_FOR()
     for(size_t k = 0; k < 4 * npixels; k += 4)
     {
-      float r, g, b, y_in, y_out, gain;
-      dt_aligned_pixel_t xyz;
-
-      r = out[k];
-      g = out[k+1];
-      b = out[k+2];
-
-      // Sanitize to avoid Inf/NaN issues
-      r = fmaxf(-1e6f, fminf(r, 1e6f));
-      g = fmaxf(-1e6f, fminf(g, 1e6f));
-      b = fmaxf(-1e6f, fminf(b, 1e6f));
-
-      if(mat)
-      {
-        // Apply Color Look
-        const float tr = r * mat[0] + g * mat[1] + b * mat[2];
-        const float tg = r * mat[3] + g * mat[4] + b * mat[5];
-        const float tb = r * mat[6] + g * mat[7] + b * mat[8];
-
-        // Mix with opacity
-        out[k]   = r * (1.0f - d->look_opacity) + tr * d->look_opacity;
-        out[k+1] = g * (1.0f - d->look_opacity) + tg * d->look_opacity;
-        out[k+2] = b * (1.0f - d->look_opacity) + tb * d->look_opacity;
-
-        out[k]   = fmaxf(out[k], 0.0f);
-        out[k+1] = fmaxf(out[k+1], 0.0f);
-        out[k+2] = fmaxf(out[k+2], 0.0f);
-      }
-      // Reload for next steps
-      r = out[k];
-      g = out[k+1];
-      b = out[k+2];
-
-      if(d->highlight_gain != 1.0f && d->workflow_mode != 3) 
-      {
-        r *= d->highlight_gain;
-        g *= d->highlight_gain;
-        b *= d->highlight_gain;
-      }
-      if(d->shadow_lift != 1.0f && d->workflow_mode != 3) 
-      {
-        r = powf(r, d->shadow_lift);
-        g = powf(g, d->shadow_lift);
-        b = powf(b, d->shadow_lift);
-      }
-      for(int i = 0; i < 4; i++) { xyz[i] = 0.0f; }
-      if(has_work_profile)
-      {
-        dt_aligned_pixel_t pix;
-        pix[0] = r; pix[1] = g; pix[2] = b; pix[3] = 0.0f;
-        dt_apply_transposed_color_matrix(pix, work_profile->matrix_in_transposed, xyz);
-        y_in = xyz[1];
-      }
-      else
-      {
-        y_in = r_coeff_lum * r + g_coeff_lum * g + b_coeff_lum * b; // Fallback Rec.2020
-      }
-      y_out = y_in;
-
-      /* Scene-referred: apply luminance-adaptive shoulder extension for
-         ACES-like tonemapping. Compute perceptual luminance Jz from RGB
-         and derive scale k = 1 + alpha * L^2 where L = clamp(Jz,0,1).
-         Then tone-map x_scaled = y_in / k and rescale result by k to
-         extend the shoulder progressively. Keep alpha constant and
-         avoid changing UI or legacy/display-referred behavior. 
-         Based on JzAzBz perceptual space (Safdar et al. 2017).
-         Reference: https://www.osapublishing.org/oe/abstract.cfm?uri=oe-25-13-15131 */
-      if(d->workflow_mode == 1 || d->workflow_mode == 2)
-      {
-        if(!has_work_profile)
-        {
-          // compute Jz from current RGB -> XYZ -> JzAzBz
-          xyz[0] = 0.636958f * r + 0.144617f * g + 0.168881f * b; // Fallback Rec.2020
-          xyz[1] = y_in;
-          xyz[2] = 0.000000f * r + 0.028073f * g + 1.060985f * b; // Fallback Rec.2020
-        }
-        for(int i=0;i<3;i++) xyz[i] = fmaxf(xyz[i], 0.0f);
-
-        float xyz_scaled[4] = {0};
-        xyz_scaled[0] = xyz[0] * 400.0f;
-        xyz_scaled[1] = xyz[1] * 400.0f;
-        xyz_scaled[2] = xyz[2] * 400.0f;
-        xyz_scaled[3] = 0.0f;
-
-        float jab[4] = {0.0f, 0.0f, 0.0f, 0.0f};
-        dt_XYZ_2_JzAzBz(xyz_scaled, jab);
-
-        const float L = fminf(fmaxf(jab[0], 0.0f), 1.0f);
-        const float alpha = 0.6f;
-        const float k_scale = 1.0f + alpha * L * L;
-
-        // scale luminance, apply selected tonemap, then undo scaling
-        const float x_scaled = y_in / k_scale;
-        if(d->workflow_mode == 1)
-          y_out = _aces_tone_map(x_scaled) * k_scale;
-        else /* workflow_mode == 2 */
-        y_out = _aces_20_tonemap(x_scaled * ACES_EXPOSURE_ADJUST) * k_scale;
-      }
-      else if(d->workflow_mode == 3)
-      {
-        /* Mode 3: Cinematic UCS.
-           Operates in Oklab space (Björn Ottosson, 2020).
-           Provides hue-constant saturation adjustments and high-quality 
-           tonemapping using ACES RRTAndODTFit approximation. 
-        */
-        float rgb_tmp[3] = {r, g, b};
-        float lab[3];
-        rgb_to_oklab_cpu(rgb_tmp, lab);
-
-        // 1. Balance Saturation UCS
-        const float L_ok = lab[0];
-        const float mask_ok = 1.0f / (1.0f + expf((L_ok - 0.5f) * 10.0f));
-        const float weight_ok = 2.0f * mask_ok - 1.0f;
-        // Boost saturation mostly in mid-tones (bell curve weight)
-        const float mid_weight = 1.0f - weight_ok * weight_ok;
-
-        // Vibrance logic: protect already saturated colors by dampening boost
-        float chroma = hypotf(lab[1], lab[2]);
-        const float vibrance_weight = fmaxf(0.0f, 1.0f - chroma * 2.5f);
-        const float sat_mult = (1.0f + d->saturation_boost * mid_weight * vibrance_weight) * (1.0f + d->ucs_saturation_balance * (weight_ok * weight_ok * weight_ok));
-        lab[1] *= sat_mult;
-        lab[2] *= sat_mult;
-
-        // 2. OpenDRT-style Vector Norm & Purity Compression
-        const float L_achromatic = lab[0];
-        chroma = hypotf(lab[1], lab[2]);
-        
-        // Calculate Vector Norm (total energy)
-        float V_norm = sqrtf(L_achromatic * L_achromatic + chroma * chroma);
-        float purity = (V_norm > 1e-6f) ? (chroma / V_norm) : 0.0f;
-
-        // Knee-based purity compression: protects natural colors (purity < 0.5)
-        // and only tames extreme "neon" colors above the threshold.
-        const float p_thresh = 0.5f;
-        float purity_comp = (purity > p_thresh) ? p_thresh + (purity - p_thresh) / (1.0f + 0.2f * (purity - p_thresh)) : purity;
-
-        // Prepare Norm for tonemapping
-        float V_orig = fmaxf(0.0f, powf(V_norm, d->contrast_brilliance_power));
-        V_orig *= (1.189f + d->highlight_gain); // +0.25 EV exposure compensation
-        V_orig = fmaxf(0.0f, powf(V_orig, d->shadow_lift + 1.0f));
-
-        // ACES RRTAndODTFit approximation
-        float V_new = _aces_20_tonemap(V_orig);
-
-        // 3. Highlight Hue Sat (Saturation Gate)
-        // Prevent color shifts by desaturating compressed highlights
-        float compression = (V_norm > 1e-4f) ? (V_new / V_norm) : 1.0f;
-        float gate_power = 0.5f * (1.0f - d->highlight_corr);
-        float saturation_gate = CLAMP(powf(compression, gate_power), 0.0f, 1.0f);
-
-        // Reconstruct L and Chroma based on tonemapped norm and compressed purity
-        lab[0] = V_new * sqrtf(fmaxf(0.0f, 1.0f - purity_comp * purity_comp));
-        lab[1] *= (V_new * purity_comp * saturation_gate) / fmaxf(chroma, 1e-6f);
-        lab[2] *= (V_new * purity_comp * saturation_gate) / fmaxf(chroma, 1e-6f);
-
-        oklab_to_rgb_cpu(lab, rgb_tmp);
-        r = rgb_tmp[0]; g = rgb_tmp[1]; b = rgb_tmp[2];
-        y_out = lab[0];
-      }
-
-      gain = y_out / fmaxf(y_in, 1e-6f);
-      if(d->workflow_mode != 3) {
-        out[k] = r * gain;
-        out[k+1] = g * gain;
-        out[k+2] = b * gain;
-      } else {
-        out[k] = r; out[k+1] = g; out[k+2] = b;
-      }
-
-      if(d->use_rolloff > 0.0f)
-      {
-        const float threshold = 0.80f;
-        if(y_out > threshold)
-        {
-          float factor = (y_out - threshold) / (1.0f - threshold);
-          factor = CLAMP(factor, 0.0f, 1.0f) * d->use_rolloff;
-          /* In mode 3, L_new is bounded to [0,1] by ACES, so blend towards 1.0 (white)
-             to ensure blown highlights reach display white, not a compressed gray. */
-          const float blend_target = (d->workflow_mode == 3) ? 1.0f : y_out;
-          out[k] = out[k] * (1.0f - factor) + blend_target * factor;
-          out[k+1] = out[k+1] * (1.0f - factor) + blend_target * factor;
-          out[k+2] = out[k+2] * (1.0f - factor) + blend_target * factor;
-        }
-      }
-
-      if(d->ucs_saturation_balance != 0.0f || d->gamut_strength > 0.0f || d->highlight_corr != 0.0f)
-      {
-        if(has_work_profile)
-        {
-          dt_aligned_pixel_t pix = { out[k], out[k+1], out[k+2], 0.f };
-          dt_apply_transposed_color_matrix(pix, work_profile->matrix_in_transposed, xyz);
-        }
-        else
-        {
-          xyz[0] = 0.636958f * out[k] + 0.144617f * out[k+1] + 0.168881f * out[k+2];
-          xyz[1] = r_coeff_lum * out[k] + g_coeff_lum * out[k+1] + b_coeff_lum * out[k+2];
-          xyz[2] = 0.000000f * out[k] + 0.028073f * out[k+1] + 1.060985f * out[k+2];
-        }
-
-        for(int i=0; i<3; i++) xyz[i] = fmaxf(xyz[i], 0.0f);
-
-        // XYZ to JzAzBz
-        float jab[4] = {0};
-        float xyz_scaled[4] = {0};
-        for(int i=0; i<3; i++) xyz_scaled[i] = xyz[i] * 400.0f; // Scale to 400 nits for JzAzBz
-        dt_XYZ_2_JzAzBz(xyz_scaled, jab);
-
-        int modified = 0;
-
-        if(d->ucs_saturation_balance != 0.0f && d->workflow_mode != 3)
-        {
-          // Chroma-based modulation for saturation balance
-          const float r_sat = out[k];
-          const float g_sat = out[k+1];
-          const float b_sat = out[k+2];
-          const float chroma = fmaxf(fmaxf(r_sat, g_sat), b_sat) - fminf(fminf(r_sat, g_sat), b_sat);
-          const float effective_saturation = d->ucs_saturation_balance * fminf(chroma * 2.0f, 1.0f);
-
-          // Apply saturation balance using luminance mask
-          const float Y_ucs = xyz[1];
-          const float L_ucs = powf(fmaxf(Y_ucs, 0.0f), 0.5f);
-          const float fulcrum = 0.65f;
-          const float n = (L_ucs - fulcrum) / fulcrum;
-          const float mask_shadow = 1.0f / (1.0f + expf(n * 4.0f));
-          float sat_adjust = effective_saturation * (2.0f * mask_shadow - 1.0f);
-          sat_adjust *= fminf(L_ucs * 4.0f, 1.0f);
-          const float sat_factor = (1.0f + d->saturation_boost) * (1.0f + sat_adjust);
-          jab[1] *= sat_factor;
-          jab[2] *= sat_factor;
-          modified = 1;
-        }
-
-        if(d->gamut_strength > 0.0f)
-        {
-          const float Y_gam = xyz[1];
-          const float L_gam = powf(fmaxf(Y_gam, 0.0f), 0.5f);
-          const float chroma_factor = 1.0f - d->gamut_strength * (0.2f + 0.2f * L_gam);
-          jab[1] *= chroma_factor;
-          jab[2] *= chroma_factor;
-          modified = 1;
-        }
-
-        if(d->highlight_corr != 0.0f)
-        {
-          // HIGHLIGHT HUE AND SATURATION CORRECTION (sync with OpenCL)
-          // Mask starts at Jz = 0.22 (just above midtones) and is full at Jz = 0.68 (very high lights)
-          // Note: Due to the 0.75 desaturation factor in the formula, the perceived effect 
-          // reaches ~90-95% at full slider value in extreme highlights.
-          float hl_mask = CLAMP((jab[0] - 0.22f) / 0.68f, 0.0f, 1.0f);
-          
-          if(dt_isnan(hl_mask)) hl_mask = 0.0f;
-          if(hl_mask > 0.0f)
-          {
-            // 1. Soft symmetric desaturation (0.75 factor)
-            float desat = 1.0f - (fabsf(d->highlight_corr) * hl_mask * 0.75f);
-            jab[1] *= desat;
-            jab[2] *= desat;
-
-            // 2. Controlled Hue Rotation (1.5 factor)
-            const float angle = d->highlight_corr * hl_mask * 1.5f;
-            const float ca = cosf(angle);
-            const float sa = sinf(angle);
-            const float az = jab[1];
-            const float bz = jab[2];
-            jab[1] = az * ca - bz * sa;
-            jab[2] = az * sa + bz * ca;
-            modified = 1;
-          }
-        }
-
-        if(jab[0] > 0.95f)
-        {
-          const float desat = CLAMP((1.0f - jab[0]) * 20.0f, 0.0f, 1.0f);
-          jab[1] *= desat;
-          jab[2] *= desat;
-          modified = 1;
-        }
-
-        if(modified)
-        {
-          // JzAzBz to XYZ
-          dt_JzAzBz_2_XYZ(jab, xyz_scaled);
-          for(int i=0; i<3; i++) xyz[i] = xyz_scaled[i] / 400.0f;
-
-          dt_aligned_pixel_t pix_xyz = { xyz[0], xyz[1], xyz[2], 0.0f };
-          dt_aligned_pixel_t pix_rgb;
-          if(has_work_profile)
-          {
-            dt_apply_transposed_color_matrix(pix_xyz, work_profile->matrix_out_transposed, pix_rgb);
-          }
-          else
-          {
-            // Fallback: inverse Rec.2020 XYZ -> RGB
-            pix_rgb[0] =  1.716651f * xyz[0] - 0.355671f * xyz[1] - 0.253366f * xyz[2];
-            pix_rgb[1] = -0.666684f * xyz[0] + 1.616481f * xyz[1] + 0.015768f * xyz[2];
-            pix_rgb[2] =  0.017640f * xyz[0] - 0.042770f * xyz[1] + 0.942103f * xyz[2];
-          }
-          for(int i=0; i<3; i++) out[k+i] = pix_rgb[i];
-
-          float min_val = fminf(out[k], fminf(out[k+1], out[k+2]));
-          if(min_val < 0.0f)
-          {
-            float lum = r_coeff_lum * out[k] + g_coeff_lum * out[k+1] + b_coeff_lum * out[k+2];
-            if(lum > 0.0f)
-            {
-              float factor = lum / (lum - min_val);
-              out[k] = lum + factor * (out[k] - lum);
-              out[k+1] = lum + factor * (out[k+1] - lum);
-              out[k+2] = lum + factor * (out[k+2] - lum);
-            }
-          }
-        }
-      }
-      if(d->gamut_strength > 0.0f)
-      {
-        // Jed Smith per-channel gamut compression (no lum_weight, with blend)
-        // Save original values for blending
-        const float orig_r = out[k], orig_g = out[k+1], orig_b = out[k+2];
-
-        const float th_c = 1.0f - d->gamut_threshold_c;
-        const float th_m = 1.0f - d->gamut_threshold_m;
-        const float th_y = 1.0f - d->gamut_threshold_y;
-
-        const float lim_c = 1.0f + d->gamut_limit_c;
-        const float lim_m = 1.0f + d->gamut_limit_m;
-        const float lim_y = 1.0f + d->gamut_limit_y;
-
-        const float s_c = (1.0f - th_c) / sqrtf(fmaxf(1.001f, lim_c) - 1.0f);
-        const float s_m = (1.0f - th_m) / sqrtf(fmaxf(1.001f, lim_m) - 1.0f);
-        const float s_y = (1.0f - th_y) / sqrtf(fmaxf(1.001f, lim_y) - 1.0f);
-
-        const float ac = fmaxf(out[k], fmaxf(out[k+1], out[k+2]));
-
-        if(ac > 0.0f)
-        {
-          const float d_r = (ac - out[k]) / ac;
-          const float d_g = (ac - out[k+1]) / ac;
-          const float d_b = (ac - out[k+2]) / ac;
-
-          float cd_r, cd_g, cd_b;
-
-          if(d_r < th_c)
-            cd_r = d_r;
-          else
-            cd_r = s_c * sqrtf(d_r - th_c + s_c*s_c*0.25f) - s_c * sqrtf(s_c*s_c*0.25f) + th_c;
-
-          if(d_g < th_m)
-            cd_g = d_g;
-          else
-            cd_g = s_m * sqrtf(d_g - th_m + s_m*s_m*0.25f) - s_m * sqrtf(s_m*s_m*0.25f) + th_m;
-
-          if(d_b < th_y)
-            cd_b = d_b;
-          else
-            cd_b = s_y * sqrtf(d_b - th_y + s_y*s_y*0.25f) - s_y * sqrtf(s_y*s_y*0.25f) + th_y;
-
-          // Compressed RGB
-          float comp_r = ac - cd_r * ac;
-          float comp_g = ac - cd_g * ac;
-          float comp_b = ac - cd_b * ac;
-
-          // Blend between original and compressed (Jed Smith style: mix(rgb, crgb, strength))
-          float blend = d->gamut_strength; // 0.0 = original, 1.0 = full compression
-          out[k]   = orig_r * (1.0f - blend) + comp_r * blend;
-          out[k+1] = orig_g * (1.0f - blend) + comp_g * blend;
-          out[k+2] = orig_b * (1.0f - blend) + comp_b * blend;
-        }
-      }
-
-      if(d->purity_boost != 0.0f)
-      {
-        const float luma_p = r_coeff_lum * out[k] + g_coeff_lum * out[k+1] + b_coeff_lum * out[k+2];
-        out[k]   += d->purity_boost * (out[k]   - luma_p);
-        out[k+1] += d->purity_boost * (out[k+1] - luma_p);
-        out[k+2] += d->purity_boost * (out[k+2] - luma_p);
-        if(out[k] < 0.0f || out[k] > 1.0f || out[k+1] < 0.0f || out[k+1] > 1.0f
-           || out[k+2] < 0.0f || out[k+2] > 1.0f)
-        {
-          const float t_p = fmaxf(0.0f, fminf(
-            (out[k] < 0.0f) ? luma_p / fmaxf(luma_p - out[k], 1e-6f) : ((out[k] > 1.0f) ? (1.0f - luma_p) / fmaxf(out[k] - luma_p, 1e-6f) : 1.0f),
-            fminf(
-              (out[k+1] < 0.0f) ? luma_p / fmaxf(luma_p - out[k+1], 1e-6f) : ((out[k+1] > 1.0f) ? (1.0f - luma_p) / fmaxf(out[k+1] - luma_p, 1e-6f) : 1.0f),
-              (out[k+2] < 0.0f) ? luma_p / fmaxf(luma_p - out[k+2], 1e-6f) : ((out[k+2] > 1.0f) ? (1.0f - luma_p) / fmaxf(out[k+2] - luma_p, 1e-6f) : 1.0f)
-            )));
-          out[k]   = luma_p + t_p * (out[k]   - luma_p);
-          out[k+1] = luma_p + t_p * (out[k+1] - luma_p);
-          out[k+2] = luma_p + t_p * (out[k+2] - luma_p);
-        }
-      }
-
-      // OpenDRT-style weighted red and blue correction for higher precision
-      if(d->workflow_mode > 0 && d->saturation_boost != 0.0f)
-      {
-        // Use calculated luma as the achromatic reference point (sat_L)
-        const float luma = r_coeff_lum * out[k] + g_coeff_lum * out[k+1] + b_coeff_lum * out[k+2];
-        const float prot_r = fmaxf(0.0f, 1.0f - fabsf(out[k] - luma) * 1.5f);
-        const float prot_b = fmaxf(0.0f, 1.0f - fabsf(out[k+2] - luma) * 1.5f);
-        out[k] += d->saturation_boost * (out[k] - luma) * prot_r; // Apply to red channel
-        out[k+2] += d->saturation_boost * (out[k+2] - luma) * prot_b;
-      }
-
-      // Final gamut check to preserve hue (exact color)
-      if(out[k] < 0.0f || out[k] > 1.0f || out[k+1] < 0.0f || out[k+1] > 1.0f || out[k+2] < 0.0f || out[k+2] > 1.0f)
-      {
-        const float luma = r_coeff_lum * out[k] + g_coeff_lum * out[k+1] + b_coeff_lum * out[k+2];
-        const float target_luma = CLAMP(luma, 0.0f, 1.0f);
-        float t = 1.0f;
-        if(out[k] < 0.0f) t = fminf(t, target_luma / (target_luma - out[k]));
-        if(out[k+1] < 0.0f) t = fminf(t, target_luma / (target_luma - out[k+1]));
-        if(out[k+2] < 0.0f) t = fminf(t, target_luma / (target_luma - out[k+2]));
-        if(out[k] > 1.0f) t = fminf(t, (1.0f - target_luma) / (out[k] - target_luma));
-        if(out[k+1] > 1.0f) t = fminf(t, (1.0f - target_luma) / (out[k+1] - target_luma));
-        if(out[k+2] > 1.0f) t = fminf(t, (1.0f - target_luma) / (out[k+2] - target_luma));
-        t = fmaxf(0.0f, t);
-        out[k] = target_luma + t * (out[k] - target_luma);
-        out[k+1] = target_luma + t * (out[k+1] - target_luma);
-        out[k+2] = target_luma + t * (out[k+2] - target_luma);
-      }
+      apply_postprocess(&out[k], d, work_profile, has_work_profile, r_coeff_lum, g_coeff_lum, b_coeff_lum);
     }
   }
 }
@@ -2225,409 +2179,18 @@ static void process_fusion(dt_iop_module_t *self,
     }
   }
 
-  // copy output buffer
-  const float *mat = (d->color_look > 0) ? color_looks[d->color_look] : NULL;
+// copy output buffer
   DT_OMP_FOR()
   for(size_t k = 0; k < (size_t)4 * wd * ht; k += 4)
   {
-    float val[3], y_in, y_out, gain;
-    dt_aligned_pixel_t xyz;
-
+    float val[3];
     val[0] = fmaxf(comb[0][k + 0], 0.f);
     val[1] = fmaxf(comb[0][k + 1], 0.f);
     val[2] = fmaxf(comb[0][k + 2], 0.f);
 
-    // Sanitize to avoid Inf/NaN issues
-    val[0] = fminf(val[0], 1e6f);
-    val[1] = fminf(val[1], 1e6f);
-    val[2] = fminf(val[2], 1e6f);
+    apply_postprocess(val, d, work_profile, has_work_profile, r_coeff_lum, g_coeff_lum, b_coeff_lum);
 
-    // If color look is selected, apply matrix
-    if(mat)
-    {
-      // Apply Color Look
-      float r = val[0], g = val[1], b = val[2];
-      float tr = r * mat[0] + g * mat[1] + b * mat[2];
-      float tg = r * mat[3] + g * mat[4] + b * mat[5];
-      float tb = r * mat[6] + g * mat[7] + b * mat[8];
-
-      // Mix with opacity
-      val[0] = r * (1.0f - d->look_opacity) + tr * d->look_opacity;
-      val[1] = g * (1.0f - d->look_opacity) + tg * d->look_opacity;
-      val[2] = b * (1.0f - d->look_opacity) + tb * d->look_opacity;
-    }
-    if(d->color_look > 0 || d->workflow_mode > 0 || d->shadow_lift != 1.0f || d->highlight_gain != 1.0f)
-    {
-      val[0] = fmaxf(val[0], 0.0f);
-      val[1] = fmaxf(val[1], 0.0f);
-      val[2] = fmaxf(val[2], 0.0f);
-
-      if(d->highlight_gain != 1.0f && d->workflow_mode != 3)
-      {
-        val[0] *= d->highlight_gain;
-        val[1] *= d->highlight_gain;
-        val[2] *= d->highlight_gain;
-      }
-      if(d->shadow_lift != 1.0f) {
-        val[0] = powf(val[0], d->shadow_lift);
-        val[1] = powf(val[1], d->shadow_lift);
-        val[2] = powf(val[2], d->shadow_lift);
-      }
-    for(int i = 0; i < 4; i++) { xyz[i] = 0.0f; }
-    if(has_work_profile)
-    {
-      dt_aligned_pixel_t pix;
-      pix[0] = val[0]; pix[1] = val[1]; pix[2] = val[2]; pix[3] = 0.0f;
-      dt_apply_transposed_color_matrix(pix, work_profile->matrix_in_transposed, xyz);
-      y_in = xyz[1];
-    }
-    else
-    {
-      y_in = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2]; // Fallback Rec.2020
-    }
-    y_out = y_in;
-
-      if(d->workflow_mode == 1 || d->workflow_mode == 2)
-      {
-      if(!has_work_profile)
-      {
-        xyz[0] = 0.636958f * val[0] + 0.144617f * val[1] + 0.168881f * val[2];
-        xyz[1] = y_in;
-        xyz[2] = 0.000000f * val[0] + 0.028073f * val[1] + 1.060985f * val[2];
-        }
-      for(int i=0;i<3;i++) xyz[i] = fmaxf(xyz[i], 0.0f);
-
-        float xyz_scaled[4];
-        xyz_scaled[0] = xyz[0] * 400.0f;
-        xyz_scaled[1] = xyz[1] * 400.0f;
-        xyz_scaled[2] = xyz[2] * 400.0f;
-        xyz_scaled[3] = 0.0f;
-
-        float jab[4] = {0.0f,0.0f,0.0f,0.0f};
-        dt_XYZ_2_JzAzBz(xyz_scaled, jab);
-
-        const float L = fminf(fmaxf(jab[0], 0.0f), 1.0f);
-        const float alpha = 0.6f;
-        const float k_scale = 1.0f + alpha * L * L;
-
-        const float x_scaled = y_in / k_scale;
-        if(d->workflow_mode == 1)
-          y_out = _aces_tone_map(x_scaled) * k_scale;
-        else
-          y_out = _aces_20_tonemap(x_scaled * ACES_EXPOSURE_ADJUST) * k_scale;
-      }
-      else if(d->workflow_mode == 3)
-      {
-        float rgb_tmp[3] = {val[0], val[1], val[2]};
-        float lab[3];
-        rgb_to_oklab_cpu(rgb_tmp, lab);
-
-        const float L_ok = lab[0];
-        const float mask_ok = 1.0f / (1.0f + expf((L_ok - 0.5f) * 10.0f));
-        const float weight_ok = 2.0f * mask_ok - 1.0f;
-        // Boost saturation mostly in mid-tones (bell curve weight)
-        const float mid_weight = 1.0f - weight_ok * weight_ok;
-
-        // Vibrance logic: protect already saturated colors by dampening boost
-        float chroma = hypotf(lab[1], lab[2]);
-        const float vibrance_weight = fmaxf(0.0f, 1.0f - chroma * 2.5f);
-        const float sat_mult = (1.0f + d->saturation_boost * mid_weight * vibrance_weight) * (1.0f + d->ucs_saturation_balance * (weight_ok * weight_ok * weight_ok));
-        lab[1] *= sat_mult;
-        lab[2] *= sat_mult;
-        
-        // 2. OpenDRT-style Vector Norm & Purity Compression
-        const float L_achromatic = lab[0];
-        chroma = hypotf(lab[1], lab[2]);
-        
-        // Calculate Vector Norm (total energy)
-        float V_norm = sqrtf(L_achromatic * L_achromatic + chroma * chroma);
-        float purity = (V_norm > 1e-6f) ? (chroma / V_norm) : 0.0f;
-
-        // Knee-based purity compression: protects natural colors (purity < 0.5)
-        // and only tames extreme "neon" colors above the threshold.
-        const float p_thresh = 0.5f;
-        float purity_comp = (purity > p_thresh) ? p_thresh + (purity - p_thresh) / (1.0f + 0.2f * (purity - p_thresh)) : purity;
-
-        // Prepare Norm for tonemapping
-        float V_orig = fmaxf(0.0f, powf(V_norm, d->contrast_brilliance_power));
-        V_orig *= (1.189f + d->highlight_gain); // +0.25 EV exposure compensation
-        V_orig = fmaxf(0.0f, powf(V_orig, d->shadow_lift + 1.0f));
-
-        float V_new = _aces_20_tonemap(V_orig);
-
-        float compression = (V_norm > 1e-4f) ? (V_new / V_norm) : 1.0f;
-        float gate_power = 0.5f * (1.0f - d->highlight_corr);
-        float saturation_gate = CLAMP(powf(compression, gate_power), 0.0f, 1.0f);
-
-        // Reconstruct
-        lab[0] = V_new * sqrtf(fmaxf(0.0f, 1.0f - purity_comp * purity_comp));
-        lab[1] *= (V_new * purity_comp * saturation_gate) / fmaxf(chroma, 1e-6f);
-        lab[2] *= (V_new * purity_comp * saturation_gate) / fmaxf(chroma, 1e-6f);
-
-        oklab_to_rgb_cpu(lab, rgb_tmp);
-        val[0] = rgb_tmp[0]; val[1] = rgb_tmp[1]; val[2] = rgb_tmp[2];
-        y_out = lab[0];
-      }
-
-      gain = y_out / fmaxf(y_in, 1e-6f);
-      if(d->workflow_mode != 3) {
-        val[0] *= gain;
-        val[1] *= gain;
-        val[2] *= gain;
-      }
-
-      if(d->use_rolloff > 0.0f)
-      {
-        const float threshold = 0.80f;
-        if(y_out > threshold)
-        {
-          float factor = (y_out - threshold) / (1.0f - threshold);
-          factor = CLAMP(factor, 0.0f, 1.0f) * d->use_rolloff;
-          const float blend_target = (d->workflow_mode == 3) ? 1.0f : y_out;
-          val[0] = val[0] * (1.0f - factor) + blend_target * factor;
-          val[1] = val[1] * (1.0f - factor) + blend_target * factor;
-          val[2] = val[2] * (1.0f - factor) + blend_target * factor;
-        }
-      }
-
-      if(d->ucs_saturation_balance != 0.0f || d->gamut_strength > 0.0f || d->highlight_corr != 0.0f)
-      {
-        if(has_work_profile)
-        {
-          dt_aligned_pixel_t pix;
-          // Use current local fused values 'val', not the output buffer
-          pix[0] = val[0]; pix[1] = val[1]; pix[2] = val[2]; pix[3] = 0.0f;
-          dt_apply_transposed_color_matrix(pix, work_profile->matrix_in_transposed, xyz);
-        }
-        else
-        {
-          xyz[0] = 0.636958f * val[0] + 0.144617f * val[1] + 0.168881f * val[2];
-          xyz[1] = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2];
-          xyz[2] = 0.000000f * val[0] + 0.028073f * val[1] + 1.060985f * val[2];
-        }
-
-        for(int i=0; i<3; i++) xyz[i] = fmaxf(xyz[i], 0.0f);
-
-        // XYZ to JzAzBz
-        float jab[4];
-        float xyz_scaled[4];
-        for(int i=0; i<3; i++) xyz_scaled[i] = xyz[i] * 400.0f;
-        dt_XYZ_2_JzAzBz(xyz_scaled, jab);
-
-        int modified = 0;
-
-        if(d->ucs_saturation_balance != 0.0f && d->workflow_mode != 3)
-        {
-          // Chroma-based modulation for saturation balance
-          const float r_sat = val[0];
-          const float g_sat = val[1];
-          const float b_sat = val[2];
-          const float chroma = fmaxf(fmaxf(r_sat, g_sat), b_sat) - fminf(fminf(r_sat, g_sat), b_sat);
-          const float effective_saturation = d->ucs_saturation_balance * fminf(chroma * 2.0f, 1.0f);
-
-          // Apply saturation balance using luminance mask
-          const float Y_ucs = xyz[1];
-          const float L_ucs = powf(fmaxf(Y_ucs, 0.0f), 0.5f);
-          const float fulcrum = 0.65f;
-          const float n = (L_ucs - fulcrum) / fulcrum;
-          const float mask_shadow = 1.0f / (1.0f + expf(n * 4.0f));
-          float sat_adjust = effective_saturation * (2.0f * mask_shadow - 1.0f);
-          sat_adjust *= fminf(L_ucs * 4.0f, 1.0f);
-          const float sat_factor = (1.0f + d->saturation_boost) * (1.0f + sat_adjust);
-          jab[1] *= sat_factor;
-          jab[2] *= sat_factor;
-          modified = 1;
-        }
-
-        if(d->gamut_strength > 0.0f)
-        {
-          const float Y_gam = xyz[1];
-          const float L_gam = powf(fmaxf(Y_gam, 0.0f), 0.5f);
-          const float chroma_factor = 1.0f - d->gamut_strength * (0.2f + 0.2f * L_gam);
-          jab[1] *= chroma_factor;
-          jab[2] *= chroma_factor;
-          modified = 1;
-        }
-
-        if(d->highlight_corr != 0.0f)
-        {
-          // HIGHLIGHT HUE AND SATURATION CORRECTION (sync with OpenCL)
-          // Mask starts at Jz = 0.22 (just above midtones) and is full at Jz = 0.68 (very high lights)
-          // Note: Due to the 0.75 desaturation factor in the formula, the perceived effect 
-          // reaches ~90-95% at full slider value in extreme highlights.
-          float hl_mask = CLAMP((jab[0] - 0.22f) / 0.68f, 0.0f, 1.0f);
-
-          if(hl_mask > 0.0f)
-          {
-            // 1. Soft symmetric desaturation (0.75 factor)
-            const float desat = 1.0f - (fabsf(d->highlight_corr) * hl_mask * 0.75f);
-            jab[1] *= desat;
-            jab[2] *= desat;
-
-            // 2. Controlled Hue Rotation (1.5 factor)
-            const float angle = d->highlight_corr * hl_mask * 1.5f;
-            const float ca = cosf(angle);
-            const float sa = sinf(angle);
-            const float az = jab[1];
-            const float bz = jab[2];
-            jab[1] = az * ca - bz * sa;
-            jab[2] = az * sa + bz * ca;
-            modified = 1;
-          }
-        }
-
-        if(jab[0] > 0.95f)
-        {
-          const float desat = CLAMP((1.0f - jab[0]) * 20.0f, 0.0f, 1.0f);
-          jab[1] *= desat;
-          jab[2] *= desat;
-          modified = 1;
-        }
-
-        if(modified)
-        {
-          // JzAzBz to XYZ
-          dt_JzAzBz_2_XYZ(jab, xyz_scaled);
-          for(int i=0; i<3; i++) xyz[i] = xyz_scaled[i] / 400.0f;
-
-          dt_aligned_pixel_t pix_xyz = { xyz[0], xyz[1], xyz[2], 0.0f };
-          dt_aligned_pixel_t pix_rgb;
-          if(has_work_profile)
-          {
-            dt_apply_transposed_color_matrix(pix_xyz, work_profile->matrix_out_transposed, pix_rgb);
-          }
-          else
-          {
-            // Fallback: inverse Rec.2020 XYZ -> RGB
-            pix_rgb[0] =  1.716651f * xyz[0] - 0.355671f * xyz[1] - 0.253366f * xyz[2];
-            pix_rgb[1] = -0.666684f * xyz[0] + 1.616481f * xyz[1] + 0.015768f * xyz[2];
-            pix_rgb[2] =  0.017640f * xyz[0] - 0.042770f * xyz[1] + 0.942103f * xyz[2];
-          }
-          for(int i=0; i<3; i++) val[i] = pix_rgb[i];
-
-          float min_val = fminf(val[0], fminf(val[1], val[2]));
-          if(min_val < 0.0f)
-          {
-            float lum = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2];
-            if(lum > 0.0f)
-            {
-              float factor = lum / (lum - min_val);
-              val[0] = lum + factor * (val[0] - lum);
-              val[1] = lum + factor * (val[1] - lum);
-              val[2] = lum + factor * (val[2] - lum);
-            }
-          }
-        }
-
-      if(d->gamut_strength > 0.0f)
-      {
-        // Jed Smith per-channel gamut compression (no lum_weight, with blend) for fusion path
-        // Save original values for blending
-        const float orig_r = val[0], orig_g = val[1], orig_b = val[2];
-
-        const float th_c = 1.0f - d->gamut_threshold_c;
-        const float th_m = 1.0f - d->gamut_threshold_m;
-        const float th_y = 1.0f - d->gamut_threshold_y;
-
-        const float lim_c = 1.0f + d->gamut_limit_c;
-        const float lim_m = 1.0f + d->gamut_limit_m;
-        const float lim_y = 1.0f + d->gamut_limit_y;
-
-        const float s_c = (1.0f - th_c) / sqrtf(fmaxf(1.001f, lim_c) - 1.0f);
-        const float s_m = (1.0f - th_m) / sqrtf(fmaxf(1.001f, lim_m) - 1.0f);
-        const float s_y = (1.0f - th_y) / sqrtf(fmaxf(1.001f, lim_y) - 1.0f);
-
-        const float ac = fmaxf(val[0], fmaxf(val[1], val[2]));
-
-        if(ac > 0.0f)
-        {
-          const float d_r = (ac - val[0]) / ac;
-          const float d_g = (ac - val[1]) / ac;
-          const float d_b = (ac - val[2]) / ac;
-
-          float cd_r, cd_g, cd_b;
-
-          if(d_r < th_c)
-            cd_r = d_r;
-          else
-            cd_r = s_c * sqrtf(d_r - th_c + s_c*s_c*0.25f) - s_c * sqrtf(s_c*s_c*0.25f) + th_c;
-
-          if(d_g < th_m)
-            cd_g = d_g;
-          else
-            cd_g = s_m * sqrtf(d_g - th_m + s_m*s_m*0.25f) - s_m * sqrtf(s_m*s_m*0.25f) + th_m;
-
-          if(d_b < th_y)
-            cd_b = d_b;
-          else
-            cd_b = s_y * sqrtf(d_b - th_y + s_y*s_y*0.25f) - s_y * sqrtf(s_y*s_y*0.25f) + th_y;
-
-          // Compressed RGB
-          float comp_r = ac - cd_r * ac;
-          float comp_g = ac - cd_g * ac;
-          float comp_b = ac - cd_b * ac;
-
-          // Blend between original and compressed (Jed Smith style: mix(rgb, crgb, strength))
-          float blend = d->gamut_strength; // 0.0 = original, 1.0 = full compression
-          val[0] = orig_r * (1.0f - blend) + comp_r * blend;
-          val[1] = orig_g * (1.0f - blend) + comp_g * blend;
-          val[2] = orig_b * (1.0f - blend) + comp_b * blend;
-        }
-      }
-      }
-
-      if(d->purity_boost != 0.0f)
-      {
-        const float luma_p = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2];
-        val[0] += d->purity_boost * (val[0] - luma_p);
-        val[1] += d->purity_boost * (val[1] - luma_p);
-        val[2] += d->purity_boost * (val[2] - luma_p);
-        if(val[0] < 0.0f || val[0] > 1.0f || val[1] < 0.0f || val[1] > 1.0f
-           || val[2] < 0.0f || val[2] > 1.0f)
-        {
-          const float t_p = fmaxf(0.0f, fminf(
-            (val[0] < 0.0f) ? luma_p / (luma_p - val[0]) : ((val[0] > 1.0f) ? (1.0f - luma_p) / (val[0] - luma_p) : 1.0f),
-            fminf(
-              (val[1] < 0.0f) ? luma_p / (luma_p - val[1]) : ((val[1] > 1.0f) ? (1.0f - luma_p) / (val[1] - luma_p) : 1.0f),
-              (val[2] < 0.0f) ? luma_p / (luma_p - val[2]) : ((val[2] > 1.0f) ? (1.0f - luma_p) / (val[2] - luma_p) : 1.0f)
-            )));
-          val[0] = luma_p + t_p * (val[0] - luma_p);
-          val[1] = luma_p + t_p * (val[1] - luma_p);
-          val[2] = luma_p + t_p * (val[2] - luma_p);
-        }
-      }
-
-      // OpenDRT-style weighted red and blue correction for higher precision
-      if(d->workflow_mode > 0 && d->saturation_boost != 0.0f)
-      {
-        // Use calculated luma as the achromatic reference point (sat_L)
-        const float luma = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2];
-        const float prot_r = fmaxf(0.0f, 1.0f - fabsf(val[0] - luma) * 1.5f);
-        const float prot_b = fmaxf(0.0f, 1.0f - fabsf(val[2] - luma) * 1.5f);
-        val[0] += d->saturation_boost * (val[0] - luma) * prot_r; // Apply to red channel
-        val[2] += d->saturation_boost * (val[2] - luma) * prot_b;
-      }
-
-      // Final gamut check to preserve hue (exact color)
-      if(val[0] < 0.0f || val[0] > 1.0f || val[1] < 0.0f || val[1] > 1.0f || val[2] < 0.0f || val[2] > 1.0f)
-      {
-        const float luma = r_coeff_lum * val[0] + g_coeff_lum * val[1] + b_coeff_lum * val[2];
-        const float target_luma = CLAMP(luma, 0.0f, 1.0f);
-        float t = 1.0f;
-        if(val[0] < 0.0f) t = fminf(t, target_luma / (target_luma - val[0]));
-        if(val[1] < 0.0f) t = fminf(t, target_luma / (target_luma - val[1]));
-        if(val[2] < 0.0f) t = fminf(t, target_luma / (target_luma - val[2]));
-        if(val[0] > 1.0f) t = fminf(t, (1.0f - target_luma) / (val[0] - target_luma));
-        if(val[1] > 1.0f) t = fminf(t, (1.0f - target_luma) / (val[1] - target_luma));
-        if(val[2] > 1.0f) t = fminf(t, (1.0f - target_luma) / (val[2] - target_luma));
-        t = fmaxf(0.0f, t);
-        val[0] = target_luma + t * (val[0] - target_luma);
-        val[1] = target_luma + t * (val[1] - target_luma);
-        val[2] = target_luma + t * (val[2] - target_luma);
-      }
-    }
-
-    for(int i = 0; i < 3; i++) out[k + i] = val[i];
+for(int i = 0; i < 3; i++) out[k + i] = val[i];
     out[k + 3] = in[k + 3]; // pass on 4th channel
   }
 
@@ -2808,80 +2371,146 @@ static void _compute_histogram_from_thumbnail(const uint8_t *buffer,
 }
 
 static void _compute_curve_nodes_from_histogram(uint32_t histogram[256],
-                                                dt_iop_basecurve_node_t nodes[7],
-                                                int workflow_mode,
-                                                gboolean high_key)
+                                                 dt_iop_basecurve_node_t nodes[7],
+                                                 int workflow_mode,
+                                                 gboolean high_key)
 {
-// Input percentiles: where we sample the luminance histogram
-float input_pcts[5]  = { 0.05f, 0.18f, 0.50f, 0.82f, 0.95f };
-// Desired output Y values: the tone targets we map each percentile to
-float output_y[5]    = { 0.035f, 0.15f, 0.45f, 0.75f, 0.90f };
+  const int is_scene = (workflow_mode >= 1 && workflow_mode <= 3);
 
-  nodes[0].x = 0.0f;
-  nodes[0].y = 0.0f;
-  nodes[6].x = 1.0f;
-  nodes[6].y = 1.0f;
-
-  uint32_t total = 0;
-  for(int i = 0; i < 256; i++)
-    total += histogram[i];
-
-  if(total == 0)
+  if(!is_scene)
   {
-    for(int p = 0; p < 5; p++)
+    // Display mode (0): keep current 5 internal nodes (7 total nodes)
+    float input_pcts[5]  = { 0.05f, 0.18f, 0.50f, 0.82f, 0.95f };
+    float output_y[5]    = { 0.035f, 0.15f, 0.45f, 0.75f, 0.90f };
+
+    nodes[0].x = 0.0f;
+    nodes[0].y = 0.0f;
+    nodes[6].x = 1.0f;
+    nodes[6].y = 1.0f;
+
+    uint32_t total = 0;
+    for(int i = 0; i < 256; i++)
+      total += histogram[i];
+
+    if(total == 0)
     {
-      nodes[p + 1].x = output_y[p];
-      nodes[p + 1].y = output_y[p];
+      for(int p = 0; p < 5; p++)
+      {
+        nodes[p + 1].x = output_y[p];
+        nodes[p + 1].y = output_y[p];
+      }
+      return;
     }
-    return;
-  }
 
-  if(high_key)
-  {
-    // High-key mode: shift all output targets upward to preserve brightness in bright scenes.
-    output_y[0] = 0.21f;
-    output_y[1] = 0.40f;
-    output_y[2] = 0.63f;
-    output_y[3] = 0.80f;
-    output_y[4] = 0.85f;
-  }
-
-  uint32_t cumsum = 0;
-  int node_idx = 0;
-  
-  for(int i = 0; i < 256 && node_idx < 5; i++)
-  {
-    cumsum += histogram[i];
-    float pct = (float)cumsum / total;
-
-    while(node_idx < 5 && pct >= input_pcts[node_idx])
+    if(high_key)
     {
-    // Blend weight between the histogram-derived X position and the target output_y value.
-    // Lower = closer to output_y (softer response); higher = follows histogram more closely. 
-      float node_force = (workflow_mode == 0) 
-                         ? ((node_idx <= 3) ? 0.60f : 0.40f) 
-                         : (high_key ? 0.45f : 0.30f);
+      output_y[0] = 0.21f;
+      output_y[1] = 0.40f;
+      output_y[2] = 0.63f;
+      output_y[3] = 0.80f;
+      output_y[4] = 0.85f;
+    }
 
-      float hist_x = (float)i / 255.0f;
-      float new_x = output_y[node_idx] + (hist_x - output_y[node_idx]) * node_force;
-      
-      // Safety: ensure X positions are strictly increasing, as required by the spline interpolator.
-      if(node_idx > 0 && new_x <= nodes[node_idx].x)
-        new_x = nodes[node_idx].x + 0.01f;
-      else if(node_idx == 0 && new_x <= 0.0f)
-        new_x = 0.01f;
+    uint32_t cumsum = 0;
+    int node_idx = 0;
+    
+    for(int i = 0; i < 256 && node_idx < 5; i++)
+    {
+      cumsum += histogram[i];
+      float pct = (float)cumsum / total;
 
-      nodes[node_idx + 1].x = fminf(new_x, 0.99f);
+      while(node_idx < 5 && pct >= input_pcts[node_idx])
+      {
+        float node_force = (workflow_mode == 0) 
+                           ? ((node_idx <= 3) ? 0.60f : 0.40f) 
+                           : (high_key ? 0.45f : 0.30f);
+
+        float hist_x = (float)i / 255.0f;
+        float new_x = output_y[node_idx] + (hist_x - output_y[node_idx]) * node_force;
+        
+        if(node_idx > 0 && new_x <= nodes[node_idx].x)
+          new_x = nodes[node_idx].x + 0.01f;
+        else if(node_idx == 0 && new_x <= 0.0f)
+          new_x = 0.01f;
+
+        nodes[node_idx + 1].x = fminf(new_x, 0.99f);
+        nodes[node_idx + 1].y = output_y[node_idx];
+        node_idx++;
+      }
+    }
+
+    while(node_idx < 5)
+    {
+      nodes[node_idx + 1].x = nodes[node_idx].x + (1.0f - nodes[node_idx].x) / (6.0f - node_idx);
       nodes[node_idx + 1].y = output_y[node_idx];
       node_idx++;
     }
   }
-
-  while(node_idx < 5) // Fill remaining nodes with evenly spaced fallback if histogram is sparse.
+  else
   {
-    nodes[node_idx + 1].x = nodes[node_idx].x + (1.0f - nodes[node_idx].x) / (6.0f - node_idx);
-    nodes[node_idx + 1].y = output_y[node_idx];
-    node_idx++;
+    // Scene modes (1,2,3): 3 internal nodes (5 total nodes: 0-4)
+    float input_pcts[3] = { 0.05f, 0.50f, 0.95f };
+    float output_y[3] = { 0.035f, 0.50f, 0.95f };
+
+    // Initialize bounds
+    nodes[0].x = 0.0f;
+    nodes[0].y = 0.0f;
+    nodes[4].x = 1.0f;
+    nodes[4].y = 1.0f;
+
+    uint32_t total = 0;
+    for(int i = 0; i < 256; i++)
+      total += histogram[i];
+
+    if(total == 0)
+    {
+      for(int p = 0; p < 3; p++)
+      {
+        nodes[p + 1].x = output_y[p];
+        nodes[p + 1].y = output_y[p];
+      }
+      return;
+    }
+
+    if(high_key)
+    {
+      output_y[0] = 0.20f;
+      output_y[1] = 0.70f;
+      output_y[2] = 0.96f;
+    }
+
+    uint32_t cumsum = 0;
+    int node_idx = 0;
+    
+    for(int i = 0; i < 256 && node_idx < 3; i++)
+    {
+      cumsum += histogram[i];
+      float pct = (float)cumsum / total;
+
+      while(node_idx < 3 && pct >= input_pcts[node_idx])
+      {
+        float node_force = high_key ? 0.45f : 0.30f;
+
+        float hist_x = (float)i / 255.0f;
+        float new_x = output_y[node_idx] + (hist_x - output_y[node_idx]) * node_force;
+        
+        if(node_idx > 0 && new_x <= nodes[node_idx].x)
+          new_x = nodes[node_idx].x + 0.01f;
+        else if(node_idx == 0 && new_x <= 0.0f)
+          new_x = 0.01f;
+
+        nodes[node_idx + 1].x = fminf(new_x, 0.99f);
+        nodes[node_idx + 1].y = output_y[node_idx];
+        node_idx++;
+      }
+    }
+
+    while(node_idx < 3)
+    {
+      nodes[node_idx + 1].x = nodes[node_idx].x + (1.0f - nodes[node_idx].x) / (4.0f - node_idx);
+      nodes[node_idx + 1].y = output_y[node_idx];
+      node_idx++;
+    }
   }
 }
 
@@ -2901,9 +2530,10 @@ static void _basecurve_compute_common(dt_iop_module_t *self, gboolean high_key)
   _compute_histogram_from_thumbnail(buffer, width, height, histogram);
   dt_free_align(buffer);
 
-  dt_iop_basecurve_params_t *p = self->params;
+  dt_iop_basecurve_params_t *p = self->params; 
 
-  p->basecurve_nodes[0] = 7;
+  const int is_scene = (p->workflow_mode >= 1 && p->workflow_mode <= 3);
+  p->basecurve_nodes[0] = is_scene ? 5 : 7;
   p->basecurve_type[0] = MONOTONE_HERMITE;
 
   _compute_curve_nodes_from_histogram(histogram, p->basecurve[0], p->workflow_mode, high_key);
