@@ -899,10 +899,13 @@ static gboolean _opencl_device_init(dt_opencl_t *cl,
     cl->dev[dev].clroundup_ht = 16;
   }
 
+  const gboolean fastopencl = dt_conf_get_bool("opencl_fast");
   dt_print_nts(DT_DEBUG_OPENCL | DT_DEBUG_VERBOSE,
                "   ROUNDUP WIDTH & HEIGHT    %ix%i\n", cl->dev[dev].clroundup_wd, cl->dev[dev].clroundup_ht);
   dt_print_nts(DT_DEBUG_OPENCL,
                "   EVENTS HANDLED:           %s\n", STR_YESNO(cl->dev[dev].use_events));
+  dt_print_nts(DT_DEBUG_OPENCL,
+               "   OPENCL FAST MODE:         %s\n", STR_YESNO(fastopencl));
   dt_print_nts(DT_DEBUG_OPENCL,
                "   TILING ADVANTAGE:         %.3f\n", cl->dev[dev].advantage);
   dt_print_nts(DT_DEBUG_OPENCL,
@@ -981,7 +984,7 @@ static gboolean _opencl_device_init(dt_opencl_t *cl,
   escapedkerneldir = dt_util_str_replace(kerneldir, " ", "\\ ");
 #endif
 
-  const char* compile_opt = dt_conf_get_bool("opencl_fast") ? DT_OPENCL_DEFAULT_COMPILE_OPTI : DT_OPENCL_DEFAULT_COMPILE_DEFAULT;
+  const char* compile_opt = fastopencl ? DT_OPENCL_DEFAULT_COMPILE_OPTI : DT_OPENCL_DEFAULT_COMPILE_DEFAULT;
   cl->dev[dev].cflags = g_strdup_printf("-w %s%s -D%s=1",
                                 compile_opt,
                                 cl->dev[dev].cuda && cl->dev[dev].atomic_support ? " -DNVIDIA_SM_20=1" : "",
@@ -1139,6 +1142,7 @@ void dt_opencl_init(dt_opencl_t *cl,
   cl->enabled = FALSE;
   cl->stopped = FALSE;
   cl->error_count = 0;
+  cl->fastcl = dt_conf_get_bool("opencl_fast");
 #if CL_TARGET_OPENCL_VERSION == 300
   cl->api30 = TRUE;
 #else
@@ -1523,7 +1527,7 @@ finally:
         cl->dev[i].max_global_mem = reserved;
         cl->dev[i].max_mem_alloc = MIN(cl->dev[i].max_mem_alloc, reserved);
         dt_print_nts(DT_DEBUG_OPENCL,
-               "   UNIFIED MEM SIZE:         %.0f MB reserved for '%s' id=%d",
+               "   UNIFIED MEM SIZE:         %.0f MB reserved for '%s' id=%d\n",
                (double)reserved / 1024.0 / 1024.0, cl->dev[i].cname, i);
         res->total_memory -= reserved;
       }
@@ -2918,7 +2922,7 @@ int dt_opencl_read_host_from_device_raw(const int devid,
 }
 
 int dt_opencl_write_host_to_device(const int devid,
-                                   void *host,
+                                   const void *host,
                                    void *device,
                                    const int width,
                                    const int height,
@@ -2929,7 +2933,7 @@ int dt_opencl_write_host_to_device(const int devid,
 }
 
 int dt_opencl_write_host_to_device_rowpitch(const int devid,
-                                            void *host,
+                                            const void *host,
                                             void *device,
                                             const int width,
                                             const int height,
@@ -2946,7 +2950,7 @@ int dt_opencl_write_host_to_device_rowpitch(const int devid,
 }
 
 int dt_opencl_write_host_to_device_raw(const int devid,
-                                       void *host,
+                                       const void *host,
                                        void *device,
                                        const size_t *origin,
                                        const size_t *region,
@@ -2977,18 +2981,18 @@ int dt_opencl_write_host_to_device_raw(const int devid,
 }
 
 int dt_opencl_enqueue_copy_image(const int devid,
-                                 cl_mem src,
+                                 const cl_mem src,
                                  cl_mem dst,
-                                 size_t *orig_src,
-                                 size_t *orig_dst,
-                                 size_t *region)
+                                 const size_t *orig_src,
+                                 const size_t *orig_dst,
+                                 const size_t *region)
 {
   if(!_cldev_running(devid))
     return DT_OPENCL_NODEVICE;
 
-  size_t osrc[3] = { orig_src[0], orig_src[1], 0 };
-  size_t odst[3] = { orig_dst[0], orig_dst[1], 0 };
-  size_t reg[3] = { region[0], region[1], 1 };
+  const size_t osrc[3] = { orig_src ? orig_src[0] : 0, orig_src ? orig_src[1] : 0, 0 };
+  const size_t odst[3] = { orig_dst ? orig_dst[0] : 0, orig_dst ? orig_dst[1] : 0, 0 };
+  const size_t reg[3] = { region[0], region[1], 1 };
 
   cl_event *eventp = _opencl_events_get_slot(devid, "[Copy Image (on device)]");
   const cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueCopyImage)
@@ -3010,16 +3014,16 @@ int dt_opencl_enqueue_copy_image(const int devid,
 }
 
 int dt_opencl_enqueue_copy_image_to_buffer(const int devid,
-                                           cl_mem src_image,
+                                           const cl_mem src_image,
                                            cl_mem dst_buffer,
-                                           size_t *origin,
-                                           size_t *region,
-                                           size_t offset)
+                                           const size_t *origin,
+                                           const size_t *region,
+                                           const size_t offset)
 {
   if(!_cldev_running(devid))
     return DT_OPENCL_NODEVICE;
 
-  const size_t org[3] = { origin[0], origin[1], 0 };
+  const size_t org[3] = { origin ? origin[0] : 0, origin ? origin[1] : 0, 0 };
   const size_t reg[3] = { region[0], region[1], 1 };
   cl_event *eventp = _opencl_events_get_slot(devid, "[Copy Image to Buffer (on device)]");
   const cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueCopyImageToBuffer)
@@ -3040,16 +3044,16 @@ int dt_opencl_enqueue_copy_image_to_buffer(const int devid,
 }
 
 int dt_opencl_enqueue_copy_buffer_to_image(const int devid,
-                                           cl_mem src_buffer,
+                                           const cl_mem src_buffer,
                                            cl_mem dst_image,
-                                           size_t offset,
-                                           size_t *origin,
-                                           size_t *region)
+                                           const size_t offset,
+                                           const size_t *origin,
+                                           const size_t *region)
 {
   if(!_cldev_running(devid))
     return DT_OPENCL_NODEVICE;
 
-  const size_t org[3] = { origin[0], origin[1], 0 };
+  const size_t org[3] = { origin ? origin[0] : 0, origin ? origin[1] : 0, 0 };
   const size_t reg[3] = { region[0], region[1], 1 };
   cl_event *eventp = _opencl_events_get_slot(devid, "[Copy Buffer to Image (on device)]");
   const cl_int err = (darktable.opencl->dlocl->symbols->dt_clEnqueueCopyBufferToImage)
@@ -3070,11 +3074,11 @@ int dt_opencl_enqueue_copy_buffer_to_image(const int devid,
 }
 
 int dt_opencl_enqueue_copy_buffer_to_buffer(const int devid,
-                                            cl_mem src_buffer,
+                                            const cl_mem src_buffer,
                                             cl_mem dst_buffer,
-                                            size_t srcoffset,
-                                            size_t dstoffset,
-                                            size_t size)
+                                            const size_t srcoffset,
+                                            const size_t dstoffset,
+                                            const size_t size)
 {
   if(!_cldev_running(devid))
     return DT_OPENCL_NODEVICE;
@@ -3341,7 +3345,12 @@ void *dt_opencl_alloc_device(const int devid,
   else if(bpp == sizeof(uint8_t))
     fmt = (cl_image_format){ CL_R, CL_UNSIGNED_INT8 };
   else
+  {
+    dt_print(DT_DEBUG_OPENCL,
+             "[opencl alloc_device] could not alloc image on device '%s' id=%d because of unknon bpp=%d format",
+             cl->dev[devid].fullname, devid, bpp);
     return NULL;
+  }
 
   cl_image_desc desc;
   memset(&desc, 0, sizeof(cl_image_desc));
@@ -3352,9 +3361,9 @@ void *dt_opencl_alloc_device(const int devid,
   cl_mem dev = (cl->dlocl->symbols->dt_clCreateImage)
     (cl->dev[devid].context, CL_MEM_READ_WRITE, &fmt, &desc, NULL, &err);
 
-  if(err != CL_SUCCESS)
+  if(err != CL_SUCCESS || dev == NULL)
     dt_print(DT_DEBUG_OPENCL,
-             "[opencl alloc_device] could not alloc img buffer on device '%s' id=%d: %s",
+             "[opencl alloc_device] could not alloc image on device '%s' id=%d: %s",
              cl->dev[devid].fullname, devid, cl_errstr(err));
 
   _check_clmem_err(devid, err);
@@ -3490,9 +3499,8 @@ void *dt_opencl_duplicate_image(const int devid, const cl_mem src)
   cl_mem new = dt_opencl_alloc_device(devid, width, height, el);
   if(new == NULL) return NULL;
 
-  size_t origin[]   = { 0, 0, 0 };
-  size_t region[] = { width, height, 1 };
-  const cl_int err = dt_opencl_enqueue_copy_image(devid, src, new, origin, origin, region);
+  size_t region[] = { width, height };
+  const cl_int err = dt_opencl_enqueue_copy_image(devid, src, new, CLIMG_ORIGIN, CLIMG_ORIGIN, region);
   if(err != CL_SUCCESS)
   {
     dt_opencl_release_mem_object(new);
@@ -3503,7 +3511,7 @@ void *dt_opencl_duplicate_image(const int devid, const cl_mem src)
 
 void dt_opencl_dump_pipe_pfm(const char* mod,
                              const int devid,
-                             cl_mem img,
+                             const cl_mem img,
                              const gboolean input,
                              const char *pipe)
 {
@@ -3650,7 +3658,7 @@ gboolean dt_opencl_image_fits_device(const int devid,
 
 /** round size to a multiple of the value given in the device specifig
  * config parameter clroundup_wd/ht */
-int dt_opencl_dev_roundup_width(int size,
+int dt_opencl_dev_roundup_width(const int size,
                                 const int devid)
 {
   if(_cldev_running(devid))
@@ -3662,7 +3670,7 @@ int dt_opencl_dev_roundup_width(int size,
     return 0;
 }
 
-int dt_opencl_dev_roundup_height(int size,
+int dt_opencl_dev_roundup_height(const int size,
                                  const int devid)
 {
   if(_cldev_running(devid))
@@ -3684,6 +3692,12 @@ gboolean dt_opencl_is_enabled(void)
 gboolean dt_opencl_running(void)
 {
   return _cl_running();
+}
+
+/** runtime check for cl system running in fast mode */
+gboolean dt_opencl_running_fast(void)
+{
+  return _cl_running() ? darktable.opencl->fastcl : FALSE;
 }
 
 /** update enabled flag and profile with value from preferences */
@@ -3780,7 +3794,7 @@ static cl_event *_opencl_events_get_slot(const int devid,
   // if first time called: allocate initial buffers
   if(*eventlist == NULL)
   {
-    int newevents = DT_OPENCL_EVENTLISTSIZE;
+    int newevents = DT_OPENCL_EVENTS;
     *eventlist = calloc(newevents, sizeof(cl_event));
     *eventtags = calloc(newevents, sizeof(dt_opencl_eventtag_t));
     if(!*eventlist || !*eventtags)
@@ -3823,7 +3837,7 @@ static cl_event *_opencl_events_get_slot(const int devid,
   // if no more space left in eventlist: grow buffer
   if(*numevents == *maxevents)
   {
-    int newevents = *maxevents + DT_OPENCL_EVENTLISTSIZE;
+    int newevents = *maxevents + DT_OPENCL_EVENTS;
     cl_event *neweventlist = calloc(newevents, sizeof(cl_event));
     dt_opencl_eventtag_t *neweventtags = calloc(newevents, sizeof(dt_opencl_eventtag_t));
     if(!neweventlist || !neweventtags)

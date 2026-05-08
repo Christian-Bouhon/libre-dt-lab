@@ -357,7 +357,8 @@ dt_ai_provider_t dt_ai_env_get_provider(dt_ai_environment_t *env)
 extern dt_ai_context_t *
 dt_ai_onnx_load_ext(const char *model_dir, const char *model_file,
                     dt_ai_provider_t provider, dt_ai_opt_level_t opt_level,
-                    const dt_ai_dim_override_t *dim_overrides, int n_overrides);
+                    const dt_ai_dim_override_t *dim_overrides, int n_overrides,
+                    uint32_t ep_flags);
 
 // model loading with backend dispatch
 
@@ -367,7 +368,7 @@ dt_ai_context_t *dt_ai_load_model(dt_ai_environment_t *env,
                                   dt_ai_provider_t provider)
 {
   return dt_ai_load_model_ext(env, model_id, model_file, provider,
-                              DT_AI_OPT_ALL, NULL, 0);
+                              DT_AI_OPT_ALL, NULL, 0, 0);
 }
 
 dt_ai_context_t *dt_ai_load_model_ext(dt_ai_environment_t *env,
@@ -376,7 +377,8 @@ dt_ai_context_t *dt_ai_load_model_ext(dt_ai_environment_t *env,
                                       dt_ai_provider_t provider,
                                       dt_ai_opt_level_t opt_level,
                                       const dt_ai_dim_override_t *dim_overrides,
-                                      int n_overrides)
+                                      int n_overrides,
+                                      uint32_t ep_flags)
 {
   if(!env || !model_id)
     return NULL;
@@ -428,7 +430,7 @@ dt_ai_context_t *dt_ai_load_model_ext(dt_ai_environment_t *env,
   if(strcmp(backend_copy, "onnx") == 0)
   {
     ctx = dt_ai_onnx_load_ext(model_dir, model_file, provider, opt_level,
-                               dim_overrides, n_overrides);
+                               dim_overrides, n_overrides, ep_flags);
   }
   else
   {
@@ -448,6 +450,10 @@ dt_ai_context_t *dt_ai_load_model_ext(dt_ai_environment_t *env,
 // _attribute_node returns the parsed JsonParser plus a borrowed JsonNode*
 // for the named key; caller must g_object_unref the returned parser;
 // returns NULL parser if the attribute set is absent or the key is missing
+//
+// the key accepts a dotted path ("variants.bayer.onnx"): each segment
+// except the last must resolve to a JSON object; the final segment is
+// the leaf lookup and may hold any JSON value type
 static JsonParser *_attribute_node(const dt_ai_model_info_t *info,
                                    const char *key,
                                    JsonNode **out_node)
@@ -467,12 +473,26 @@ static JsonParser *_attribute_node(const dt_ai_model_info_t *info,
     return NULL;
   }
   JsonObject *obj = json_node_get_object(root);
-  if(!json_object_has_member(obj, key))
+  gchar **segments = g_strsplit(key, ".", -1);
+  const int n = g_strv_length(segments);
+  JsonNode *node = NULL;
+  for(int i = 0; i < n; i++)
+  {
+    if(!json_object_has_member(obj, segments[i])) goto out;
+    node = json_object_get_member(obj, segments[i]);
+    if(i == n - 1) break;
+    // intermediate segments must be objects to descend further
+    if(!node || !JSON_NODE_HOLDS_OBJECT(node)) { node = NULL; goto out; }
+    obj = json_node_get_object(node);
+  }
+out:
+  g_strfreev(segments);
+  if(!node)
   {
     g_object_unref(parser);
     return NULL;
   }
-  *out_node = json_object_get_member(obj, key);
+  *out_node = node;
   return parser;
 }
 
@@ -529,6 +549,30 @@ char *dt_ai_model_attribute_string(const dt_ai_model_info_t *info,
   return result;
 }
 
+int *dt_ai_model_attribute_int_array(const dt_ai_model_info_t *info,
+                                     const char *key,
+                                     int *out_count)
+{
+  if(out_count) *out_count = 0;
+  JsonNode *v = NULL;
+  JsonParser *p = _attribute_node(info, key, &v);
+  int *result = NULL;
+  if(v && JSON_NODE_HOLDS_ARRAY(v))
+  {
+    JsonArray *arr = json_node_get_array(v);
+    const guint n = json_array_get_length(arr);
+    if(n > 0)
+    {
+      result = g_new(int, n);
+      for(guint i = 0; i < n; i++)
+        result[i] = (int)json_array_get_int_element(arr, i);
+      if(out_count) *out_count = (int)n;
+    }
+  }
+  if(p) g_object_unref(p);
+  return result;
+}
+
 // provider string conversion
 
 const char *dt_ai_provider_to_string(dt_ai_provider_t provider)
@@ -560,6 +604,36 @@ dt_ai_provider_t dt_ai_provider_from_string(const char *str)
     return DT_AI_PROVIDER_MIGRAPHX;
 
   return DT_AI_PROVIDER_AUTO;
+}
+
+// parse the comma-separated EP list from dt_ai_ort_probe_library_full().
+// AUTO and CPU are always set — they work regardless of what the library
+// advertises; unknown tokens (e.g. "ROCm", "TensorRT") are ignored
+guint dt_ai_providers_from_eps(const char *eps)
+{
+  guint mask = (1u << DT_AI_PROVIDER_AUTO) | (1u << DT_AI_PROVIDER_CPU);
+  if(!eps) return mask;
+
+  gchar **tokens = g_strsplit(eps, ",", -1);
+  for(int i = 0; tokens[i]; i++)
+  {
+    const dt_ai_provider_t p = dt_ai_provider_from_string(g_strstrip(tokens[i]));
+    if(p != DT_AI_PROVIDER_AUTO)  // from_string returns AUTO on unknown
+      mask |= 1u << p;
+  }
+  g_strfreev(tokens);
+  return mask;
+}
+
+guint dt_ai_providers_bundled(void)
+{
+  guint mask = (1u << DT_AI_PROVIDER_AUTO) | (1u << DT_AI_PROVIDER_CPU);
+#if defined(__APPLE__)
+  mask |= 1u << DT_AI_PROVIDER_COREML;
+#elif defined(_WIN32)
+  mask |= 1u << DT_AI_PROVIDER_DIRECTML;
+#endif
+  return mask;
 }
 
 // clang-format off

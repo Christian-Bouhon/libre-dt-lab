@@ -66,8 +66,6 @@ static void _bm_free(potrace_bitmap_t *bm)
   }
 }
 
-#define SET_THRESHOLD 0.6f
-
 static inline void _scale_point(float p[2],
                                 const float xscale,
                                 const float yscale,
@@ -141,6 +139,7 @@ GList *ras2forms(const float *mask,
                  const int width,
                  const int height,
                  const dt_image_t *const image,
+                 const float threshold,
                  const int turdsize,
                  const double alphamax,
                  GList **out_signs)
@@ -158,7 +157,7 @@ GList *ras2forms(const float *mask,
     for(int x=0; x < width; x++)
     {
       const int index = x + y * width;
-      if(mask[index] < SET_THRESHOLD)
+      if(mask[index] < threshold)
       {
         // black enough to be a point of the form
         BM_USET(bm, x, y);
@@ -279,7 +278,11 @@ GList *ras2forms(const float *mask,
   potrace_param_free(param);
   _bm_free(bm);
 
-  if(out_signs) *out_signs = signs;
+  // restore potrace's traversal order (outer first, then its holes).
+  // group consumers need the outer at list position 0 so it acts as the
+  // base while holes subtract on top with DIFFERENCE mode
+  forms = g_list_reverse(forms);
+  if(out_signs) *out_signs = g_list_reverse(signs);
   return forms;
 }
 

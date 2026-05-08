@@ -17,7 +17,12 @@ src/ai/                          ONNX Runtime backend (darktable_ai static lib)
 
 src/common/ai/                   higher-level AI modules (compiled in lib_darktable)
   segmentation.c/.h                SAM/SegNext interactive masking
-  restore.c/.h                     denoise/upscale tiled inference
+  restore.c/.h                     generic env/ctx lifecycle + model loaders
+  restore_common.h                 private struct defs shared by restore_*
+  restore_rgb.c/.h                 RGB-path denoise + upscale (tiled inference,
+                                   shadow boost, DWT detail recovery)
+  restore_raw_bayer.c/.h           RawNIND Bayer denoise (batch + piped preview)
+  restore_raw_linear.c/.h          RawNIND linear/X-Trans denoise
 
 src/common/ai_models.c/.h       model registry, download, preferences integration
 src/gui/preferences_ai.c        AI preferences tab
@@ -191,6 +196,28 @@ runtime without loading a model. It creates temporary
 `OrtSessionOptions`, attempts to attach the provider, and returns 1
 (available) or 0 (unavailable). Used by the preferences UI to show a
 warning when a selected provider is not available.
+
+### Multi-GPU Device Selection (escape hatch)
+
+For systems with multiple GPUs of the same vendor (e.g. laptop with
+both an iGPU and a dGPU, or a workstation with two NVIDIA cards), the
+default `device_id` is `0` — whichever the platform enumerates first.
+Power users can override this by setting either a conf key or an env
+var (env var wins when both are set):
+
+| Provider | Conf key | Env var |
+|---|---|---|
+| CUDA | `plugins/ai/cuda_device_id` | `DT_CUDA_DEVICE_ID` |
+| MIGraphX / ROCm | `plugins/ai/migraphx_device_id` | `DT_MIGRAPHX_DEVICE_ID` |
+| DirectML | `plugins/ai/dml_device_id` | `DT_DML_DEVICE_ID` |
+
+The integer index follows each provider's own enumeration:
+- **CUDA** indexes match `nvidia-smi` (and respect `CUDA_VISIBLE_DEVICES`)
+- **MIGraphX / ROCm** indexes match the GPU agent order in `rocminfo`
+- **DirectML** indexes match `IDXGIFactory1::EnumAdapters1` order
+
+OpenVINO and CoreML are single-device or self-managing; they do not
+read a device_id key. Apply changes by restarting darktable.
 
 ### ONNX Runtime Packages
 
@@ -402,6 +429,9 @@ FILE(GLOB SOURCE_FILES_AI
   "common/ai_models.c"
   "common/ai/segmentation.c"
   "common/ai/restore.c"
+  "common/ai/restore_rgb.c"
+  "common/ai/restore_raw_bayer.c"
+  "common/ai/restore_raw_linear.c"
   "common/ai/your_task.c"       # add here
   ...
 )
@@ -455,8 +485,10 @@ dt_your_task_free(ctx);
 | Task | Key | API | Consumer |
 |------|-----|-----|----------|
 | Object Mask | `"mask"` | `src/common/ai/segmentation.h` | `src/develop/masks/object.c` |
-| Denoise | `"denoise"` | `src/common/ai/restore.h` | `src/libs/neural_restore.c` |
-| Upscale | `"upscale"` | `src/common/ai/restore.h` | `src/libs/neural_restore.c` |
+| Denoise | `"denoise"` | `src/common/ai/restore_rgb.h` | `src/libs/neural_restore.c` |
+| Upscale | `"upscale"` | `src/common/ai/restore_rgb.h` | `src/libs/neural_restore.c` |
+| Raw Denoise (Bayer)   | `"rawdenoise"` | `src/common/ai/restore_raw_bayer.h`  | `src/libs/neural_restore.c` |
+| Raw Denoise (Linear)  | `"rawdenoise"` | `src/common/ai/restore_raw_linear.h` | `src/libs/neural_restore.c` |
 
 For model requirements, I/O specifications, tiling strategies, color
 space conventions, ONNX export instructions, and config.json examples

@@ -302,24 +302,23 @@ static void _refine_with_detail_mask(dt_iop_module_t *self,
   dt_control_log(_("detail mask blending error"));
 }
 
-static size_t _get_post_operations(const dt_develop_blend_params_t *const params,
+static size_t _get_post_operations(const dt_develop_blend_params_t *const bp,
                                    const dt_dev_pixelpipe_iop_t *const piece,
                                    _develop_mask_post_processing operations[3])
 {
-  const gboolean mask_feather = params->feathering_radius > 0.1f && piece->colors >= 3;
-  const gboolean mask_blur = params->blur_radius > 0.1f;
-  const gboolean mask_tone_curve =
-    fabsf(params->contrast) >= 0.01f || fabsf(params->brightness) >= 0.01f;
+  const gboolean mask_feather = bp->feathering_radius > 0.1f && piece->colors >= 3;
+  const gboolean mask_blur = bp->blur_radius > 0.1f;
+  const gboolean mask_tone_curve = fabsf(bp->contrast) >= 0.01f || fabsf(bp->brightness) >= 0.01f;
 
   const gboolean mask_feather_before =
-       params->feathering_guide == DEVELOP_MASK_GUIDE_IN_BEFORE_BLUR
-    || params->feathering_guide == DEVELOP_MASK_GUIDE_OUT_BEFORE_BLUR;
+       bp->feathering_guide == DEVELOP_MASK_GUIDE_IN_BEFORE_BLUR
+    || bp->feathering_guide == DEVELOP_MASK_GUIDE_OUT_BEFORE_BLUR;
 
   const gboolean mask_feather_out =
-       params->feathering_guide == DEVELOP_MASK_GUIDE_OUT_BEFORE_BLUR
-    || params->feathering_guide == DEVELOP_MASK_GUIDE_OUT_AFTER_BLUR;
+       bp->feathering_guide == DEVELOP_MASK_GUIDE_OUT_BEFORE_BLUR
+    || bp->feathering_guide == DEVELOP_MASK_GUIDE_OUT_AFTER_BLUR;
 
-  const float opacity = CLIP(params->opacity / 100.0f);
+  const float opacity = CLIP(bp->opacity / 100.0f);
 
   memset(operations, 0, sizeof(_develop_mask_post_processing) * 3);
   size_t index = 0;
@@ -418,8 +417,7 @@ static void _develop_blend_process_mask_tone_curve(float *const restrict mask,
   DT_OMP_FOR_SIMD(aligned(mask:64))
   for(size_t k = 0; k < buffsize; k++)
   {
-    float x = mask[k] / opacity;
-    x = 2.f * x - 1.f;
+    float x = 2.0f * mask[k] / opacity - 1.0f;
     if(1.f - brightness <= 0.f)
       x = mask[k] <= mask_epsilon ? -1.f : 1.f;
     else if(1.f + brightness <= 0.f)
@@ -434,7 +432,12 @@ static void _develop_blend_process_mask_tone_curve(float *const restrict mask,
       x = (x + brightness) / (1.f + brightness);
       x = fmaxf(x, -1.f);
     }
-    mask[k] = CLIP(((x * e / (1.f + (e - 1.f) * fabsf(x))) / 2.f + 0.5f) * opacity);
+    const float cval = 0.5f * (x * e / (1.f + (e - 1.f) * fabsf(x))) + 0.5f;
+    /*  we don't want *very* small masking values possibly resulting from above maths
+        so we make sure they above a threshold
+    */
+    const float mval = cval > 1e-6 ? cval : 0.0f;
+    mask[k] = CLIP(mval) * opacity;
   }
 }
 
@@ -995,7 +998,6 @@ gboolean dt_develop_blend_process_cl(dt_iop_module_t *self,
   dt_colorspaces_iccprofile_info_cl_t *work_profile_info_cl = NULL;
   cl_float *work_profile_lut_cl = NULL;
 
-  size_t origin[] = { 0, 0 };
   size_t region[] = { owidth, oheight };
 
   // parameters, for every channel the 4 limits + pre-computed
@@ -1180,7 +1182,7 @@ gboolean dt_develop_blend_process_cl(dt_iop_module_t *self,
           if(dev_guide == NULL) goto error;
 
           size_t origin_1[] = { dx, dy };
-          err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_guide, origin, origin_1, region);
+          err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_guide, CLIMG_ORIGIN, origin_1, region);
           if(err != CL_SUCCESS)
           {
             dt_opencl_release_mem_object(dev_guide);
@@ -1225,12 +1227,10 @@ gboolean dt_develop_blend_process_cl(dt_iop_module_t *self,
       else if(operation == DEVELOP_MASK_POST_TONE_CURVE)
       {
         const float e = expf(3.f * d->contrast);
-        const float brightness = d->brightness;
-
         err = dt_opencl_enqueue_kernel_2d_args(devid, kernel_mask_tone_curve, owidth, oheight,
                                   CLARG(dev_mask), CLARG(dev_mask_2),
                                   CLARG(owidth), CLARG(oheight),
-                                  CLARG(e), CLARG(brightness), CLARG(opacity));
+                                  CLARG(e), CLARG(d->brightness), CLARG(opacity));
         if(err != CL_SUCCESS)
         {
           dt_print(DT_DEBUG_OPENCL,
@@ -1252,7 +1252,7 @@ gboolean dt_develop_blend_process_cl(dt_iop_module_t *self,
   err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
   dev_tmp = dt_opencl_alloc_device(devid, owidth, oheight, sizeof(float) * ch);
   if(dev_tmp == NULL) goto error;
-  err = dt_opencl_enqueue_copy_image(devid, dev_out, dev_tmp, origin, origin, region);
+  err = dt_opencl_enqueue_copy_image(devid, dev_out, dev_tmp, CLIMG_ORIGIN, CLIMG_ORIGIN, region);
   if(err != CL_SUCCESS) goto error;
 
   if(request_mask_display & DT_DEV_PIXELPIPE_DISPLAY_ANY)
@@ -1405,14 +1405,12 @@ dt_blendop_cl_global_t *dt_develop_blend_init_cl_global(void)
     dt_opencl_create_kernel(program, "blendop_set_mask");
   b->kernel_blendop_display_channel =
     dt_opencl_create_kernel(program, "blendop_display_channel");
-
-  const int program_rcd = 31;
   b->kernel_calc_Y0_mask =
-    dt_opencl_create_kernel(program_rcd, "calc_Y0_mask");
+    dt_opencl_create_kernel(program, "calc_Y0_mask");
   b->kernel_calc_scharr_mask =
-    dt_opencl_create_kernel(program_rcd, "calc_scharr_mask");
+    dt_opencl_create_kernel(program, "calc_scharr_mask");
   b->kernel_calc_blend =
-    dt_opencl_create_kernel(program_rcd, "calc_detail_blend");
+    dt_opencl_create_kernel(program, "calc_detail_blend");
 
   return b;
 #else
