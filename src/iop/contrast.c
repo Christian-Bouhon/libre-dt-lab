@@ -392,11 +392,12 @@ static inline void apply_local_contrast(const float *const restrict in,
     // Apply balance weighting to local contrast
     correction_ev *= w_local;
 
-    // Noise protection (Smoothstep on detail magnitude)
+    // Noise protection — attenuate local contrast gain in low luminance
     if (d->noise_threshold > 1e-6f) {
-        const float edge0 = d->noise_threshold * 0.5f;
-        const float edge1 = edge0 * 1.5f;
-        correction_ev *= dt_smoothstep(edge0, edge1, correction_ev);
+        const float floor = d->noise_threshold * 8.0f;
+        const float ratio = fminf(lum_pixel / fmaxf(floor, 1e-6f), 1.0f);
+        const float attenuation = ratio * ratio * (3.0f - 2.0f * ratio);
+        correction_ev *= attenuation;
     }
 
     // Global contrast with protection
