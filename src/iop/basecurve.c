@@ -1266,7 +1266,8 @@ int process_cl_lut(dt_iop_module_t *self,
                                            CLARG(dev_profile_lut), CLARG(use_work_profile));
   }
 
-  if(d->workflow_mode > 0 || d->color_look > 0)
+  if(d->workflow_mode > 0 || d->color_look > 0 || d->gamut_strength > 0.0f
+     || d->purity_boost != 0.0f || d->highlight_corr != 0.0f || d->ucs_saturation_balance != 0.0f)
   {
     err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_basecurve_finalize, width, height,
         CLARG(dev_in), CLARG(dev_tmp), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(d->workflow_mode),
@@ -1710,7 +1711,9 @@ static void apply_postprocess(float *rgb, dt_iop_basecurve_data_t *const d,
     float purity_comp = (purity > p_thresh) ? p_thresh + (purity - p_thresh) / (1.0f + 0.2f * (purity - p_thresh)) : purity;
 
     float V_orig = fmaxf(0.0f, powf(V_norm, d->contrast_brilliance_power));
-    V_orig *= (1.189f + d->highlight_gain);
+    V_orig *= (1.189f + d->highlight_gain) * (1.0f - 0.5f * purity); /*CB 0.3 = plus doux, risque rouge hors gamut
+                                                                          0.5 = rouge pile dans le gamut,
+                                                                          0.7 = rouge bien dans le gamut, mais couleurs un peu plus assombries */
     V_orig = fmaxf(0.0f, powf(V_orig, d->shadow_lift + 1.0f));
 
     float V_new = _aces_20_tonemap(V_orig);
@@ -1919,10 +1922,11 @@ static void apply_postprocess(float *rgb, dt_iop_basecurve_data_t *const d,
 
   if(d->purity_boost != 0.0f)
   {
+    const float boost_amount = d->purity_boost * d->gamut_strength;
     const float luma_p = r_coeff_lum * r + g_coeff_lum * g + b_coeff_lum * b;
-    r += d->purity_boost * (r - luma_p);
-    g += d->purity_boost * (g - luma_p);
-    b += d->purity_boost * (b - luma_p);
+    r += boost_amount * (r - luma_p);
+    g += boost_amount * (g - luma_p);
+    b += boost_amount * (b - luma_p);
     if(r < 0.0f || r > 1.0f || g < 0.0f || g > 1.0f || b < 0.0f || b > 1.0f)
     {
       const float t_p = fmaxf(0.0f, fminf(
@@ -2005,7 +2009,7 @@ static void process_lut(dt_iop_module_t *self,
     apply_curve(in, out, (int)wd, (int)ht, d->preserve_colors, 1.0, d->table, d->unbounded_coeffs, work_profile);
 
   if(d->color_look > 0 || d->workflow_mode > 0 || d->shadow_lift != 1.0f || d->highlight_gain != 1.0f
-     || d->ucs_saturation_balance != 0.0f || d->gamut_strength > 0.0f || d->highlight_corr != 0.0f)
+     || d->ucs_saturation_balance != 0.0f || d->gamut_strength > 0.0f || d->purity_boost != 0.0f || d->highlight_corr != 0.0f)
   {
     const size_t npixels = (size_t)wd * ht;
     DT_OMP_FOR()
@@ -3226,6 +3230,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
       gtk_widget_set_visible(g->ucs_saturation_balance, TRUE);
       gtk_widget_set_visible(g->gamut_section.expander, TRUE); // Rendre visible la section gamut
       gtk_widget_set_visible(g->gamut_strength, TRUE);
+      gtk_widget_set_visible(g->purity_boost, TRUE);
       gtk_widget_set_visible(g->highlight_corr, TRUE);
       gtk_widget_set_visible(g->color_space, TRUE);
       gtk_widget_set_visible(g->color_look, TRUE);
