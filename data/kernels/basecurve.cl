@@ -544,7 +544,7 @@ const float contrast_brilliance_power,
 
       // Prepare Norm for tonemapping
       float V_orig = fmax(0.0f, pow(V_norm, contrast_brilliance_power));
-      V_orig *= (1.189f + highlight_gain); // +0.25 EV exposure compensation
+      V_orig *= (1.189f + highlight_gain) * (1.0f - 0.5f * purity);
       V_orig = fmax(0.0f, pow(V_orig, shadow_lift + 1.0f));
 
       float V_new = _aces_20_tonemap(V_orig);
@@ -760,8 +760,9 @@ const float contrast_brilliance_power,
 
     if(purity_boost != 0.0f)
     {
+      const float boost_amount = purity_boost * gamut_strength;
       const float luma_p = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
-      pixel.xyz += purity_boost * (pixel.xyz - (float3)(luma_p));
+      pixel.xyz += boost_amount * (pixel.xyz - (float3)(luma_p));
       if(any(pixel.xyz < (float3)(0.0f)) || any(pixel.xyz > (float3)(1.0f)))
       {
         float t_p = 1.0f;
