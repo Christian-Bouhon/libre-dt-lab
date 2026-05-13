@@ -75,7 +75,7 @@
 #define ACES_EXPOSURE_ADJUST 2.0f
 #define ROLLOFF_THRESHOLD 0.80f
 
-DT_MODULE_INTROSPECTION(11, dt_iop_basecurve_params_t)
+DT_MODULE_INTROSPECTION(12, dt_iop_basecurve_params_t)
 
 typedef struct dt_iop_basecurve_node_t
 {
@@ -452,6 +452,7 @@ typedef struct dt_iop_basecurve_gui_data_t
   int last_workflow_mode;
   gboolean look_selected_first_time;
   gboolean in_gui_update; // TRUE while gui_update is running, prevents slider callbacks from adding spurious history
+  GtkWidget *colorpicker;
 } dt_iop_basecurve_gui_data_t;
 
 typedef struct basecurve_preset_t
@@ -579,6 +580,10 @@ typedef struct dt_iop_basecurve_global_data_t
   int kernel_basecurve_normalize;
   int kernel_basecurve_reconstruct;
   int kernel_basecurve_finalize;
+  float picked_color[3];
+  float picked_color_min[3];
+  float picked_color_max[3];
+  float picked_output_color[3];
 } dt_iop_basecurve_global_data_t;
 
 
@@ -1470,41 +1475,30 @@ static inline void gauss_blur(
   const float w[5] = { 1.f / 16.f, 4.f / 16.f, 6.f / 16.f, 4.f / 16.f, 1.f / 16.f };
   float *tmp = dt_alloc_align_float((size_t)4 * wd * ht);
   dt_iop_image_fill(tmp, 0.0f, wd, ht, 4);
+  const int iwd = (int)wd;
+  const int iht = (int)ht;
   DT_OMP_FOR()
-  for(int j=0;j<ht;j++)
+  for(int j = 0; j < iht; j++)
   { // horizontal pass
-    // left borders
-    for(int i=0;i<2;i++)
-      for(int ii=-2;ii<=2;ii++)
+    for(int i = 0; i < iwd; i++)
+      for(int ii = -2; ii <= 2; ii++)
+      {
+        const int col = MIN(MAX(-i - ii, i + ii), iwd - (i + ii - iwd + 1));
         for_four_channels(c)
-          tmp[4*(j*wd+i)+c] += input[4*(j*wd+MAX(-i-ii,i+ii))+c] * w[ii+2];
-    // most pixels
-    for(int i=2;i<wd-2;i++)
-      for(int ii=-2;ii<=2;ii++)
-        for_four_channels(c)
-          tmp[4*(j*wd+i)+c] += input[4*(j*wd+i+ii)+c] * w[ii+2];
-    // right borders
-    for(int i=wd-2;i<wd;i++)
-      for(int ii=-2;ii<=2;ii++)
-        for_four_channels(c)
-          tmp[4*(j*wd+i)+c] += input[4*(j*wd+MIN(i+ii, wd-(i+ii-wd+1) ))+c] * w[ii+2];
+          tmp[4 * (j * iwd + i) + c] += input[4 * (j * iwd + col) + c] * w[ii + 2];
+      }
   }
   dt_iop_image_fill(output, 0.0f, wd, ht, 4);
   DT_OMP_FOR()
-  for(int i=0;i<wd;i++)
+  for(int i = 0; i < iwd; i++)
   { // vertical pass
-    for(int j=0;j<2;j++)
-      for(int jj=-2;jj<=2;jj++)
+    for(int j = 0; j < iht; j++)
+      for(int jj = -2; jj <= 2; jj++)
+      {
+        const int row = MIN(MAX(-j - jj, j + jj), iht - (j + jj - iht + 1));
         for_four_channels(c)
-          output[4*(j*wd+i)+c] += tmp[4*(MAX(-j-jj,j+jj)*wd+i)+c] * w[jj+2];
-    for(int j=2;j<ht-2;j++)
-      for(int jj=-2;jj<=2;jj++)
-        for_four_channels(c)
-          output[4*(j*wd+i)+c] += tmp[4*((j+jj)*wd+i)+c] * w[jj+2];
-    for(int j=ht-2;j<ht;j++)
-      for(int jj=-2;jj<=2;jj++)
-        for_four_channels(c)
-          output[4*(j*wd+i)+c] += tmp[4*(MIN(j+jj, ht-(j+jj-ht+1))*wd+i)+c] * w[jj+2];
+          output[4 * (j * iwd + i) + c] += tmp[4 * (row * iwd + i) + c] * w[jj + 2];
+      }
   }
   dt_free_align(tmp);
 }
@@ -1693,13 +1687,26 @@ static void apply_postprocess(float *rgb, dt_iop_basecurve_data_t *const d,
     const float L_ok = lab[0];
     const float mask_ok = 1.0f / (1.0f + expf((L_ok - 0.5f) * 10.0f));
     const float weight_ok = 2.0f * mask_ok - 1.0f;
-    const float mid_weight = 1.0f - weight_ok * weight_ok;
+    const float mid_weight = 1.0f - weight_ok * weight_ok * (0.7f + 0.3f * L_ok);
 
     float chroma = hypotf(lab[1], lab[2]);
     const float vibrance_weight = fmaxf(0.0f, 1.0f - chroma * 2.5f);
     const float sat_mult = (1.0f + d->saturation_boost * mid_weight * vibrance_weight) * (1.0f + d->ucs_saturation_balance * (weight_ok * weight_ok * weight_ok));
     lab[1] *= sat_mult;
     lab[2] *= sat_mult;
+
+    // Soft chroma compression to stay in gamut when saturation_boost pushed too far
+    float chroma_sat = hypotf(lab[1], lab[2]);
+    const float knee_sat = 0.30f;
+    const float knee_slope = 2.0f;
+    if(chroma_sat > knee_sat)
+    {
+      const float excess = chroma_sat - knee_sat;
+      const float compressed = knee_sat + excess / (1.0f + knee_slope * excess);
+      const float scale = compressed / fmaxf(chroma_sat, 1e-6f);
+      lab[1] *= scale;
+      lab[2] *= scale;
+    }
 
     const float L_achromatic = lab[0];
     chroma = hypotf(lab[1], lab[2]);
@@ -1775,21 +1782,31 @@ static void apply_postprocess(float *rgb, dt_iop_basecurve_data_t *const d,
 
     int modified = 0;
 
-    if(d->ucs_saturation_balance != 0.0f && d->workflow_mode != 3)
+    if((d->ucs_saturation_balance != 0.0f || d->saturation_boost != 0.0f) && d->workflow_mode != 3)
     {
       const float chroma = fmaxf(fmaxf(r, g), b) - fminf(fminf(r, g), b);
       const float effective_saturation = d->ucs_saturation_balance * fminf(chroma * 2.0f, 1.0f);
 
-      const float Y_ucs = xyz[1];
-      const float L_ucs = powf(fmaxf(Y_ucs, 0.0f), 0.5f);
-      const float fulcrum = 0.65f;
-      const float n = (L_ucs - fulcrum) / fulcrum;
-      const float mask_shadow = 1.0f / (1.0f + expf(n * 4.0f));
-      float sat_adjust = effective_saturation * (2.0f * mask_shadow - 1.0f);
-      sat_adjust *= fminf(L_ucs * 4.0f, 1.0f);
-      const float sat_factor = (1.0f + d->saturation_boost) * (1.0f + sat_adjust);
-      jab[1] *= sat_factor;
-      jab[2] *= sat_factor;
+      if(d->ucs_saturation_balance != 0.0f)
+      {
+        const float Y_ucs = xyz[1];
+        const float L_ucs = powf(fmaxf(Y_ucs, 0.0f), 0.5f);
+        const float fulcrum = 0.65f;
+        const float n = (L_ucs - fulcrum) / fulcrum;
+        const float mask_shadow = 1.0f / (1.0f + expf(n * 4.0f));
+        
+        float sat_adjust = effective_saturation * (2.0f * mask_shadow - 1.0f);
+        sat_adjust *= fminf(L_ucs * 4.0f, 1.0f);
+        jab[1] *= (1.0f + sat_adjust);
+        jab[2] *= (1.0f + sat_adjust);
+      }
+
+      if(d->saturation_boost != 0.0f)
+      {
+        jab[1] *= (1.0f + d->saturation_boost);
+        jab[2] *= (1.0f + d->saturation_boost);
+      }
+
       modified = 1;
     }
 
@@ -1922,7 +1939,7 @@ static void apply_postprocess(float *rgb, dt_iop_basecurve_data_t *const d,
 
   if(d->purity_boost != 0.0f)
   {
-    const float boost_amount = d->purity_boost * d->gamut_strength;
+    const float boost_amount = d->purity_boost * d->gamut_strength; // Curseur purity lié au "gamut_strength"
     const float luma_p = r_coeff_lum * r + g_coeff_lum * g + b_coeff_lum * b;
     r += boost_amount * (r - luma_p);
     g += boost_amount * (g - luma_p);
@@ -2574,6 +2591,21 @@ static float eval_grey(float x)
   return x;
 }
 
+void color_picker_apply(dt_iop_module_t *self,
+                        GtkWidget *picker,
+                        dt_dev_pixelpipe_t *pipe)
+{
+  dt_iop_basecurve_global_data_t *gd = self->global_data;
+  for(int k = 0; k < 3; k++)
+  {
+    gd->picked_color[k] = self->picked_color[k];
+    gd->picked_color_min[k] = self->picked_color_min[k];
+    gd->picked_color_max[k] = self->picked_color_max[k];
+    gd->picked_output_color[k] = self->picked_output_color[k];
+  }
+  dt_control_queue_redraw_widget(self->widget);
+}
+
 void init(dt_iop_module_t *self)
 {
   dt_iop_default_init(self);
@@ -2611,6 +2643,13 @@ void init_global(dt_iop_module_so_t *self)
   gd->kernel_basecurve_normalize = dt_opencl_create_kernel(program, "basecurve_normalize");
   gd->kernel_basecurve_reconstruct = dt_opencl_create_kernel(program, "basecurve_reconstruct");
   gd->kernel_basecurve_finalize = dt_opencl_create_kernel(program, "basecurve_finalize");
+  for(int k = 0; k < 3; k++)
+  {
+    gd->picked_color[k] = 0.0f;
+    gd->picked_color_min[k] = 0.0f;
+    gd->picked_color_max[k] = 0.0f;
+    gd->picked_output_color[k] = 0.0f;
+  }
 }
 
 void cleanup_global(dt_iop_module_so_t *self)
@@ -2756,6 +2795,7 @@ static gboolean dt_iop_basecurve_draw(GtkWidget *widget, cairo_t *crf, dt_iop_mo
     pango_font_description_free(desc);
     g_object_unref(layout);
   }
+
   cairo_scale(cr, 1.0f, -1.0f);
 
   // draw grid
@@ -2811,6 +2851,26 @@ static gboolean dt_iop_basecurve_draw(GtkWidget *widget, cairo_t *crf, dt_iop_mo
     }
   }
   cairo_stroke(cr);
+
+  // draw color picker indicator line
+  if(self->request_color_pick == DT_REQUEST_COLORPICK_MODULE
+     && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->colorpicker)))
+  {
+    dt_iop_basecurve_global_data_t *gd = self->global_data;
+    // picked_color is RGB (0..1 range for typical values)
+    const float lum = 0.2126f * gd->picked_color[0]
+                    + 0.7152f * gd->picked_color[1]
+                    + 0.0722f * gd->picked_color[2];
+    if(lum > 0.0f)
+    {
+      const float x_pick = to_log(fminf(lum, 1.0f), g->loglogscale);
+      cairo_set_source_rgba(cr, 0.9f, 0.9f, 0.9f, 0.5f);
+      cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.5));
+      cairo_move_to(cr, width * x_pick, 0.0);
+      cairo_line_to(cr, width * x_pick, height);
+      cairo_stroke(cr);
+    }
+  }
 
   cairo_destroy(cr);
   cairo_set_source_surface(crf, cst, 0, 0);
@@ -3353,14 +3413,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
   if(!w || w == g->workflow_mode)
   {
-    if(p->workflow_mode != 0)
-    {
-      gtk_widget_hide(g->logbase);
-    }
-    else
-    {
-      gtk_widget_show(g->logbase);
-    }
+    gtk_widget_show(g->logbase);
   }
 }
 
@@ -3543,6 +3596,11 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(btn_compute_bright), "clicked", G_CALLBACK(_compute_bright_callback), self);
   gtk_box_pack_start(GTK_BOX(box_btns), btn_compute_bright, FALSE, FALSE, 0);
   dt_action_define_iop(self, NULL, N_("compute for bright scenes"), btn_compute_bright, &dt_action_def_button);
+
+  g->colorpicker = dt_color_picker_new(self, DT_COLOR_PICKER_POINT_AREA, NULL);
+  gtk_widget_set_tooltip_text(g->colorpicker, _("pick luminance from image to show on curve"));
+  gtk_box_pack_start(GTK_BOX(box_btns), g->colorpicker, FALSE, FALSE, 0);
+  dt_action_define_iop(self, NULL, N_("pick luminance"), g->colorpicker, &dt_action_def_toggle);
 
   /* Eye button: toggle node x/y sliders below the graph */
   g->btn_toggle_sliders = dtgtk_button_new(dtgtk_cairo_paint_eye_toggle, 0, NULL);
