@@ -521,13 +521,26 @@ const float contrast_brilliance_power,
       const float mask_ok = 1.0f / (1.0f + dtcl_exp((L_ok - 0.5f) * 10.0f));
       const float weight_ok = 2.0f * mask_ok - 1.0f;
       // Boost saturation mostly in mid-tones (bell curve weight)
-      const float mid_weight = 1.0f - weight_ok * weight_ok;
+      const float mid_weight = 1.0f - weight_ok * weight_ok * (0.7f + 0.3f * L_ok);
       // Vibrance logic: protect already saturated colors
       float chroma = length(lab.yz);
       const float vibrance_weight = fmax(0.0f, 1.0f - chroma * 2.5f);
       const float sat_mult = (1.0f + saturation_boost * mid_weight * vibrance_weight) * (1.0f + ucs_saturation_balance * (weight_ok * weight_ok * weight_ok));
       lab.y *= sat_mult;
       lab.z *= sat_mult;
+
+      // Soft chroma compression for gamut safety
+      float chroma_sat = native_sqrt(lab.y * lab.y + lab.z * lab.z);
+      const float knee_sat = 0.30f;
+      const float knee_slope = 2.0f;
+      if(chroma_sat > knee_sat)
+      {
+        const float excess = chroma_sat - knee_sat;
+        const float compressed = knee_sat + excess / (1.0f + knee_slope * excess);
+        const float scale = compressed / fmax(chroma_sat, 1e-6f);
+        lab.y *= scale;
+        lab.z *= scale;
+      }
 
       // 2. OpenDRT-style Vector Norm & Purity Compression
       const float L_achromatic = lab.x;
@@ -607,24 +620,32 @@ const float contrast_brilliance_power,
 
       int modified = 0;
 
-      if(ucs_saturation_balance != 0.0f && workflow_mode != 3)
+      if((ucs_saturation_balance != 0.0f || saturation_boost != 0.0f) && workflow_mode != 3)
       {
         // Chroma-based modulation for saturation balance
         const float chroma = fmax(fmax(pixel.x, pixel.y), pixel.z) - fmin(fmin(pixel.x, pixel.y), pixel.z);
         const float effective_saturation = ucs_saturation_balance * fmin(chroma * 2.0f, 1.0f);
 
-        // Apply saturation balance
-        const float Y = xyz.y;
-        const float L = native_sqrt(fmax(Y, 0.0f));
-        const float fulcrum = 0.65f;
-        const float n = (L - fulcrum) / fulcrum;
-        const float mask_shadow = 1.0f / (1.0f + dtcl_exp(n * 4.0f));
-        
-        float sat_adjust = effective_saturation * (2.0f * mask_shadow - 1.0f);
-        sat_adjust *= fmin(L * 4.0f, 1.0f);
-        const float sat_factor = (1.0f + saturation_boost) * (1.0f + sat_adjust);
-        jab.y *= sat_factor;
-        jab.z *= sat_factor;
+        if(ucs_saturation_balance != 0.0f)
+        {
+          const float Y = xyz.y;
+          const float L = native_sqrt(fmax(Y, 0.0f));
+          const float fulcrum = 0.65f;
+          const float n = (L - fulcrum) / fulcrum;
+          const float mask_shadow = 1.0f / (1.0f + dtcl_exp(n * 4.0f));
+          
+          float sat_adjust = effective_saturation * (2.0f * mask_shadow - 1.0f);
+          sat_adjust *= fmin(L * 4.0f, 1.0f);
+          jab.y *= (1.0f + sat_adjust);
+          jab.z *= (1.0f + sat_adjust);
+        }
+
+        if(saturation_boost != 0.0f)
+        {
+          jab.y *= (1.0f + saturation_boost);
+          jab.z *= (1.0f + saturation_boost);
+        }
+
         modified = 1;
       }
 
@@ -646,6 +667,7 @@ const float contrast_brilliance_power,
         // Note: Due to the 0.75 desaturation factor in the formula, the perceived effect 
         // reaches ~90-95% at full slider value in extreme highlights.
         float hl_mask = clamp((jab.x - 0.22f) / 0.68f, 0.0f, 1.0f);
+        if(isnan(hl_mask)) hl_mask = 0.0f;
 
         if(hl_mask > 0.0f)
       {
