@@ -1361,7 +1361,7 @@ static inline float _aces_tone_map(const float x)
    NOTE: Does NOT implement the full ACES pipeline (no AP1 color space transform,
    no D60 whitepoint). Used here as a luminance-only tone curve. 
 */
-static inline float _aces_20_tonemap(const float x)
+static inline float ACES_RRT_ODT_tonemap(const float x)
 {
   const float a = 0.0245786f;
   const float b = 0.000090537f;
@@ -1676,7 +1676,7 @@ static void apply_postprocess(float *rgb, dt_iop_basecurve_data_t *const d,
     if(d->workflow_mode == 1)
       y_out = _aces_tone_map(x_scaled) * k_scale;
     else
-      y_out = _aces_20_tonemap(x_scaled * ACES_EXPOSURE_ADJUST) * k_scale;
+      y_out = ACES_RRT_ODT_tonemap(x_scaled * ACES_EXPOSURE_ADJUST) * k_scale;
   }
   else if(d->workflow_mode == 3)
   {
@@ -1723,7 +1723,7 @@ static void apply_postprocess(float *rgb, dt_iop_basecurve_data_t *const d,
                                                                           0.7 = rouge bien dans le gamut, mais couleurs un peu plus assombries */
     V_orig = fmaxf(0.0f, powf(V_orig, d->shadow_lift + 1.0f));
 
-    float V_new = _aces_20_tonemap(V_orig);
+    float V_new = ACES_RRT_ODT_tonemap(V_orig);
 
     float compression = (V_norm > 1e-4f) ? (V_new / V_norm) : 1.0f;
     float gate_power = 0.5f * (1.0f - d->highlight_corr);
