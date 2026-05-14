@@ -96,12 +96,7 @@ const char *name()
 int flags()
 {
   return IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_INCLUDE_IN_STYLES | IOP_FLAGS_ALLOW_TILING
-         | IOP_FLAGS_PREVIEW_NON_OPENCL | IOP_FLAGS_DEPRECATED;
-}
-
-const char *deprecated_msg()
-{
-  return _("this module is deprecated. please use the tone equalizer module instead.");
+         | IOP_FLAGS_PREVIEW_NON_OPENCL;
 }
 
 int default_group()
@@ -116,6 +111,14 @@ dt_iop_colorspace_type_t default_colorspace(dt_iop_module_t *self,
   return IOP_CS_LAB;
 }
 
+const char **description(dt_iop_module_t *self)
+{
+  return dt_iop_set_description(self, _("adjust the lighting in certain zones of the image"),
+                                      _("corrective and creative"),
+                                      _("linear or non-linear, Lab, display-referred"),
+                                      _("non-linear, Lab"),
+                                      _("non-linear, Lab, display-referred"));
+}
 /* get the zone index of pixel lightness from zonemap */
 static inline int _iop_zonesystem_zone_index_from_lightness(float lightness, float *zonemap, int size)
 {
@@ -813,4 +816,3 @@ void _iop_zonesystem_redraw_preview_callback(gpointer instance, dt_iop_module_t 
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-

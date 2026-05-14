@@ -104,10 +104,10 @@ typedef struct dt_iop_levels_global_data_t
 } dt_iop_levels_global_data_t;
 
 
-const char *deprecated_msg()
+/* const char *deprecated_msg()
 {
   return _("this module is deprecated. please use the RGB levels module instead.");
-}
+} */
 
 const char *name()
 {
@@ -121,7 +121,7 @@ int default_group()
 
 int flags()
 {
-  return IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_DEPRECATED;
+  return IOP_FLAGS_SUPPORTS_BLENDING; // | IOP_FLAGS_DEPRECATED;
 }
 
 dt_iop_colorspace_type_t default_colorspace(dt_iop_module_t *self,

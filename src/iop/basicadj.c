@@ -152,10 +152,10 @@ int legacy_params(dt_iop_module_t *self,
   return 1;
 }
 
-const char *deprecated_msg()
+/*const char *deprecated_msg()
 {
   return _("this module is deprecated. please use the quick access panel instead.");
-}
+}*/
 
 const char *name()
 {
@@ -178,7 +178,7 @@ int default_group()
 
 int flags()
 {
-  return IOP_FLAGS_ALLOW_TILING | IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_DEPRECATED;
+  return IOP_FLAGS_ALLOW_TILING | IOP_FLAGS_SUPPORTS_BLENDING; // | IOP_FLAGS_DEPRECATED;
 }
 
 dt_iop_colorspace_type_t default_colorspace(dt_iop_module_t *self,

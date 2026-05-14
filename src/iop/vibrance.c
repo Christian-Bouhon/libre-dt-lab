@@ -54,11 +54,6 @@ typedef struct dt_iop_vibrance_global_data_t
   int kernel_vibrance;
 } dt_iop_vibrance_global_data_t;
 
-const char *deprecated_msg()
-{
-  return _("this module is deprecated. please use the vibrance slider in the color balance rgb module instead.");
-}
-
 const char *name()
 {
   return _("vibrance");
@@ -71,8 +66,7 @@ const char *aliases()
 
 int flags()
 {
-  return IOP_FLAGS_INCLUDE_IN_STYLES | IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_ALLOW_TILING
-    | IOP_FLAGS_DEPRECATED;
+  return IOP_FLAGS_INCLUDE_IN_STYLES | IOP_FLAGS_SUPPORTS_BLENDING | IOP_FLAGS_ALLOW_TILING;
 }
 
 int default_group()
@@ -203,4 +197,3 @@ void gui_init(dt_iop_module_t *self)
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
 // kate: tab-indents: off; indent-width 2; replace-tabs on; indent-mode cstyle; remove-trailing-spaces modified;
 // clang-format on
-
