@@ -68,7 +68,7 @@ inline float _aces_tone_map(const float x)
    NOTE: Does NOT implement the full ACES pipeline (no AP1 color space transform,
    no D60 whitepoint). Used here as a luminance-only tone curve. 
 */
-inline float _aces_20_tonemap(const float x)
+inline float ACES_RRT_ODT_tonemap(const float x)
 {
   const float a = 0.0245786f;
   const float b = 0.000090537f;
@@ -509,7 +509,7 @@ const float contrast_brilliance_power,
       if(workflow_mode == 1)
         y_out = _aces_tone_map(x_scaled) * k;
       else
-        y_out = _aces_20_tonemap(x_scaled * 2.0f) * k;
+        y_out = ACES_RRT_ODT_tonemap(x_scaled * 2.0f) * k;
     }
     else if(workflow_mode == 3)
     {
@@ -560,7 +560,7 @@ const float contrast_brilliance_power,
       V_orig *= (1.189f + highlight_gain) * (1.0f - 0.5f * purity);
       V_orig = fmax(0.0f, pow(V_orig, shadow_lift + 1.0f));
 
-      float V_new = _aces_20_tonemap(V_orig);
+      float V_new = ACES_RRT_ODT_tonemap(V_orig);
 
       // 3. Highlight Hue Sat (Saturation Gate)
       float compression = (V_norm > 1e-4f) ? (V_new / V_norm) : 1.0f;
