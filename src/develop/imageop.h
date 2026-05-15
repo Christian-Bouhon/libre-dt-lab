@@ -262,6 +262,12 @@ typedef struct dt_iop_module_t
   /** expander containing the widget and flag to store expanded state */
   GtkWidget *expander;
   gboolean expanded;
+  /** window for detach-to-separate-window feature */
+  GtkWidget *detach_window;
+  /** placeholder widget shown in panel when module is detached */
+  GtkWidget *detach_placeholder;
+  /** whether this module is currently detached to a separate window */
+  gboolean detached;
   /** reset parameters button */
   GtkWidget *reset_button;
   /** show preset menu button */
@@ -394,6 +400,10 @@ dt_iop_module_t *dt_iop_commit_blend_params
 void dt_iop_advertise_rastermask(dt_iop_module_t *module, const int mask_mode);
 /** creates a label widget for the expander, with callback to enable/disable this module. */
 void dt_iop_gui_set_expander(dt_iop_module_t *module);
+/** detach module to a separate window */
+void dt_iop_gui_detach(dt_iop_module_t *module);
+/** re-attach module from separate window back to panel */
+void dt_iop_gui_attach(dt_iop_module_t *module);
 /** get the widget of plugin ui in expander */
 GtkWidget *dt_iop_gui_get_widget(dt_iop_module_t *module);
 /** get the eventbox of plugin ui in expander */

@@ -401,6 +401,9 @@ gboolean dt_iop_load_module_by_so(dt_iop_module_t *module,
   module->reset_button = NULL;
   module->presets_button = NULL;
   module->fusion_slider = NULL;
+  module->detach_window = NULL;
+  module->detach_placeholder = NULL;
+  module->detached = FALSE;
 
   if(module->dev && module->dev->gui_attached)
   {
@@ -2250,6 +2253,15 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
   g_slist_free_full(module->widget_list, g_free);
   module->widget_list = NULL;
   DT_CONTROL_SIGNAL_DISCONNECT_ALL(module, module->so->op);
+  if(module->detached)
+  {
+    // destroy the detach window (this also destroys module->widget inside it)
+    gtk_widget_destroy(module->detach_window);
+    gtk_widget_destroy(module->detach_placeholder);
+    module->detach_window = NULL;
+    module->detach_placeholder = NULL;
+    module->detached = FALSE;
+  }
   if(module->gui_cleanup) module->gui_cleanup(module);
   gtk_widget_destroy(module->expander ? module->expander : module->widget);
   dt_iop_gui_cleanup_blending(module);
@@ -3064,6 +3076,12 @@ GtkWidget *dt_iop_gui_header_button(dt_iop_module_t *module,
   return button;
 }
 
+/* forward declarations for detach callbacks */
+static void _gui_detach_clicked_callback(GtkButton *button, gpointer user_data);
+static void _gui_attach_clicked_callback(GtkButton *button, gpointer user_data);
+static gboolean _gui_reattach_on_close(GtkWidget *win, GdkEvent *event,
+                                        dt_iop_module_t *module);
+
 static gboolean _on_drag_motion(GtkWidget *widget,
                                 GdkDragContext *dc,
                                 const gint x,
@@ -3265,6 +3283,14 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   dt_iop_gui_set_enable_button_icon(module->off, module);
   gtk_widget_set_sensitive(module->off, !module->hide_enable_button);
 
+  /* add detach button */
+  GtkWidget *detach_btn = dtgtk_button_new(dtgtk_cairo_paint_display2, 0, NULL);
+  gtk_widget_set_tooltip_text(detach_btn, _("detach module to separate window"));
+  g_signal_connect(G_OBJECT(detach_btn), "clicked",
+                   G_CALLBACK(_gui_detach_clicked_callback), module);
+  gtk_box_pack_end(GTK_BOX(header), detach_btn, FALSE, FALSE, 0);
+  gtk_widget_show(detach_btn);
+
   gtk_box_pack_start(GTK_BOX(header), icon, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(header), lab, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(header), module->instance_name, FALSE, FALSE, 0);
@@ -3316,6 +3342,156 @@ GtkWidget *dt_iop_gui_get_pluginui(dt_iop_module_t *module)
 {
   // return gtkframe (pluginui_frame)
   return dtgtk_expander_get_frame(DTGTK_EXPANDER(module->expander));
+}
+
+static void _gui_detach_clicked_callback(GtkButton *button, gpointer user_data)
+{
+  dt_iop_gui_detach((dt_iop_module_t *)user_data);
+}
+
+static void _gui_attach_clicked_callback(GtkButton *button, gpointer user_data)
+{
+  dt_iop_gui_attach((dt_iop_module_t *)user_data);
+}
+
+static void _gui_detach_enable_toggled(GtkToggleButton *toggle, dt_iop_module_t *module)
+{
+  if(darktable.gui->reset) return;
+  module->enabled = gtk_toggle_button_get_active(toggle);
+  if(module->off)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), module->enabled);
+  dt_dev_add_history_item(module->dev, module, TRUE);
+  dt_dev_pixelpipe_rebuild(module->dev);
+}
+
+static void _gui_detach(dt_iop_module_t *module)
+{
+  if(module->detached) return;
+
+  GtkBox *panel = dt_ui_get_container(darktable.gui->ui,
+                                       DT_UI_CONTAINER_PANEL_RIGHT_CENTER);
+
+  // save position in panel
+  int position;
+  gtk_container_child_get(GTK_CONTAINER(panel), module->expander,
+                          "position", &position, NULL);
+
+  // create placeholder (shows module name + re-attach button)
+  GtkWidget *placeholder = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_widget_set_name(placeholder, "iop-detach-placeholder");
+
+  GtkWidget *plabel = gtk_label_new(module->name());
+  gtk_label_set_ellipsize(GTK_LABEL(plabel), PANGO_ELLIPSIZE_END);
+  gtk_widget_set_hexpand(plabel, TRUE);
+
+  GtkWidget *reattach_btn = dtgtk_button_new(dtgtk_cairo_paint_cancel, 0, NULL);
+  gtk_widget_set_tooltip_text(reattach_btn, _("re-attach module to panel"));
+  g_signal_connect(G_OBJECT(reattach_btn), "clicked",
+                   G_CALLBACK(_gui_attach_clicked_callback), module);
+
+  gtk_box_pack_start(GTK_BOX(placeholder), plabel, TRUE, TRUE, 0);
+  gtk_box_pack_end(GTK_BOX(placeholder), reattach_btn, FALSE, FALSE, 0);
+  gtk_widget_show_all(placeholder);
+
+  // insert placeholder at same position, hide expander (don't remove)
+  gtk_box_pack_start(GTK_BOX(panel), placeholder, FALSE, FALSE, 0);
+  gtk_box_reorder_child(GTK_BOX(panel), placeholder, position);
+  gtk_widget_hide(module->expander);
+  gtk_widget_show(placeholder);
+
+  // take the whole body (iopw) out of the expander — includes controls + masks + blending
+  GtkWidget *iopw = dtgtk_expander_get_body(DTGTK_EXPANDER(module->expander));
+  GtkWidget *body_evb = gtk_widget_get_parent(iopw);
+
+  g_object_ref(G_OBJECT(iopw));
+  gtk_container_remove(GTK_CONTAINER(body_evb), iopw);
+
+  // create detach window
+  GtkWidget *win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+  char title[256];
+  snprintf(title, sizeof(title), "%s — %s", module->name(), _("darktable"));
+  gtk_window_set_title(GTK_WINDOW(win), title);
+  gtk_window_set_default_size(GTK_WINDOW(win), 400, 500);
+  gtk_window_set_transient_for(GTK_WINDOW(win),
+      GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+
+  GtkWidget *win_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+
+  // simple header with module name + enable toggle
+  GtkWidget *hdr = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  GtkWidget *hdr_label = gtk_label_new(module->name());
+  gtk_widget_set_hexpand(hdr_label, TRUE);
+  gtk_label_set_ellipsize(GTK_LABEL(hdr_label), PANGO_ELLIPSIZE_END);
+
+  GtkWidget *enable_toggle = gtk_toggle_button_new();
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(enable_toggle), module->enabled);
+  g_signal_connect(G_OBJECT(enable_toggle), "toggled",
+                   G_CALLBACK(_gui_detach_enable_toggled), module);
+  gtk_widget_set_tooltip_text(enable_toggle, _("enable/disable module"));
+
+  gtk_box_pack_start(GTK_BOX(hdr), hdr_label, TRUE, TRUE, 0);
+  gtk_box_pack_end(GTK_BOX(hdr), enable_toggle, FALSE, FALSE, 0);
+
+  gtk_box_pack_start(GTK_BOX(win_box), hdr, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(win_box), iopw, TRUE, TRUE, 0);
+  gtk_container_add(GTK_CONTAINER(win), win_box);
+  g_object_unref(G_OBJECT(iopw));
+  gtk_widget_show_all(win);
+
+  // connecting close -> re-attach
+  g_signal_connect(G_OBJECT(win), "delete-event",
+                   G_CALLBACK(_gui_reattach_on_close), module);
+
+  module->detach_window = win;
+  module->detach_placeholder = placeholder;
+  module->detached = TRUE;
+}
+
+void dt_iop_gui_detach(dt_iop_module_t *module)
+{
+  _gui_detach(module);
+}
+
+static gboolean _gui_reattach_on_close(GtkWidget *win, GdkEvent *event,
+                                        dt_iop_module_t *module)
+{
+  dt_iop_gui_attach(module);
+  return TRUE;
+}
+
+void dt_iop_gui_attach(dt_iop_module_t *module)
+{
+  if(!module->detached) return;
+
+  GtkBox *panel = dt_ui_get_container(darktable.gui->ui,
+                                       DT_UI_CONTAINER_PANEL_RIGHT_CENTER);
+
+  // save placeholder position
+  int position;
+  gtk_container_child_get(GTK_CONTAINER(panel), module->detach_placeholder,
+                          "position", &position, NULL);
+
+  // get iopw back from the detach window
+  GtkWidget *iopw = dtgtk_expander_get_body(DTGTK_EXPANDER(module->expander));
+  GtkWidget *parent = gtk_widget_get_parent(iopw);
+  g_object_ref(G_OBJECT(iopw));
+  gtk_container_remove(GTK_CONTAINER(parent), iopw);
+
+  // destroy window + placeholder
+  gtk_widget_destroy(module->detach_placeholder);
+  gtk_widget_destroy(module->detach_window);
+
+  // put iopw back into the expander's body event box
+  GtkWidget *body_evb = dtgtk_expander_get_body_event_box(DTGTK_EXPANDER(module->expander));
+  gtk_container_add(GTK_CONTAINER(body_evb), iopw);
+  g_object_unref(G_OBJECT(iopw));
+
+  // show expander in panel at saved position
+  gtk_widget_show(module->expander);
+
+  module->detach_window = NULL;
+  module->detach_placeholder = NULL;
+  module->detached = FALSE;
 }
 
 gboolean dt_iop_breakpoint(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
