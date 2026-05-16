@@ -3284,12 +3284,15 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   gtk_widget_set_sensitive(module->off, !module->hide_enable_button);
 
   /* add detach button right after on-off */
-  GtkWidget *detach_btn = dtgtk_button_new(dtgtk_cairo_paint_display2, 0, NULL);
-  gtk_widget_set_tooltip_text(detach_btn, _("detach module to separate window"));
-  g_signal_connect(G_OBJECT(detach_btn), "clicked",
-                   G_CALLBACK(_gui_detach_clicked_callback), module);
-  gtk_box_pack_start(GTK_BOX(header), detach_btn, FALSE, FALSE, 0);
-  gtk_widget_show(detach_btn);
+  if(dt_conf_get_bool("darkroom/ui/show_detach_button"))
+  {
+    GtkWidget *detach_btn = dtgtk_button_new(dtgtk_cairo_paint_display2, 0, NULL);
+    gtk_widget_set_tooltip_text(detach_btn, _("detach module to separate window"));
+    g_signal_connect(G_OBJECT(detach_btn), "clicked",
+                     G_CALLBACK(_gui_detach_clicked_callback), module);
+    gtk_box_pack_start(GTK_BOX(header), detach_btn, FALSE, FALSE, 0);
+    gtk_widget_show(detach_btn);
+  }
 
   gtk_box_pack_start(GTK_BOX(header), icon, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(header), lab, FALSE, FALSE, 0);
