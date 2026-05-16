@@ -3283,12 +3283,12 @@ void dt_iop_gui_set_expander(dt_iop_module_t *module)
   dt_iop_gui_set_enable_button_icon(module->off, module);
   gtk_widget_set_sensitive(module->off, !module->hide_enable_button);
 
-  /* add detach button */
+  /* add detach button right after on-off */
   GtkWidget *detach_btn = dtgtk_button_new(dtgtk_cairo_paint_display2, 0, NULL);
   gtk_widget_set_tooltip_text(detach_btn, _("detach module to separate window"));
   g_signal_connect(G_OBJECT(detach_btn), "clicked",
                    G_CALLBACK(_gui_detach_clicked_callback), module);
-  gtk_box_pack_end(GTK_BOX(header), detach_btn, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(header), detach_btn, FALSE, FALSE, 0);
   gtk_widget_show(detach_btn);
 
   gtk_box_pack_start(GTK_BOX(header), icon, FALSE, FALSE, 0);
@@ -3433,7 +3433,13 @@ static void _gui_detach(dt_iop_module_t *module)
   gtk_box_pack_end(GTK_BOX(hdr), enable_toggle, FALSE, FALSE, 0);
 
   gtk_box_pack_start(GTK_BOX(win_box), hdr, FALSE, FALSE, 0);
-  gtk_box_pack_start(GTK_BOX(win_box), iopw, TRUE, TRUE, 0);
+  // add a scrollable content area 
+  GtkWidget *sw = gtk_scrolled_window_new(NULL, NULL); 
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(sw), 
+                                 GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC); 
+  gtk_container_add(GTK_CONTAINER(sw), iopw); 
+  gtk_box_pack_start (GTK_BOX(win_box), sw, TRUE, TRUE, 0);
+  
   gtk_container_add(GTK_CONTAINER(win), win_box);
   g_object_unref(G_OBJECT(iopw));
   gtk_widget_show_all(win);
