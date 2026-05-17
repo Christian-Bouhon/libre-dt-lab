@@ -611,7 +611,7 @@ void dt_dev_process_image_job(dt_develop_t *dev,
 
   dt_pthread_mutex_lock(&pipe->mutex);
 
-  if(dev->gui_leaving || dt_pipe_shutdown(pipe))
+  if(dev->gui_leaving || (dt_atomic_get_int(&pipe->shutdown) != DT_DEV_PIXELPIPE_STOP_NO))
   {
     dt_pthread_mutex_unlock(&pipe->mutex);
     return;
@@ -718,20 +718,23 @@ restart:
   const gboolean require_zoom_test = (pipe->changed & ~DT_DEV_PIPE_ZOOMED) || initial;
   initial = FALSE; // don't enforce dt_dev_pixelpipe_change() for restarts
 
+  const float anticipate_move = pipe->changed & DT_DEV_PIPE_ZOOMED
+              ? dt_conf_get_float("darkroom/ui/anticipate_move")
+              : 1.0f;
+
   /* dt_dev_pixelpipe_change()
       locks history mutex while syncing nodes
       finally calculates dimensions
       leaves clean pipe->changed
   */
-  const float anticipate_move = pipe->changed & DT_DEV_PIPE_ZOOMED ? dt_conf_get_float("darkroom/ui/anticipate_move") : 1.0f;
   if(changing || port_loading)
     dt_dev_pixelpipe_change(pipe, dev);
 
   float scale = 1.0f;
   int window_width = G_MAXINT;
   int window_height = G_MAXINT;
-  float zoom_x  = 0;
-  float zoom_y = 0;
+  float zoom_x  = 0.0f;
+  float zoom_y = 0.0f;
 
   if(port)
   {
@@ -740,7 +743,9 @@ restart:
     // the image boundary
     if(port_loading || require_zoom_test)
     {
-      dt_print_pipe(DT_DEBUG_PIPE, "[dt_dev_zoom_move]", pipe, NULL, DT_DEVICE_NONE, NULL, NULL);
+      dt_print_pipe(DT_DEBUG_PIPE, "dt_dev_zoom_move", pipe, NULL, DT_DEVICE_NONE, NULL, NULL, "%s%s",
+        port_loading ? "port_loading " : "",
+        require_zoom_test ? "required_test" : "");
       dt_dev_zoom_move(port, DT_ZOOM_MOVE, 0.0f, 0, 0.0f, 0.0f, TRUE);
     }
 
@@ -764,57 +769,55 @@ restart:
 
   dt_get_times(&start);
 
-  // keep error status of dt_dev_pixelpipe_process() for easy log code && check
-  // for safe dt_control_queue_redraw_widget
-  const gboolean problem = dt_dev_pixelpipe_process(pipe, dev, x, y, wd, ht, scale, devid);
-  const dt_dev_pixelpipe_stopper_t shutdown = dt_atomic_get_int(&pipe->shutdown);
-  if(problem || shutdown)
-    dt_print(DT_DEBUG_PIPE, "dt_dev_pixelpipe_process %dx%d x=%d y=%d %s%s",
-                wd, ht, x, y,
-                problem ? "problem " : "success ",
-                shutdown == DT_DEV_PIXELPIPE_STOP_NODES ? "DT_DEV_PIXELPIPE_STOP_NODES"
-                : shutdown == DT_DEV_PIXELPIPE_STOP_HQ  ? "DT_DEV_PIXELPIPE_STOP_HQ"
-                : shutdown == DT_DEV_PIXELPIPE_STOP_NO  ? "DT_DEV_PIXELPIPE_STOP_NO"
-                : "DT_DEV_PIXELPIPE_STOP_OTHER");
-  if(problem)
+  // keep return status of dt_dev_pixelpipe_process()
+  const gboolean stopped = dt_dev_pixelpipe_process(pipe, dev, x, y, wd, ht, scale, devid);
+  if(stopped)
   {
+    // If pixelpipe stopped that could be because of pipe->shutdown so we check that and reset.
+    const dt_dev_pixelpipe_stopper_t shutdown = dt_atomic_exch_int(&pipe->shutdown, DT_DEV_PIXELPIPE_STOP_NO);
+    const dt_iop_roi_t proi = (dt_iop_roi_t) {.x = x, .y = y, .width = wd, .height = ht, .scale = scale };
+    dt_print_pipe(DT_DEBUG_PIPE, "pipe stopped", pipe, NULL, DT_DEVICE_NONE, &proi, NULL, "%s%s%s%s",
+                shutdown == DT_DEV_PIXELPIPE_STOP_NODES ? "DT_DEV_PIXELPIPE_STOP_NODES"
+                  : shutdown == DT_DEV_PIXELPIPE_STOP_HQ  ? "DT_DEV_PIXELPIPE_STOP_HQ"
+                  : shutdown == DT_DEV_PIXELPIPE_STOP_NO  ? "" : "DT_DEV_PIXELPIPE_STOP_MODULE",
+                dev->image_force_reload ? "image_force_reload " : "",
+                pipe->loading ? "pipe_loading " : "",
+                pipe->input_changed ? "pipe_input_changed " : "");
+
+    /* In some cases we should stop restarting the pipe but exit with DT_DEV_PIXELPIPE_INVALID status
+       How can we handle the pipe->loading status in a better way?
+       Just restart?
+    */
     const gboolean img_changed = dev->image_force_reload || pipe->loading || pipe->input_changed;
-    // As image_force_reload could be set while we are restarting we clear it and possibly flush the cache too.
-    if(dev->image_force_reload) dt_dev_pixelpipe_cache_flush(pipe);
-    dev->image_force_reload = FALSE;
-    // interrupted because image changed?
     if(img_changed)
     {
-      dt_print(DT_DEBUG_PIPE, "img changed: %s%s%s",
-                  dev->image_force_reload ? "image_force_reload " : "",
-                  pipe->loading ? "pipe loading " : "",
-                  pipe->input_changed ? "input_changed " : "");
+      if(dev->image_force_reload)
+      {
+        dt_dev_pixelpipe_cache_flush(pipe);
+        dev->image_force_reload = FALSE;
+      }
       dt_mipmap_cache_release(&buf);
       dt_control_busy_leave();
       pipe->status = DT_DEV_PIXELPIPE_INVALID;
       dt_pthread_mutex_unlock(&pipe->mutex);
       return;
     }
-    if(shutdown)
-    {
-      dt_atomic_set_int(&pipe->shutdown, DT_DEV_PIXELPIPE_STOP_NO);
+
+    /* pixelpipe stops due to changed pipe nodes, HQ mode changes or module aborts.
+       All want restarts as pipe status is not valid yet.
+    */
+    if(shutdown != DT_DEV_PIXELPIPE_STOP_NO)
       goto restart;
-    }
   }
+
+  // image pipes require pending dimension check
+  if(port && dt_pipe_is_image(pipe) && pipe->changed != DT_DEV_PIPE_UNCHANGED)
+    goto restart;
 
   dt_show_times_f(&start,
                   "[dev_process_image] pixel pipeline", "processing `%s'",
                   dev->image_storage.filename);
   _dev_average_delay_update(&start, &pipe->average_delay);
-
-  // maybe we got zoomed/panned in the meantime?
-  if(port && pipe->changed != DT_DEV_PIPE_UNCHANGED)
-  {
-    if(port->widget && !problem)
-      dt_control_queue_redraw_widget(port->widget);
-    dt_atomic_set_int(&pipe->shutdown, DT_DEV_PIXELPIPE_STOP_NO);
-    goto restart;
-  }
 
   pipe->status = DT_DEV_PIXELPIPE_VALID;
   pipe->loading = FALSE;
@@ -1200,9 +1203,9 @@ static void _dev_add_history_item_ext(dt_develop_t *dev,
     {
       if(module->off)
       {
-        ++darktable.gui->reset;
+        DT_ENTER_GUI_UPDATE();
         dt_iop_gui_set_enable_button(module);
-        --darktable.gui->reset;
+        DT_LEAVE_GUI_UPDATE();
       }
     }
   }
@@ -1337,7 +1340,7 @@ static void _dev_add_history_item(dt_develop_t *dev,
                                   const gboolean new_item,
                                   const gpointer target)
 {
-  if(!darktable.gui || darktable.gui->reset) return;
+  if(!darktable.gui || DT_IN_GUI_UPDATE()) return;
 
   // record current name, needed to ensure we do an undo record
   // if the module name is changed.
@@ -1650,7 +1653,7 @@ void dt_dev_pop_history_items_ext(dt_develop_t *dev, const int32_t cnt)
 void dt_dev_pop_history_items(dt_develop_t *dev, const int32_t cnt)
 {
   dt_pthread_mutex_lock(&dev->history_mutex);
-  ++darktable.gui->reset;
+  DT_ENTER_GUI_UPDATE();
   GList *dev_iop = g_list_copy(dev->iop);
 
   dt_dev_pop_history_items_ext(dev, cnt);
@@ -1700,7 +1703,7 @@ void dt_dev_pop_history_items(dt_develop_t *dev, const int32_t cnt)
     dt_dev_pixelpipe_rebuild(dev);
   }
 
-  --darktable.gui->reset;
+  DT_LEAVE_GUI_UPDATE();
   dt_dev_invalidate_all(dev);
   dt_pthread_mutex_unlock(&dev->history_mutex);
 
@@ -2741,7 +2744,7 @@ void dt_dev_read_history(dt_develop_t *dev)
 
 void dt_dev_reprocess_all(dt_develop_t *dev)
 {
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
   if(dev && dev->gui_attached)
   {
     dt_dev_pipe_synch_all(dev);
@@ -2756,7 +2759,7 @@ void dt_dev_reprocess_all(dt_develop_t *dev)
 
 void dt_dev_reprocess_center(dt_develop_t *dev)
 {
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
   if(dev && dev->gui_attached)
   {
     dev->full.pipe->changed |= DT_DEV_PIPE_SYNCH;
@@ -2772,7 +2775,7 @@ void dt_dev_reprocess_center(dt_develop_t *dev)
 
 void dt_dev_reprocess_preview(dt_develop_t *dev)
 {
-  if(darktable.gui->reset || !dev || !dev->gui_attached)
+  if(DT_IN_GUI_UPDATE() || !dev || !dev->gui_attached)
     return;
 
   dev->preview_pipe->changed |= DT_DEV_PIPE_SYNCH;
@@ -2887,9 +2890,9 @@ static float _calculate_new_scroll_zoom_tscale(const int up,
     {
     case SIZE_LARGE:
       tscalemax = constrained
-        ? (tscaleold > 2.0f
+        ? (tscaleold >= 2.0f
            ? tscaletop
-           : (tscaleold > 1.0f ? 2.0f : 1.0f))
+           : (tscaleold >= 1.0f ? 2.0f : 1.0f))
         : tscaletop;
       tscalemin = constrained
         ? (tscaleold < tscalefit
@@ -2899,7 +2902,7 @@ static float _calculate_new_scroll_zoom_tscale(const int up,
       break;
     case SIZE_MEDIUM:
       tscalemax = constrained
-        ? (tscaleold > 2.0f
+        ? (tscaleold >= 2.0f
            ? tscaletop
            : 2.0f)
         : tscaletop;
@@ -2911,7 +2914,7 @@ static float _calculate_new_scroll_zoom_tscale(const int up,
       break;
     case SIZE_SMALL:
       tscalemax = constrained
-        ? (tscaleold > 2.0f
+        ? (tscaleold >= 2.0f
            ? tscaletop
            : tscalefit)
         : tscaletop;
@@ -3546,7 +3549,7 @@ void dt_dev_invalidate_history_module(GList *list,
 void dt_dev_module_remove(dt_develop_t *dev,
                           dt_iop_module_t *module)
 {
-  // if(darktable.gui->reset) return;
+  // DT_GUARD_GUI_UPDATE();
   dt_pthread_mutex_lock(&dev->history_mutex);
   int del = 0;
 
@@ -3724,7 +3727,7 @@ static gboolean _dev_wait_hash(dt_develop_t *dev,
 
   for(int n = 0; n < nloop; n++)
   {
-    if(dt_pipe_shutdown(pipe))
+    if(dt_atomic_get_int(&pipe->shutdown) != DT_DEV_PIXELPIPE_STOP_NO)
       return TRUE;  // stop waiting if pipe shuts down
 
     dt_hash_t probehash;
@@ -3865,7 +3868,7 @@ void dt_dev_image(const dt_imgid_t imgid,
   dev.gui_attached = FALSE;
   dt_dev_pixelpipe_t *pipe = dev.full.pipe;
 
-  pipe->type |= DT_DEV_PIXELPIPE_IMAGE | (finalscale ? DT_DEV_PIXELPIPE_IMAGE_FINAL : 0);
+  pipe->type |= DT_DEV_PIXELPIPE_IMAGE | (finalscale ? DT_DEV_PIXELPIPE_IMAGE_FINAL : DT_DEV_PIXELPIPE_NONE);
   // load image and set history_end
 
   dev.snapshot_id = snapshot_id;

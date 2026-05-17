@@ -289,7 +289,7 @@ static void process_wavelets(dt_iop_module_t *self,
   const int width = roi_out->width;
   const int height = roi_out->height;
 
-  if(self->dev->gui_attached && (piece->pipe->type & DT_DEV_PIXELPIPE_FULL))
+  if(self->dev->gui_attached && dt_pipe_is_full(piece->pipe))
   {
     dt_iop_atrous_gui_data_t *g = self->gui_data;
     g->num_samples = get_samples(g->sample, d, roi_in, piece);
@@ -376,7 +376,7 @@ int process_cl(dt_iop_module_t *self,
   float sharp[MAX_NUM_SCALES];
   const int max_scale = get_scales(thrs, boost, sharp, d, roi_in, piece);
 
-  if(self->dev->gui_attached && (piece->pipe->type & DT_DEV_PIXELPIPE_FULL))
+  if(self->dev->gui_attached && dt_pipe_is_full(piece->pipe))
   {
     dt_iop_atrous_gui_data_t *g = self->gui_data;
     g->num_samples = get_samples(g->sample, d, roi_in, piece);
@@ -486,7 +486,7 @@ int process_cl(dt_iop_module_t *self,
   float sharp[MAX_NUM_SCALES];
   const int max_scale = get_scales(thrs, boost, sharp, d, roi_in, piece);
 
-  if(self->dev->gui_attached && (piece->pipe->type & DT_DEV_PIXELPIPE_FULL))
+  if(self->dev->gui_attached && dt_pipe_is_full(piece->pipe))
   {
     dt_iop_atrous_gui_data_t *g = self->gui_data;
     g->num_samples = get_samples(g->sample, d, roi_in, piece);
@@ -525,7 +525,7 @@ int process_cl(dt_iop_module_t *self,
     if(dev_detail[k] == NULL) goto error;
   }
 
-  size_t region[] = { width, height };
+  const size_t region[2] = { width, height };
   // copy original input from dev_in -> dev_out as starting point
   err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, CLIMG_ORIGIN, CLIMG_ORIGIN, region);
   if(err != CL_SUCCESS) goto error;
@@ -1013,9 +1013,9 @@ static void reset_mix(dt_iop_module_t *self)
   dt_iop_atrous_gui_data_t *g = self->gui_data;
   dt_iop_atrous_params_t *p = self->params;
   g->drag_params = *p;
-  ++darktable.gui->reset;
+  DT_ENTER_GUI_UPDATE();
   dt_bauhaus_slider_set(g->mix, p->mix);
-  --darktable.gui->reset;
+  DT_LEAVE_GUI_UPDATE();
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
 
@@ -1535,7 +1535,7 @@ static void tab_switch(GtkNotebook *notebook,
                        dt_iop_module_t *self)
 {
   dt_iop_atrous_gui_data_t *g = self->gui_data;
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
   g->channel = g->channel2 = (atrous_channel_t)page_num;
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
@@ -1543,7 +1543,7 @@ static void tab_switch(GtkNotebook *notebook,
 static void mix_callback(GtkWidget *slider,
                          dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
   dt_iop_atrous_params_t *p = self->params;
   dt_iop_atrous_gui_data_t *g = self->gui_data;
   p->mix = dt_bauhaus_slider_get(slider);
@@ -1717,7 +1717,7 @@ const dt_action_def_t _action_def_equalizer
 static void _ui_pipe_done(gpointer instance, dt_iop_module_t *self)
 {
   dt_iop_atrous_gui_data_t *g = self->gui_data;
-  if(g && !darktable.gui->reset && self->enabled && self->expanded)
+  if(g && !DT_IN_GUI_UPDATE() && self->enabled && self->expanded)
     gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
 

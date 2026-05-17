@@ -726,6 +726,21 @@ static gboolean _draw(GtkWidget *da,
 }
 
 static GdkDevice *_touchpad = NULL;
+static gboolean _touchpad_gestures_enabled(void)
+{
+  // If conf_gen.h was built before darktableconfig.xml.in gained this key
+  // (incremental build without cmake reconfigure), dt_confgen_value_exists
+  // returns FALSE and dt_conf_get_bool gets an empty string → FALSE.
+  // Default to enabled in that case so a stale build doesn't silently break gestures.
+  if(!dt_confgen_value_exists("darkroom/ui/touchpad_gestures", DT_DEFAULT))
+  {
+    dt_print(DT_DEBUG_INPUT,
+             "[touchpad] 'darkroom/ui/touchpad_gestures' missing from confgen"
+             " (stale conf_gen.h — run cmake reconfigure), defaulting to enabled");
+    return TRUE;
+  }
+  return dt_conf_get_bool("darkroom/ui/touchpad_gestures");
+}
 
 static gboolean _input_event(GtkWidget *widget,
                              GdkEvent *event,
@@ -738,20 +753,46 @@ static gboolean _input_event(GtkWidget *widget,
     case GDK_TOUCHPAD_PINCH:
     case GDK_TOUCHPAD_SWIPE:
       _touchpad = gdk_event_get_source_device(event);
+      if(_touchpad)
+      {
+        dt_print(DT_DEBUG_INPUT,
+                 "[touchpad] gesture event type=%d source='%s' source_type=%d",
+                 event->type,
+                 gdk_device_get_name(_touchpad),
+                 gdk_device_get_source(_touchpad));
+      }
+      else
+      {
+        dt_print(DT_DEBUG_INPUT,
+                 "[touchpad] gesture event type=%d without source device",
+                 event->type);
+      }
       break;
     default:
       break;
   }
 
-  if(event->type == GDK_TOUCHPAD_PINCH)
+  if(event->type == GDK_TOUCHPAD_PINCH && _touchpad_gestures_enabled())
   {
     const GdkEventTouchpadPinch *pinch = &event->touchpad_pinch;
-    if(dt_view_manager_gesture_pinch(darktable.view_manager, pinch->x, pinch->y,
-                                     pinch->phase, pinch->scale, pinch->state & 0xf))
+    dt_print(DT_DEBUG_INPUT,
+             "[touchpad] pinch x=%.2f y=%.2f phase=%d scale=%.6f state=0x%x",
+             pinch->x, pinch->y, pinch->phase, pinch->scale, pinch->state);
+    if(dt_view_manager_gesture_pinch(darktable.view_manager, pinch->x_root, pinch->y_root,
+                                     pinch->dx, pinch->dy, pinch->phase,
+                                     pinch->scale, pinch->state & 0xf))
     {
       gtk_widget_queue_draw(widget);
       return TRUE;
     }
+
+    dt_print(DT_DEBUG_INPUT,
+             "[touchpad] pinch ignored by current view");
+  }
+  else if(event->type == GDK_TOUCHPAD_PINCH)
+  {
+    dt_print(DT_DEBUG_INPUT,
+             "[touchpad] pinch received but disabled by preference darkroom/ui/touchpad_gestures");
   }
 
   return FALSE;
@@ -763,14 +804,48 @@ static gboolean _scrolled(GtkWidget *widget,
 {
   (void)user_data;
   GdkDevice *device = gdk_event_get_source_device((GdkEvent *)event);
+  const gboolean touchpad_enabled = _touchpad_gestures_enabled();
+  const gboolean ctrl_pressed = dt_modifier_is(event->state, GDK_CONTROL_MASK);
 
-  if(((device && gdk_device_get_source(device) == GDK_SOURCE_TOUCHPAD)
-      || device == _touchpad)
-     && event->direction == GDK_SCROLL_SMOOTH && !event->is_stop)
+  dt_print(DT_DEBUG_INPUT,
+           "[scroll] direction=%d smooth=%s stop=%s ctrl=%s"
+           " x=%.1f y=%.1f dx=%.3f dy=%.3f state=0x%x"
+           " device='%s' source-type=%d",
+           event->direction,
+           event->direction == GDK_SCROLL_SMOOTH ? "yes" : "no",
+           event->is_stop ? "yes" : "no",
+           ctrl_pressed ? "yes" : "no",
+           event->x, event->y, event->delta_x, event->delta_y, event->state,
+           device ? gdk_device_get_name(device) : "<none>",
+           device ? (int)gdk_device_get_source(device) : -1);
+  const gboolean is_touchpad_source = device && gdk_device_get_source(device) == GDK_SOURCE_TOUCHPAD;
+  const gboolean matches_last_gesture_device = (device == _touchpad);
+
+  const gboolean is_smooth = event->direction == GDK_SCROLL_SMOOTH && !event->is_stop;
+#ifdef GDK_WINDOWING_QUARTZ
+  // On macOS/Quartz, the built-in trackpad reports as GDK_SOURCE_MOUSE, not
+  // GDK_SOURCE_TOUCHPAD.  Route every non-ctrl smooth scroll to gesture_pan so
+  // that two-finger panning works in views like darkroom (both standalone and
+  // interleaved with a pinch-zoom gesture whose translational component macOS
+  // delivers as a separate scroll stream).
+  const gboolean route_as_pan = touchpad_enabled && !ctrl_pressed && is_smooth;
+#else
+  const gboolean route_as_pan = touchpad_enabled
+                                && !ctrl_pressed
+                                && (is_touchpad_source || matches_last_gesture_device)
+                                && is_smooth;
+#endif
+  if(route_as_pan)
   {
     gdouble delta_x = 0.0, delta_y = 0.0;
     if(!dt_gui_get_scroll_deltas(event, &delta_x, &delta_y))
+    {
+      dt_print(DT_DEBUG_INPUT,
+               "[touchpad] smooth scroll ignored (likely pointer emulated), source='%s' source_type=%d",
+               device ? gdk_device_get_name(device) : "<none>",
+               device ? gdk_device_get_source(device) : -1);
       return TRUE;
+    }
 
     delta_x *= DT_UI_SCROLL_SMOOTH_DELTA_SCALE;
     delta_y *= DT_UI_SCROLL_SMOOTH_DELTA_SCALE;
@@ -778,14 +853,42 @@ static gboolean _scrolled(GtkWidget *widget,
        && dt_view_manager_gesture_pan(darktable.view_manager, event->x, event->y,
                                       delta_x, delta_y, event->state & 0xf))
     {
+      dt_print(DT_DEBUG_INPUT,
+               "[touchpad] pan x=%.2f y=%.2f dx=%.3f dy=%.3f source='%s'",
+               event->x, event->y, delta_x, delta_y,
+               device ? gdk_device_get_name(device) : "<none>");
       gtk_widget_queue_draw(widget);
       return TRUE;
     }
+    else if(delta_x != 0.0 || delta_y != 0.0)
+    {
+      dt_print(DT_DEBUG_INPUT,
+               "[touchpad] pan not handled by current view (no gesture_pan handler?)"
+               " dx=%.3f dy=%.3f",
+               delta_x, delta_y);
+    }
+  }
+  else if(is_smooth)
+  {
+    dt_print(DT_DEBUG_INPUT,
+             "[touchpad] smooth scroll not treated as pan: enabled=%d ctrl=%d touchpad_source=%d matches_last_gesture=%d route_as_pan=%d source='%s' source_type=%d",
+             touchpad_enabled,
+             ctrl_pressed,
+             is_touchpad_source,
+             matches_last_gesture_device,
+             route_as_pan,
+             device ? gdk_device_get_name(device) : "<none>",
+             device ? gdk_device_get_source(device) : -1);
   }
 
   int delta_y;
   if(dt_gui_get_scroll_unit_delta(event, &delta_y))
   {
+    dt_print(DT_DEBUG_INPUT,
+             "[scroll] discrete fallback x=%.2f y=%.2f up=%d state=0x%x source='%s' source_type=%d",
+             event->x, event->y, delta_y < 0, event->state,
+             device ? gdk_device_get_name(device) : "<none>",
+             device ? gdk_device_get_source(device) : -1);
     dt_view_manager_scrolled(darktable.view_manager, event->x, event->y,
                              delta_y < 0,
                              event->state & 0xf);
@@ -815,7 +918,7 @@ static void _panel_scrolled(GtkEventControllerScroll *controller,
 static void _scrollbar_changed(GtkWidget *widget,
                                gpointer user_data)
 {
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
 
   GtkAdjustment *adjustment_x =
     gtk_range_get_adjustment(GTK_RANGE(darktable.gui->scrollbars.hscrollbar));
@@ -1385,6 +1488,52 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   dt_loc_get_sharedir(sharedir, sizeof(sharedir));
   dt_loc_get_user_config_dir(configdir, sizeof(configdir));
 
+#ifdef _WIN32
+  // set win32 title bar color based on theme (background color)
+  g_signal_override_class_handler("map", gtk_window_get_type(),
+                                  G_CALLBACK(_window_set_titlebar_color_callback));
+  g_signal_override_class_handler("style-updated", gtk_window_get_type(),
+                                  G_CALLBACK(_window_set_titlebar_color_callback));
+#endif
+
+  GtkWidget *widget;
+  if(!gui->ui)
+    gui->ui = g_malloc0(sizeof(dt_ui_t));
+  gui->surface = NULL;
+  gui->hide_tooltips = dt_conf_get_bool("ui/hide_tooltips") ? 1 : 0;
+  gui->grouping = dt_conf_get_bool("ui_last/grouping");
+  gui->expanded_group_id = NO_IMGID;
+  gui->show_overlays = dt_conf_get_bool("lighttable/ui/expose_statuses");
+  gui->last_preset = NULL;
+  gui->have_pen_pressure = FALSE;
+
+  // load the style / theme
+  GtkSettings *settings = gtk_settings_get_default();
+  g_object_set(G_OBJECT(settings), "gtk-application-prefer-dark-theme", TRUE, (gchar *)0);
+  g_object_set(G_OBJECT(settings), "gtk-theme-name", "Adwaita", (gchar *)0);
+  g_object_unref(settings);
+
+  // smooth scrolling must be enabled to handle trackpad/touch events
+  gui->scroll_mask = GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK;
+
+  // key accelerator that enables scrolling of side panels
+  gui->sidebar_scroll_mask = GDK_MOD1_MASK | GDK_CONTROL_MASK;
+
+  // Init focus peaking
+  gui->show_focus_peaking = dt_conf_get_bool("ui/show_focus_peaking");
+
+  /* Have the delete event (window close) end the program */
+  snprintf(path, sizeof(path), "%s/icons", datadir);
+  gtk_icon_theme_append_search_path(gtk_icon_theme_get_default(), path);
+  snprintf(path, sizeof(path), "%s/icons", sharedir);
+  gtk_icon_theme_append_search_path(gtk_icon_theme_get_default(), path);
+
+  //init overlay colors
+  dt_guides_set_overlay_colors();
+
+  // Initializing widgets
+  _init_widgets(gui);
+
 #ifdef MAC_INTEGRATION
   GtkosxApplication *OSXApp = g_object_new(GTKOSX_TYPE_APPLICATION, NULL);
 
@@ -1441,10 +1590,17 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
 
   // build the menu bar
   GtkWidget *menu_bar = gtk_menu_bar_new();
-  gtk_widget_show(menu_bar);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu_bar), view_root_menu);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu_bar), window_root_menu);
   gtk_menu_shell_append(GTK_MENU_SHELL(menu_bar), help_root_menu);
+
+  // park the menubar inside the (already constructed) main window so
+  // gtk-mac-integration finds a real Quartz-backed GtkWindow as the
+  // toplevel. the GtkMenuBar widget itself stays hidden — the items
+  // are mirrored into the native macOS NSMenu by mac-integration
+  GtkWidget *main_vbox = gtk_bin_get_child(GTK_BIN(gui->ui->main_window));
+  gtk_box_pack_start(GTK_BOX(main_vbox), menu_bar, FALSE, FALSE, 0);
+  gtk_widget_set_no_show_all(menu_bar, TRUE);
 
   gtkosx_application_set_menu_bar(OSXApp, GTK_MENU_SHELL(menu_bar));
 
@@ -1469,52 +1625,6 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   g_signal_connect_data(G_OBJECT(OSXApp), "NSApplicationOpenFile",
                         G_CALLBACK(_osx_openfile_callback), NULL, NULL, 0);
 #endif
-
-#ifdef _WIN32
-  // set win32 title bar color based on theme (background color)
-  g_signal_override_class_handler("map", gtk_window_get_type(),
-                                  G_CALLBACK(_window_set_titlebar_color_callback));
-  g_signal_override_class_handler("style-updated", gtk_window_get_type(),
-                                  G_CALLBACK(_window_set_titlebar_color_callback));
-#endif
-
-  GtkWidget *widget;
-  if(!gui->ui)
-    gui->ui = g_malloc0(sizeof(dt_ui_t));
-  gui->surface = NULL;
-  gui->hide_tooltips = dt_conf_get_bool("ui/hide_tooltips") ? 1 : 0;
-  gui->grouping = dt_conf_get_bool("ui_last/grouping");
-  gui->expanded_group_id = NO_IMGID;
-  gui->show_overlays = dt_conf_get_bool("lighttable/ui/expose_statuses");
-  gui->last_preset = NULL;
-  gui->have_pen_pressure = FALSE;
-
-  // load the style / theme
-  GtkSettings *settings = gtk_settings_get_default();
-  g_object_set(G_OBJECT(settings), "gtk-application-prefer-dark-theme", TRUE, (gchar *)0);
-  g_object_set(G_OBJECT(settings), "gtk-theme-name", "Adwaita", (gchar *)0);
-  g_object_unref(settings);
-
-  // smooth scrolling must be enabled to handle trackpad/touch events
-  gui->scroll_mask = GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK;
-
-  // key accelerator that enables scrolling of side panels
-  gui->sidebar_scroll_mask = GDK_MOD1_MASK | GDK_CONTROL_MASK;
-
-  // Init focus peaking
-  gui->show_focus_peaking = dt_conf_get_bool("ui/show_focus_peaking");
-
-  /* Have the delete event (window close) end the program */
-  snprintf(path, sizeof(path), "%s/icons", datadir);
-  gtk_icon_theme_append_search_path(gtk_icon_theme_get_default(), path);
-  snprintf(path, sizeof(path), "%s/icons", sharedir);
-  gtk_icon_theme_append_search_path(gtk_icon_theme_get_default(), path);
-
-  //init overlay colors
-  dt_guides_set_overlay_colors();
-
-  // Initializing widgets
-  _init_widgets(gui);
 
   widget = dt_ui_center(darktable.gui->ui);
   g_signal_connect(G_OBJECT(widget), "configure-event",
@@ -1641,7 +1751,7 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
                      dt_shortcuts_reinitialise,
                      GDK_KEY_I, GDK_CONTROL_MASK | GDK_SHIFT_MASK | GDK_MOD1_MASK);
 
-  darktable.gui->reset = 0;
+  DT_CLEAR_GUI_UPDATE();
 
   // let's try to support pressure sensitive input devices like tablets for mask drawing
   dt_print(DT_DEBUG_INPUT, "[input device] Input devices found:\n");
@@ -2212,7 +2322,7 @@ void dt_ui_update_scrollbars(dt_ui_t *ui)
   /* update scrollbars for current view */
   const dt_view_t *cv = dt_view_manager_get_current_view(darktable.view_manager);
 
-  ++darktable.gui->reset;
+  DT_ENTER_GUI_UPDATE();
   if(cv->vscroll_size > cv->vscroll_viewport_size)
   {
     gtk_adjustment_configure
@@ -2230,7 +2340,7 @@ void dt_ui_update_scrollbars(dt_ui_t *ui)
        cv->hscroll_viewport_size,
        cv->hscroll_viewport_size);
   }
-  --darktable.gui->reset;
+  DT_LEAVE_GUI_UPDATE();
 
   gtk_widget_set_visible(darktable.gui->scrollbars.vscrollbar,
                          cv->vscroll_size > cv->vscroll_viewport_size);
@@ -2274,7 +2384,7 @@ static void _handle_panel_widths(const dt_ui_panel_t p)
   GtkWidget *main_window = dt_ui_main_window(darktable.gui->ui);
   gtk_window_get_size(GTK_WINDOW(main_window), &app_window_width, NULL);
 
-  // calculate total used width 
+  // calculate total used width
   int used_w = 0;
   used_w += gtk_widget_get_allocated_width(darktable.gui->ui->panels[other_panel]);
 

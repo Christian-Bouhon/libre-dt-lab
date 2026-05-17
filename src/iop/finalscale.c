@@ -40,7 +40,8 @@ const char *name()
 int flags()
 {
   return IOP_FLAGS_ALLOW_TILING | IOP_FLAGS_HIDDEN | IOP_FLAGS_TILING_FULL_ROI
-    | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_NO_HISTORY_STACK;
+    | IOP_FLAGS_ONE_INSTANCE | IOP_FLAGS_NO_HISTORY_STACK
+    | IOP_FLAGS_WRITE_PIPECACHE | IOP_FLAGS_WRITE_PIPECACHECL;
 }
 
 int default_group()
@@ -57,10 +58,8 @@ dt_iop_colorspace_type_t default_colorspace(dt_iop_module_t *self,
 
 static inline gboolean _gui_fullpipe(dt_dev_pixelpipe_iop_t *piece)
 {
-  return piece->pipe->type & (DT_DEV_PIXELPIPE_FULL
-                              | DT_DEV_PIXELPIPE_PREVIEW2
-                              | DT_DEV_PIXELPIPE_IMAGE)
-    && darktable.develop->late_scaling.enabled;
+  return (dt_pipe_is_canvas(piece->pipe) || dt_pipe_is_image(piece->pipe))
+     && darktable.develop->late_scaling.enabled;
 }
 
 void modify_roi_in(dt_iop_module_t *self,
@@ -158,7 +157,7 @@ int process_cl(dt_iop_module_t *self,
   }
 
   const int devid = piece->pipe->devid;
-  const gboolean exporting = piece->pipe->type == DT_DEV_PIXELPIPE_EXPORT;
+  const gboolean exporting = dt_pipe_is_export(piece->pipe);
 
   dt_print_pipe(DT_DEBUG_IMAGEIO,
                 exporting ? "clip_and_zoom_roi" : "clip_and_zoom",
@@ -177,7 +176,7 @@ void process(dt_iop_module_t *self,
              const dt_iop_roi_t *const roi_in,
              const dt_iop_roi_t *const roi_out)
 {
-  const gboolean exporting = piece->pipe->type == DT_DEV_PIXELPIPE_EXPORT;
+  const gboolean exporting = dt_pipe_is_export(piece->pipe);
   dt_print_pipe(DT_DEBUG_IMAGEIO,
                 exporting ? "clip_and_zoom_roi" : "clip_and_zoom",
                 piece->pipe, self, DT_DEVICE_CPU, roi_in, roi_out);
@@ -193,9 +192,8 @@ void commit_params(dt_iop_module_t *self,
                    dt_dev_pixelpipe_t *pipe,
                    dt_dev_pixelpipe_iop_t *piece)
 {
-  const int use_finalscale = DT_DEV_PIXELPIPE_IMAGE | DT_DEV_PIXELPIPE_IMAGE_FINAL;
-  piece->enabled = piece->pipe->type == DT_DEV_PIXELPIPE_EXPORT
-                  || (pipe->type & use_finalscale) == use_finalscale
+  piece->enabled = dt_pipe_is_export(piece->pipe)
+                  || (dt_pipe_is_image(pipe) && dt_pipe_is_image_final(pipe))
                   || _gui_fullpipe(piece);
 }
 

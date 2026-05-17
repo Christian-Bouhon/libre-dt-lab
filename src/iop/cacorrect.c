@@ -257,13 +257,13 @@ void process(dt_iop_module_t *self,
 
   const uint32_t filters = piece->filters;  // Just in case we want to use a roi_in 
 
-  const gboolean run_fast = piece->pipe->type & DT_DEV_PIXELPIPE_FAST;
+  const gboolean run_fast = dt_pipe_is_fast(piece->pipe);
 
   dt_iop_cacorrect_data_t *d = piece->data;
 
   // the colorshift avoiding requires non-downscaled data for sure so we
   // don't do this for preview
-  const gboolean avoidshift = d->avoidshift && !(piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW);
+  const gboolean avoidshift = d->avoidshift && !dt_pipe_is_preview(piece->pipe);
   const int iterations = d->iterations;
 
   // Because we can't break parallel processing, we need a switch do handle the errors

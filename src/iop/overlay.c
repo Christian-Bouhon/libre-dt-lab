@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2024-2025 darktable developers.
+    Copyright (C) 2024-2026 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -206,8 +206,8 @@ static GList *_get_disabled_modules(const dt_iop_module_t *self,
   {
     dt_iop_module_t *mod = l->data;
     if((after
-          && !dt_iop_module_is(mod->so, "gamma")
-          && !dt_iop_module_is(mod->so, "finalscale")
+          && !dt_iop_module_is_gamma(mod)
+          && !dt_iop_module_is_finalscale(mod)
           && !dt_iop_module_is(mod->so, "crop")
           && !dt_iop_module_is(mod->so, "ashift"))
     || (is_current
@@ -696,7 +696,7 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   {
     // No overlay: copy input to output on GPU
     return dt_opencl_enqueue_copy_image(
-      devid, dev_in, dev_out, (size_t[]){ 0, 0 }, (size_t[]){ 0, 0 }, (size_t[]){ width, height });
+      devid, dev_in, dev_out, CLIMG_ORIGIN, CLIMG_ORIGIN, (size_t[2]){ width, height });
   }
 
   cl_int err = DT_OPENCL_SYSMEM_ALLOCATION;
@@ -706,7 +706,7 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   cl_mem dev_overlay = dt_opencl_alloc_device_buffer(devid, overlay_size);
   if(!dev_overlay) goto cleanup;
 
-  err = dt_opencl_write_buffer_to_device(devid, image, dev_overlay, 0, overlay_size, CL_TRUE);
+  err = dt_opencl_write_buffer_to_device(devid, image, dev_overlay, 0, overlay_size, TRUE);
   if(err != CL_SUCCESS) goto cleanup;
 
   const float opacity = data->opacity / 100.0f;
@@ -801,7 +801,7 @@ static void _alignment_callback(const GtkWidget *tb, dt_iop_module_t *self)
 {
   const dt_iop_overlay_gui_data_t *g = self->gui_data;
 
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
   dt_iop_overlay_params_t *p = self->params;
 
   int index = -1;

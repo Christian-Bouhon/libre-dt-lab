@@ -2398,6 +2398,13 @@
     <longdescription><![CDATA[in darktable's darkroom, where you do your edits, all controls are listed on a panel on the right; you can choose whether you want to use the scroll wheel or scroll gesture on your touchpad to scroll the panel, or to change the values of the control under the pointer; this latter modality enables faster editing, but this can be dangerous because you can change the values ​​of the module controls without noticing if you are not used to it\n\n<b>enabled:</b> the mouse wheel scrolls the modules panel and with <i>Ctrl+Alt</i> adjusts a control's value\n\n<b>disabled:</b> the mouse wheel adjusts the control under the pointer and with <i>Ctrl+Alt</i> scrolls the panel.]]></longdescription>
     <welcomescreen pagenum="5" questionnum="1"/>
   </dtconfig>
+  <dtconfig prefs="misc" section="interface">
+    <name>darkroom/ui/touchpad_gestures</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>enable touchpad gestures in darkroom</shortdescription>
+    <longdescription><![CDATA[use two-finger touchpad gestures in darkroom for panning and pinch-to-zoom. <b>enabled:</b> touchpad pinch gestures zoom the image and two-finger touchpad scrolling pans it; <i>Ctrl+scroll</i> still uses the legacy zoom behavior. <b>disabled:</b> touchpad gestures are ignored and darkroom falls back to the legacy scroll behavior, including <i>Ctrl+scroll</i> for zooming in and out.]]></longdescription>
+  </dtconfig>
   <dtconfig prefs="darkroom" section="general">
     <name>plugins/darkroom/ui/border_size</name>
     <type>int</type>
@@ -2995,6 +3002,47 @@
     <longdescription/>
   </dtconfig>
   <dtconfig>
+    <name>plugins/imageio/format/heif/bitdepth</name>
+    <type>
+      <enum>
+        <option>8</option>
+        <option>10</option>
+        <option>12</option>
+      </enum>
+    </type>
+    <default>8</default>
+    <shortdescription>HEIF bit depth (bpc)</shortdescription>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/heif/color_mode</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription/>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/heif/compression_type</name>
+    <type min="0" max="1">int</type>
+    <default>1</default>
+    <shortdescription/>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/heif/quality</name>
+    <type min="0" max="100">int</type>
+    <default>50</default>
+    <shortdescription/>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/imageio/format/heif/subsample</name>
+    <type min="0" max="3">int</type>
+    <default>0</default>
+    <shortdescription>HEIF chroma subsampling</shortdescription>
+    <longdescription/>
+  </dtconfig>
+  <dtconfig>
     <name>plugins/imageio/format/xcf/bpp</name>
     <type>
       <enum>
@@ -3540,7 +3588,7 @@
   <dtconfig>
     <name>plugins/darkroom/masks/object/smoothing</name>
     <type min="0.0" max="1.3">float</type>
-    <default>1.0</default>
+    <default>0.0</default>
     <shortdescription>AI mask smoothing</shortdescription>
     <longdescription>corner threshold for AI mask vectorization. 0 = all sharp corners (most points), 1.0 = balanced, 1.3 = maximum smoothing (fewest points).</longdescription>
   </dtconfig>
@@ -3553,10 +3601,10 @@
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/masks/object/refine_passes</name>
-    <type min="1" max="5">int</type>
-    <default>1</default>
+    <type min="1" max="3">int</type>
+    <default>2</default>
     <shortdescription>AI mask refinement passes</shortdescription>
-    <longdescription>number of iterative decoder passes. each pass feeds back the mask to tighten boundaries. higher values give tighter edges at the cost of more processing time.</longdescription>
+    <longdescription>number of decoder passes for automatic mask refinement. each extra pass augments the prompts (interior point from the prior mask, plus a tight bounding box for SAM) so the model converges without manual clicks. higher values can produce tighter masks at the cost of more processing time.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/masks/object/threshold</name>
@@ -3589,16 +3637,9 @@
   <dtconfig>
     <name>plugins/darkroom/masks/object/render_size</name>
     <type min="1024">int</type>
-    <default>1024</default>
+    <default>1536</default>
     <shortdescription>AI mask render resolution</shortdescription>
     <longdescription>target resolution (longest side in pixels) for rendering the image before AI mask encoding. higher values improve edge accuracy but increase processing time. the AI encoder always works at 1024px internally.</longdescription>
-  </dtconfig>
-  <dtconfig>
-    <name>plugins/darkroom/masks/object/brush_size</name>
-    <type min="0.005" max="0.5">float</type>
-    <default>0.03</default>
-    <shortdescription>AI mask brush size</shortdescription>
-    <longdescription>brush radius as a fraction of the shorter image dimension. used for the brush tool in the AI object mask to paint over the target object.</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/masks/object/persist_model</name>
@@ -3606,6 +3647,41 @@
     <default>TRUE</default>
     <shortdescription>keep AI mask model loaded</shortdescription>
     <longdescription>keep the AI segmentation model loaded in memory between mask creation sessions within the same darkroom view. reduces latency when creating multiple masks but uses more memory</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/masks/object/path_preview</name>
+    <type>bool</type>
+    <default>TRUE</default>
+    <shortdescription>show AI mask path preview overlay</shortdescription>
+    <longdescription>display the vectorized path (with anchor points) on top of the AI mask while creating it. useful for previewing the final shape before committing</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/masks/object/refine_boundary</name>
+    <type>bool</type>
+    <default>TRUE</default>
+    <shortdescription>refine AI mask boundary with DenseCRF on each decode</shortdescription>
+    <longdescription>when enabled, runs DenseCRF post-processing on each decoder pass to snap the mask boundary to nearby image edges. helps recover small notches and bumps the model missed. adds a few hundred ms per click</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/masks/object/refine_boundary_iterations</name>
+    <type min="1" max="10">int</type>
+    <default>3</default>
+    <shortdescription>DenseCRF mean-field iterations</shortdescription>
+    <longdescription>number of mean-field iterations the DenseCRF runs per decode when boundary refinement is enabled. higher = tighter snap to edges at the cost of more processing time</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/masks/object/refine_boundary_sigma_color</name>
+    <type min="1.0" max="50.0">float</type>
+    <default>10.0</default>
+    <shortdescription>DenseCRF color tolerance</shortdescription>
+    <longdescription>color similarity bandwidth (sigma_rgb) for the bilateral kernel in DenseCRF boundary refinement. lower values make the mask follow finer color differences; higher values group similar colors together</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/masks/object/refine_boundary_weight_bilateral</name>
+    <type min="0.5" max="30.0">float</type>
+    <default>10.0</default>
+    <shortdescription>DenseCRF edge-snap strength</shortdescription>
+    <longdescription>weight of the bilateral (edge-aware) pairwise term in DenseCRF boundary refinement. higher values make the mask snap more aggressively to image edges</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/ashift/near_delta</name>
@@ -3783,6 +3859,13 @@
     <shortdescription/>
     <longdescription/>
   </dtconfig>
+  <dtconfig>
+    <name>plugins/lighttable/neural_restore/preview_tooltip_zoom</name>
+    <type min="0.0" max="8.0">float</type>
+    <default>2.0</default>
+    <shortdescription>hover-zoom factor for the neural restore preview tooltip</shortdescription>
+    <longdescription>multiplier applied when hovering over the preview to show pixels at higher scale. set to 0 to disable the hover tooltip; otherwise clamped to [1, 8] and capped at the active monitor size. the actual percentage is shown in the tooltip's bottom-right corner</longdescription>
+  </dtconfig>
   <dtconfig prefs="processing" section="general">
     <name>plugins/darkroom/workflow</name>
     <type>
@@ -3834,13 +3917,6 @@
     <default>4</default>
     <shortdescription>maximum number of full-res images to load in memory</shortdescription>
     <longdescription>if more images are display in expose mode, zooming will be deactivated</longdescription>
-  </dtconfig>
-  <dtconfig>
-    <name>codepaths/openmp_simd</name>
-    <type>bool</type>
-    <default>false</default>
-    <shortdescription>enable usage of OpenMP SIMD codepaths. if enabled, and such codepath exists, it will have the highest priority</shortdescription>
-    <longdescription></longdescription>
   </dtconfig>
   <dtconfig>
     <name>allow_lab_output</name>

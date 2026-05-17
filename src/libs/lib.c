@@ -30,10 +30,7 @@
 #include "gui/gtk.h"
 #include "gui/presets.h"
 #include "gui/splash.h"
-#include <glib-2.0/glib.h>
 #include <string.h>
-#ifdef GDK_WINDOWING_QUARTZ
-#endif
 #include <stdbool.h>
 #include <stdlib.h>
 
@@ -463,7 +460,7 @@ static void _free_module_info(GtkWidget *widget,
 {
   dt_lib_module_info_t *minfo = (dt_lib_module_info_t *)user_data;
   g_free(minfo->plugin_name);
-  free(minfo->params);
+  g_free(minfo->params);
   free(minfo);
 }
 
@@ -918,7 +915,7 @@ void dt_lib_gui_update(dt_lib_module_t *module)
     module->gui_uptodate = TRUE;
   }
 
-  if(module->preset_label)
+  if(module && module->has_preset_label(module))
   {
     dt_lib_module_info_t *mi = _get_module_info_for_module(module);
     gchar *active_preset_name = dt_lib_get_active_preset_name(mi);
@@ -968,7 +965,8 @@ static gboolean _lib_gui_reset_callback(GtkButton *button,
 {
   dt_lib_module_t *module = (dt_lib_module_t *)user_data;
   module->gui_reset(module);
-  gtk_label_set_text(GTK_LABEL(module->preset_label), "");
+  if(module->has_preset_label(module))
+    gtk_label_set_text(GTK_LABEL(module->preset_label), "");
   return TRUE;
 }
 
@@ -1390,14 +1388,17 @@ GtkWidget *dt_lib_gui_get_expander(dt_lib_module_t *module)
   module->expander = expander;
 
   // get active preset and set preset_label
-  dt_lib_module_info_t *mi = _get_module_info_for_module(module);
-  gchar *preset_name = dt_lib_get_active_preset_name(mi);
-  if(preset_name)
+  if(module->has_preset_label && module->has_preset_label(module))
   {
-    _set_module_preset_label(mi->module, preset_name);
-    g_free(preset_name);
+    dt_lib_module_info_t *mi = _get_module_info_for_module(module);
+    gchar *preset_name = dt_lib_get_active_preset_name(mi);
+    if(preset_name)
+    {
+      _set_module_preset_label(mi->module, preset_name);
+      g_free(preset_name);
+    }
+    _free_module_info(NULL, mi);
   }
-  _free_module_info(NULL, mi);
 
   return module->expander;
 }
@@ -1678,6 +1679,9 @@ gboolean dt_lib_presets_can_autoapply(dt_lib_module_t *mod)
 
 void dt_lib_reset_preset_label(dt_lib_module_t *mod)
 {
+  if(!mod || !mod->has_preset_label(mod))
+    return;
+
   gtk_label_set_text(GTK_LABEL(mod->preset_label), "");
 }
 

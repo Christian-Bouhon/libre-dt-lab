@@ -38,6 +38,7 @@ FILE(GLOB SOURCE_FILES
   "common/database.c"
   "common/datetime.c"
   "common/dbus.c"
+  "common/densecrf.cc"
   "common/distance_transform.c"
   "common/dlopencl.c"
   "common/dng_opcode.c"
@@ -661,6 +662,8 @@ if(USE_GMIC)
     add_definitions(-DHAVE_GMIC)
     include_directories(SYSTEM ${GMIC_INCLUDE_DIRS})
     list(APPEND LIBS ${GMIC_LIBRARIES})
+  else()
+    message(FATAL_ERROR "No suitable GMIC development files found, please install them or disable GMIC support")
   endif(GMIC_FOUND)
 endif(USE_GMIC)
 
@@ -705,40 +708,23 @@ endif()
 
 
 if(NOT CUSTOM_CFLAGS)
-  if(BUILD_SSE2_CODEPATHS)
-    #we MUST always specify our required instruction set, native might not detect it
-    set(DT_REQ_INSTRUCTIONS "-msse2")
-  endif()
-
   include(march-mtune)
 
-  #if(NOT BUILD_SSE2_CODEPATHS)
-  #  set(MARCH "${MARCH} -mno-sse2 -D__DISABLE_SSE2__ -U__SSE2__ -D__DISABLE_SSE__ -U__SSE__")
-  #endif()
-
   #-g MUST be set for ALL builds, or there will be no support for them when bugs happen
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MARCH} ${DT_REQ_INSTRUCTIONS} -g")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MARCH} -g")
   set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} -O2 -ftree-vectorize")
   set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -ffast-math -fno-finite-math-only")
   if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-    if(BUILD_SSE2_CODEPATHS)
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mfpmath=sse")
-    endif()
-
     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0 -g3 -ggdb3")
     set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -fexpensive-optimizations")
   else()
     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
   endif()
 
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MARCH} ${DT_REQ_INSTRUCTIONS} -g")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MARCH} -g")
   set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O2 -ftree-vectorize")
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -ffast-math -fno-finite-math-only")
   if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    if(BUILD_SSE2_CODEPATHS)
-      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mfpmath=sse")
-    endif()
-
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g3 -ggdb3")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fexpensive-optimizations")
   else()
@@ -792,6 +778,7 @@ if(USE_LUA)
   if(USE_LUA)
     add_definitions("-DUSE_LUA")
     FILE(GLOB SOURCE_FILES_LUA
+      "lua/ai.c"
       "lua/cairo.c"
       "lua/call.c"
       "lua/configuration.c"
@@ -809,6 +796,7 @@ if(USE_LUA)
       "lua/lua.c"
       "lua/lualib.c"
       "lua/luastorage.c"
+      "lua/metadata.c"
       "lua/modules.c"
       "lua/password.c"
       "lua/preferences.c"

@@ -44,9 +44,6 @@ enum border_mode
 // !! Make sure to sync this with the filter array !!
 #define MAX_HALF_FILTER_WIDTH 3
 
-// Add *verbose* (like one msg per pixel out) debug message to stderr
-#define DEBUG_PRINT_VERBOSE 0
-
 /* --------------------------------------------------------------------------
  * Debug helpers
  * ------------------------------------------------------------------------*/
@@ -266,8 +263,7 @@ static float _maketaps_bicubic(float *taps,
 
 #define DT_LANCZOS_EPSILON (1e-9f)
 
-#if 0
-// Reference version left here for ... documentation
+/* Reference version left here for documentation
 static inline float
 lanczos(const float width, const float t)
 {
@@ -287,9 +283,8 @@ lanczos(const float width, const float t)
   }
   return r;
 }
-#endif
 
-/* Fast lanczos version, no calls to math.h functions, too accurate, too slow
+ * Fast lanczos version, no calls to math.h functions, too accurate, too slow
  *
  * Based on a forum entry at
  * http://devmaster.net/forums/topic/4648-fast-and-accurate-sinecosine/
@@ -303,7 +298,8 @@ lanczos(const float width, const float t)
  *
  * Of course we know that lanczos func will only be called for
  * the range -width < t < width so we can additionally avoid the
- * range check.  */
+ * range check.
+*/
 
 static float _maketaps_lanczos(float *taps,
                                const size_t num_taps,
@@ -552,7 +548,6 @@ float dt_interpolation_compute_sample(const dt_interpolation_t *itor,
       s += kernelv[i] * h;
       in += linestride;
     }
-    s = _interpolated_out(s * oonorm);
   }
   else if(ix >= 0 && iy >= 0 && ix < width && iy < height)
   {
@@ -574,9 +569,8 @@ float dt_interpolation_compute_sample(const dt_interpolation_t *itor,
       }
       s += kernelv[i] * h;
     }
-    s = _interpolated_out(s * oonorm);
   }
-  return s; // if called for masks make sure to CLIP to avoid interpolator under/overshoots
+  return s * oonorm; // if called for masks make sure to CLIP to avoid interpolator under/overshoots
 }
 
 /* --------------------------------------------------------------------------
@@ -645,7 +639,7 @@ void dt_interpolation_compute_pixel4c(const dt_interpolation_t *itor,
     }
 
     for_each_channel(c,aligned(out))
-      out[c] = _interpolated_out(pixel[c] * oonorm);
+      out[c] = pixel[c] * oonorm;
   }
   else if(ix >= 0 && iy >= 0 && ix < width && iy < height)
   {
@@ -675,7 +669,7 @@ void dt_interpolation_compute_pixel4c(const dt_interpolation_t *itor,
     }
 
     for_each_channel(c,aligned(out))
-      out[c] = _interpolated_out(pixel[c] * oonorm);
+      out[c] = pixel[c] * oonorm;
   }
   else
   {
@@ -885,11 +879,11 @@ static gboolean _prepare_resampling_plan(const dt_interpolation_t *itor,
       }
 
       // Projected position in input samples
-      float fx = (float)(shift + x) / scale;
+      const float fx = (float)(shift + x) / scale;
 
       // Compute the filter kernel at that position
       int first;
-      (void)_compute_upsampling_kernel(itor, scratchpad, &first, fx);
+      _compute_upsampling_kernel(itor, scratchpad, &first, fx);
 
       /* Check lower and higher bound pixel index and skip as many pixels as
        * necessary to fall into range */
@@ -1115,11 +1109,7 @@ void dt_interpolation_resample(const dt_interpolation_t *itor,
 
       // Output pixel is ready
       const size_t baseidx = (size_t)oy * out_stride_floats + (size_t)ox * 4;
-
-      dt_aligned_pixel_t pixel;
-      for_each_channel(c, aligned(vs:16))
-        pixel[c] = _interpolated_out(vs[c]);
-      copy_pixel_nontemporal(out + baseidx, pixel);
+      copy_pixel_nontemporal(out + baseidx, vs);
 
       // Reset vertical resampling context
       viidx -= vl;
@@ -1181,7 +1171,7 @@ void dt_interpolation_free_cl_global(dt_interpolation_cl_global_t *g)
   free(g);
 }
 
-static uint32_t roundToNextPowerOfTwo(uint32_t x)
+static uint32_t _roundToNextPowerOfTwo(uint32_t x)
 {
   x--;
   x |= x >> 1;
@@ -1244,8 +1234,8 @@ int dt_interpolation_resample_cl(const dt_interpolation_t *itor,
   {
     if(wd_fit && ht_fit)
     {
-      size_t iorigin[] = { dx, dy };
-      size_t region[] = { width, height };
+      const size_t iorigin[2] = { dx, dy };
+      const size_t region[2] = { width, height };
       // copy original input from dev_in -> dev_out as starting point
       err = dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, iorigin, CLIMG_ORIGIN, region);
     }
@@ -1289,7 +1279,7 @@ int dt_interpolation_resample_cl(const dt_interpolation_t *itor,
   const int kernel = darktable.opencl->interpolation->kernel_interpolation_resample;
 
   // make sure blocksize is not too large
-  const int taps = roundToNextPowerOfTwo(vmaxtaps);
+  const int taps = _roundToNextPowerOfTwo(vmaxtaps);
   // the number of work items per row rounded up to a power of 2
   // (for quick recursive reduction)
 
@@ -1321,8 +1311,8 @@ int dt_interpolation_resample_cl(const dt_interpolation_t *itor,
     goto error;
   }
 
-  size_t sizes[2] = { ROUNDUPDWD(width, devid), ROUNDUP(height * taps, vblocksize) };
-  size_t local[2] = { 1, vblocksize };
+  const size_t sizes[2] = { ROUNDUPDWD(width, devid), ROUNDUP(height * taps, vblocksize) };
+  const size_t local[2] = { 1, vblocksize };
 
   // store resampling plan to device memory hindex, vindex, hkernel,
   // vkernel: (v|h)maxtaps might be too small, so store a bit more

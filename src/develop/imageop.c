@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2009-2025 darktable developers.
+    Copyright (C) 2009-2026 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -516,7 +516,7 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
   dt_iop_gui_set_expanded(next, TRUE, FALSE);
   dt_iop_request_focus(next);
 
-  ++darktable.gui->reset;
+  DT_ENTER_GUI_UPDATE();
 
   // we remove the plugin effectively
   if(!dt_iop_is_hidden(module))
@@ -577,7 +577,7 @@ static void _gui_delete_callback(GtkButton *button, dt_iop_module_t *module)
   /* redraw */
   dt_control_queue_redraw_center();
 
-  --darktable.gui->reset;
+  DT_LEAVE_GUI_UPDATE();
 }
 
 dt_iop_module_t *dt_iop_gui_get_previous_visible_module(const dt_iop_module_t *module)
@@ -710,9 +710,9 @@ dt_iop_module_t *dt_iop_gui_duplicate(dt_iop_module_t *base,
   dt_dev_add_history_item(base->dev, base, FALSE);
 
   // first we create the new module
-  ++darktable.gui->reset;
+  DT_ENTER_GUI_UPDATE();
   dt_iop_module_t *module = dt_dev_module_duplicate(base->dev, base);
-  --darktable.gui->reset;
+  DT_LEAVE_GUI_UPDATE();
   if(!module) return NULL;
 
   // what is the position of the module in the pipe ?
@@ -1067,7 +1067,7 @@ static gboolean _gui_off_button_press(GtkButton *w,
     DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_DEVELOP_DISTORT);
   }
 
-  if(!darktable.gui->reset && dt_modifier_is(e->state, GDK_CONTROL_MASK))
+  if(!DT_IN_GUI_UPDATE() && dt_modifier_is(e->state, GDK_CONTROL_MASK))
   {
     dt_iop_request_focus(dt_dev_gui_module() == module ? NULL : module);
     return TRUE;
@@ -1104,7 +1104,7 @@ static void _gui_off_callback(GtkToggleButton *togglebutton,
     (dt_dev_modulegroups_get_activated(module->dev) == DT_MODULEGROUP_BASICS);
   const gboolean special = module->flags() & IOP_FLAGS_GUIDES_SPECIAL_DRAW;
 
-  if(!darktable.gui->reset)
+  if(!DT_IN_GUI_UPDATE())
   {
     /* modules with IOP_FLAGS_GUIDES_SPECIAL_DRAW flag like crop & ashift need special care.
         If in expanded state we request focus to let it's gui_focus() callback
@@ -1314,18 +1314,18 @@ void dt_iop_set_module_trouble_message(dt_iop_module_t *const module,
 
 void dt_iop_gui_init(dt_iop_module_t *module)
 {
-  ++darktable.gui->reset;
+  DT_ENTER_GUI_UPDATE();
   --darktable.bauhaus->skip_accel;
   dt_pthread_mutex_init(&module->gui_lock, NULL);
   if(module->gui_init) module->gui_init(module);
   ++darktable.bauhaus->skip_accel;
-  --darktable.gui->reset;
+  DT_LEAVE_GUI_UPDATE();
 }
 
 void dt_iop_reload_defaults(dt_iop_module_t *module)
 {
   if(darktable.gui)
-    ++darktable.gui->reset;
+    DT_ENTER_GUI_UPDATE();
 
   if(module->reload_defaults)
   {
@@ -1348,7 +1348,7 @@ void dt_iop_reload_defaults(dt_iop_module_t *module)
   dt_iop_load_default_params(module);
 
   if(darktable.gui)
-    --darktable.gui->reset;
+    DT_LEAVE_GUI_UPDATE();
 
   if(module->header)
     dt_iop_gui_update_header(module);
@@ -2271,7 +2271,7 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
 
 void dt_iop_gui_update(dt_iop_module_t *module)
 {
-  ++darktable.gui->reset;
+  DT_ENTER_GUI_UPDATE();
   if(!dt_iop_is_hidden(module))
   {
     if(module->gui_data)
@@ -2305,15 +2305,15 @@ void dt_iop_gui_update(dt_iop_module_t *module)
       DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_DEVELOP_DISTORT);
     }
   }
-  --darktable.gui->reset;
+  DT_LEAVE_GUI_UPDATE();
 }
 
 void dt_iop_gui_reset(dt_iop_module_t *module)
 {
-  ++darktable.gui->reset;
+  DT_ENTER_GUI_UPDATE();
   if(module->gui_reset && !dt_iop_is_hidden(module))
     module->gui_reset(module);
-  --darktable.gui->reset;
+  DT_LEAVE_GUI_UPDATE();
 }
 
 static gboolean _gui_reset_callback(GtkButton *button,
@@ -2406,7 +2406,7 @@ void dt_iop_request_focus(dt_iop_module_t *module)
   if(!darktable.lib->proxy.colorpicker.restrict_histogram)
     dt_iop_color_picker_reset(NULL, TRUE);
 
-  if(darktable.gui->reset || (out_focus_module == module))
+  if(DT_IN_GUI_UPDATE() || (out_focus_module == module))
     return;
 
   dev->gui_module = module;
@@ -2830,7 +2830,7 @@ gboolean dt_iop_show_hide_header_buttons(dt_iop_module_t *module,
 
 static void _display_mask_indicator_callback(GtkToggleButton *bt, dt_iop_module_t *module)
 {
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
 
   const gboolean is_active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(bt));
   const dt_iop_gui_blend_data_t *bd = module->blend_data;
@@ -3503,25 +3503,6 @@ void dt_iop_gui_attach(dt_iop_module_t *module)
   module->detached = FALSE;
 }
 
-gboolean dt_iop_breakpoint(dt_develop_t *dev, dt_dev_pixelpipe_t *pipe)
-{
-  if(pipe != dev->preview_pipe
-     && pipe != dev->preview2.pipe)
-    sched_yield();
-
-  if(pipe != dev->preview_pipe
-     && pipe != dev->preview2.pipe
-     && pipe->changed == DT_DEV_PIPE_ZOOMED)
-    return TRUE;
-
-  if((pipe->changed != DT_DEV_PIPE_UNCHANGED
-      && pipe->changed != DT_DEV_PIPE_ZOOMED)
-     || dev->gui_leaving)
-    return TRUE;
-
-  return FALSE;
-}
-
 void dt_iop_nap(int32_t usec)
 {
   if(usec <= 0) return;
@@ -3698,7 +3679,7 @@ void dt_iop_so_gui_set_state(dt_iop_module_so_t *module, dt_iop_module_state_t s
   }
   else if(state == IOP_STATE_ACTIVE)
   {
-    if(!darktable.gui->reset)
+    if(!DT_IN_GUI_UPDATE())
     {
       int once = 0;
 
@@ -4064,7 +4045,7 @@ const char *dt_iop_get_instance_id(const dt_iop_module_t *module)
 
 void dt_iop_refresh_center(const dt_iop_module_t *module)
 {
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
   dt_develop_t *dev = module->dev;
   if(dev && dev->gui_attached)
   {
@@ -4078,7 +4059,7 @@ void dt_iop_refresh_center(const dt_iop_module_t *module)
 
 void dt_iop_refresh_preview(const dt_iop_module_t *module)
 {
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
   dt_develop_t *dev = module->dev;
   if(dev && dev->gui_attached)
   {
@@ -4092,7 +4073,7 @@ void dt_iop_refresh_preview(const dt_iop_module_t *module)
 
 void dt_iop_refresh_preview2(const dt_iop_module_t *module)
 {
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
   dt_develop_t *dev = module->dev;
   if(dev && dev->gui_attached)
   {

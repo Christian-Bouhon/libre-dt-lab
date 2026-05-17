@@ -56,11 +56,13 @@ struct dt_ai_context_t
   gboolean dynamic_outputs;
 };
 
-// minimum ORT API we'll fall back to when the runtime library is older
-// than what we were compiled against. v14 = ORT 1.14, the first release
-// with ONNX opset 18 support — older ORT can't run our models. bump
-// this in lockstep with any model that requires a newer opset
-#define DT_ORT_MIN_API_VERSION 14
+// minimum ORT API we accept. v18 = ORT 1.18, required for ROCm 6.0
+// and the V2 CUDA EP options API. caps ONNX opset at 20 — bump in
+// lockstep with any model that needs a newer opset
+#define DT_ORT_MIN_API_VERSION 18
+
+// cache size for per-device VRAM lookups; ORT also uses a uint32 device id
+#define DT_AI_MAX_CUDA_DEVICES 8
 
 // global singletons (initialized exactly once via g_once)
 // ORT requires at most one OrtEnv per process.
@@ -267,9 +269,67 @@ gboolean dt_ai_device_id_changed_since_load(const dt_ai_provider_t provider)
   return cur != loaded;
 }
 
-// shell out to a command and return its stdout. caller frees. NULL on failure
+// shell out to a command and return its stdout (caller frees, NULL on failure).
+// Windows path uses CreateProcessA directly so a GUI-subsystem parent doesn't
+// flash a console window when spawning console children (nvidia-smi, rocminfo).
+// caller must pass an ASCII command without quoted paths -- the Windows
+// branch doesn't shell-tokenize and Linux's g_spawn parses different rules
 static gchar *_run_capture(const char *cmd)
 {
+#ifdef _WIN32
+  SECURITY_ATTRIBUTES sa = { 0 };
+  sa.nLength = sizeof(sa);
+  sa.bInheritHandle = TRUE;
+
+  HANDLE rd = NULL, wr = NULL;
+  if(!CreatePipe(&rd, &wr, &sa, 0))
+    return NULL;
+  // read end must not be inherited or ReadFile never sees EOF
+  SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
+
+  STARTUPINFOA si = { 0 };
+  si.cb = sizeof(si);
+  si.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
+  si.wShowWindow = SW_HIDE;
+  si.hStdOutput = wr;
+  si.hStdError = wr;
+  si.hStdInput = NULL;
+
+  PROCESS_INFORMATION pi = { 0 };
+  // CreateProcessA writes into the cmdline buffer
+  gchar *cmdline = g_strdup(cmd);
+  const BOOL ok = CreateProcessA(NULL, cmdline,
+                                 NULL, NULL, TRUE,
+                                 CREATE_NO_WINDOW,
+                                 NULL, NULL, &si, &pi);
+  g_free(cmdline);
+  CloseHandle(wr);
+  if(!ok)
+  {
+    CloseHandle(rd);
+    return NULL;
+  }
+
+  GString *out = g_string_new(NULL);
+  char buf[4096];
+  DWORD n = 0;
+  while(ReadFile(rd, buf, sizeof(buf), &n, NULL) && n > 0)
+    g_string_append_len(out, buf, (gssize)n);
+  CloseHandle(rd);
+
+  WaitForSingleObject(pi.hProcess, INFINITE);
+  DWORD exit_code = 0;
+  GetExitCodeProcess(pi.hProcess, &exit_code);
+  CloseHandle(pi.hProcess);
+  CloseHandle(pi.hThread);
+
+  if(exit_code != 0)
+  {
+    g_string_free(out, TRUE);
+    return NULL;
+  }
+  return g_string_free(out, FALSE);
+#else
   gchar *out = NULL;
   GError *err = NULL;
   gint exit_status = 0;
@@ -285,6 +345,7 @@ static gchar *_run_capture(const char *cmd)
     return NULL;
   }
   return out;
+#endif
 }
 
 // CUDA device enumeration via nvidia-smi. respects CUDA_VISIBLE_DEVICES
@@ -552,7 +613,7 @@ int dt_ai_ort_probe_library_full(const char *path, char **out_version, char **ou
   return TRUE;
 }
 
-// find libonnxruntime.so.* recursively, skip auditwheel *.libs/ peers
+// find the ORT runtime library recursively, skipping *.libs/ peers
 static gchar *_scan_for_ort_lib(const char *root)
 {
   GDir *d = g_dir_open(root, 0, NULL);
@@ -567,7 +628,11 @@ static gchar *_scan_for_ort_lib(const char *root)
       if(!g_str_has_suffix(name, ".libs"))
         result = _scan_for_ort_lib(p);
     }
+#ifdef _WIN32
+    else if(g_strcmp0(name, "onnxruntime.dll") == 0)
+#else
     else if(g_str_has_prefix(name, "libonnxruntime.so."))
+#endif
     {
       result = g_strdup(p);
     }
@@ -618,33 +683,11 @@ GList *dt_ai_ort_find_libraries(void)
     if(g_file_test(dir, G_FILE_TEST_IS_DIR))
     {
 #ifdef _WIN32
-      // look for onnxruntime.dll
-      gchar *exact = g_build_filename(dir, "onnxruntime.dll", NULL);
-      if(g_file_test(exact, G_FILE_TEST_EXISTS))
-      {
-        user_paths[i] = exact;
-      }
-      else
-      {
-        g_free(exact);
-        GDir *d = g_dir_open(dir, 0, NULL);
-        if(d)
-        {
-          const gchar *name;
-          while((name = g_dir_read_name(d)))
-          {
-            if(g_str_has_prefix(name, "onnxruntime") &&
-               g_str_has_suffix(name, ".dll"))
-            {
-              user_paths[i] = g_build_filename(dir, name, NULL);
-              break;
-            }
-          }
-          g_dir_close(d);
-        }
-      }
+      const char *flat_name = "onnxruntime.dll";
 #else
-      gchar *exact = g_build_filename(dir, "libonnxruntime.so", NULL);
+      const char *flat_name = "libonnxruntime.so";
+#endif
+      gchar *exact = g_build_filename(dir, flat_name, NULL);
       if(g_file_test(exact, G_FILE_TEST_EXISTS))
       {
         user_paths[i] = exact;
@@ -652,10 +695,8 @@ GList *dt_ai_ort_find_libraries(void)
       else
       {
         g_free(exact);
-        // preserve_layout puts the lib in onnxruntime/capi/
         user_paths[i] = _scan_for_ort_lib(dir);
       }
-#endif
     }
     g_free(dir);
   }
@@ -1295,6 +1336,137 @@ static int _device_id_from_conf(const char *conf_key, const char *env_var)
   return 0;
 }
 
+// query total VRAM for a CUDA device via nvidia-smi, cached per device.
+// returns 0 on failure
+G_LOCK_DEFINE_STATIC(cuda_vram_cache);
+static size_t _cuda_total_vram_bytes(int device_id)
+{
+  static size_t cached[DT_AI_MAX_CUDA_DEVICES] = { 0 };
+  static gboolean queried[DT_AI_MAX_CUDA_DEVICES] = { FALSE };
+  if(device_id < 0 || device_id >= DT_AI_MAX_CUDA_DEVICES) return 0;
+
+  G_LOCK(cuda_vram_cache);
+  if(queried[device_id])
+  {
+    const size_t hit = cached[device_id];
+    G_UNLOCK(cuda_vram_cache);
+    return hit;
+  }
+  G_UNLOCK(cuda_vram_cache);
+
+  gchar *cmd = g_strdup_printf(
+    "nvidia-smi --query-gpu=memory.total "
+    "--format=csv,noheader,nounits -i %d", device_id);
+  gchar *out = _run_capture(cmd);
+  g_free(cmd);
+
+  size_t bytes = 0;
+  if(out)
+  {
+    const long mb = atol(g_strstrip(out));
+    if(mb > 0) bytes = (size_t)mb * 1024UL * 1024UL;
+    g_free(out);
+  }
+
+  G_LOCK(cuda_vram_cache);
+  cached[device_id] = bytes;
+  queried[device_id] = TRUE;
+  G_UNLOCK(cuda_vram_cache);
+  return bytes;
+}
+
+// gpu_mem_limit (bytes) for CUDA EP. precedence:
+//   env DT_CUDA_MEM_LIMIT_MB > conf plugins/ai/cuda_mem_limit_mb > 75% VRAM.
+// returns 0 = no cap
+static size_t _cuda_mem_limit_bytes(int device_id)
+{
+  const char *env = g_getenv("DT_CUDA_MEM_LIMIT_MB");
+  if(env && env[0])
+  {
+    const long mb = atol(env);
+    if(mb > 0) return (size_t)mb * 1024UL * 1024UL;
+  }
+  if(dt_conf_key_exists("plugins/ai/cuda_mem_limit_mb"))
+  {
+    const int mb = dt_conf_get_int("plugins/ai/cuda_mem_limit_mb");
+    if(mb > 0) return (size_t)mb * 1024UL * 1024UL;
+  }
+  const size_t total = _cuda_total_vram_bytes(device_id);
+  if(total == 0) return 0;
+  return total - total / 4;
+}
+
+// configure CUDA EP via V2 options API. HEURISTIC algo search and
+// kSameAsRequested arena avoid a per-Run VRAM leak observed on Blackwell
+// (large cuDNN workspaces not returning to the arena between Runs).
+// returns FALSE if V2 setup fails so callers can fall back to V1
+static gboolean _try_cuda_v2(OrtSessionOptions *session_opts, int device_id)
+{
+  if(!g_ort
+     || !g_ort->CreateCUDAProviderOptions
+     || !g_ort->UpdateCUDAProviderOptions
+     || !g_ort->SessionOptionsAppendExecutionProvider_CUDA_V2
+     || !g_ort->ReleaseCUDAProviderOptions)
+    return FALSE;
+
+#if defined(__linux__)
+  if(!_check_cuda_driver_compat()) return FALSE;
+#endif
+
+  dt_print(DT_DEBUG_AI, "[darktable_ai] attempting to enable NVIDIA CUDA (V2)...");
+
+  OrtCUDAProviderOptionsV2 *opts = NULL;
+  OrtStatus *st = g_ort->CreateCUDAProviderOptions(&opts);
+  if(st)
+  {
+    g_ort->ReleaseStatus(st);
+    return FALSE;
+  }
+
+  const size_t cap = _cuda_mem_limit_bytes(device_id);
+  gchar *dev_str = g_strdup_printf("%d", device_id);
+  gchar *cap_str = cap ? g_strdup_printf("%zu", cap) : NULL;
+
+  const char *keys[4];
+  const char *vals[4];
+  int n = 0;
+  keys[n] = "device_id";                vals[n++] = dev_str;
+  keys[n] = "arena_extend_strategy";    vals[n++] = "kSameAsRequested";
+  keys[n] = "cudnn_conv_algo_search";   vals[n++] = "HEURISTIC";
+  if(cap_str) { keys[n] = "gpu_mem_limit"; vals[n++] = cap_str; }
+
+  st = g_ort->UpdateCUDAProviderOptions(opts, keys, vals, n);
+  g_free(dev_str);
+  g_free(cap_str);
+  if(st)
+  {
+    dt_print(DT_DEBUG_AI, "[darktable_ai] CUDA V2 UpdateOptions failed: %s",
+             g_ort->GetErrorMessage(st));
+    g_ort->ReleaseStatus(st);
+    g_ort->ReleaseCUDAProviderOptions(opts);
+    return FALSE;
+  }
+
+  st = g_ort->SessionOptionsAppendExecutionProvider_CUDA_V2(session_opts, opts);
+  g_ort->ReleaseCUDAProviderOptions(opts);
+  if(st)
+  {
+    dt_print(DT_DEBUG_AI, "[darktable_ai] CUDA V2 append failed: %s",
+             g_ort->GetErrorMessage(st));
+    g_ort->ReleaseStatus(st);
+    return FALSE;
+  }
+
+  gchar *dev_name = _lookup_device_name(DT_AI_PROVIDER_CUDA, device_id);
+  dt_print(DT_DEBUG_AI,
+           "[darktable_ai] NVIDIA CUDA enabled successfully on device %d: %s "
+           "(mem_limit=%zu MB, algo=HEURISTIC, arena=kSameAsRequested)",
+           device_id, dev_name ? dev_name : "?",
+           cap ? cap / (1024UL * 1024UL) : 0);
+  g_free(dev_name);
+  return TRUE;
+}
+
 static void
 _enable_acceleration(OrtSessionOptions *session_opts,
                      dt_ai_provider_t provider,
@@ -1322,8 +1494,9 @@ _enable_acceleration(OrtSessionOptions *session_opts,
   {
     const int dev = _device_id_from_conf("plugins/ai/cuda_device_id",
                                          "DT_CUDA_DEVICE_ID");
-    _try_provider(session_opts, "OrtSessionOptionsAppendExecutionProvider_CUDA",
-                  "NVIDIA CUDA", NULL, (uint32_t)dev, DT_AI_PROVIDER_CUDA);
+    if(!_try_cuda_v2(session_opts, dev))
+      _try_provider(session_opts, "OrtSessionOptionsAppendExecutionProvider_CUDA",
+                    "NVIDIA CUDA", NULL, (uint32_t)dev, DT_AI_PROVIDER_CUDA);
     break;
   }
 
@@ -1385,10 +1558,13 @@ _enable_acceleration(OrtSessionOptions *session_opts,
                                                 "DT_CUDA_DEVICE_ID");
       const int amd_dev  = _device_id_from_conf("plugins/ai/migraphx_device_id",
                                                 "DT_MIGRAPHX_DEVICE_ID");
-      if(!_try_provider(
-           session_opts,
-           "OrtSessionOptionsAppendExecutionProvider_CUDA",
-           "NVIDIA CUDA", NULL, (uint32_t)cuda_dev, DT_AI_PROVIDER_CUDA))
+      const gboolean cuda_ok =
+        _try_cuda_v2(session_opts, cuda_dev)
+        || _try_provider(session_opts,
+                         "OrtSessionOptionsAppendExecutionProvider_CUDA",
+                         "NVIDIA CUDA", NULL, (uint32_t)cuda_dev,
+                         DT_AI_PROVIDER_CUDA);
+      if(!cuda_ok)
       {
         if(!_try_provider(
              session_opts,

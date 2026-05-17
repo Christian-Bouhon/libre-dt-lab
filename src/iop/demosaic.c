@@ -279,10 +279,10 @@ static gboolean _demosaic_full(const dt_dev_pixelpipe_iop_t *const piece,
       || piece->pipe->want_detail_mask)
     return TRUE;
 
-  if(piece->pipe->type & DT_DEV_PIXELPIPE_THUMBNAIL)
+  if(dt_pipe_is_thumb(piece->pipe))
     return _get_thumb_quality(roi_out->width, roi_out->height);
 
-  if(piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW)
+  if(dt_pipe_is_preview(piece->pipe))
     return roi_out->scale > (piece->pipe->dsc.filters == 9u ? 0.667f : 0.5f);
 
   return TRUE;
@@ -650,8 +650,8 @@ void process(dt_iop_module_t *self,
 
   dt_dev_clear_scharr_mask(pipe);
 
-  const gboolean run_fast = pipe->type & (DT_DEV_PIXELPIPE_FAST | DT_DEV_PIXELPIPE_PREVIEW);
-  const gboolean fullpipe = pipe->type & DT_DEV_PIXELPIPE_FULL;
+  const gboolean run_fast = dt_pipe_is_fast(pipe) || dt_pipe_is_preview(pipe);
+  const gboolean fullpipe = dt_pipe_is_full(pipe);
 
   const uint8_t(*const xtrans)[6] = piece->xtrans;
   const dt_iop_demosaic_data_t *d = piece->data;
@@ -710,7 +710,7 @@ void process(dt_iop_module_t *self,
   }
 
   const gboolean demosaic_mask = pipe->mask_display == DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
-  const gboolean no_masking = pipe->mask_display == DT_DEV_PIXELPIPE_DISPLAY_NONE;
+  const gboolean no_masking = dt_pipe_no_mask_display(pipe);
   const gboolean dual = (demosaicing_method & DT_DEMOSAIC_DUAL) && !run_fast && !show_sigma && !show_capture && !demosaic_mask;
   const gboolean direct = roi_out->width == width && roi_out->height == height && feqf(roi_in->scale, roi_out->scale, 1e-8f);
   const gboolean passthru = method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME
@@ -912,8 +912,8 @@ int process_cl(dt_iop_module_t *self,
 {
   const dt_image_t *img = &self->dev->image_storage;
   dt_dev_pixelpipe_t *const pipe = piece->pipe;
-  const gboolean run_fast = pipe->type & (DT_DEV_PIXELPIPE_FAST | DT_DEV_PIXELPIPE_PREVIEW);
-  const gboolean fullpipe = pipe->type & DT_DEV_PIXELPIPE_FULL;
+  const gboolean run_fast = dt_pipe_is_fast(pipe) || dt_pipe_is_preview(pipe);
+  const gboolean fullpipe = dt_pipe_is_full(pipe);
   const gboolean true_monochrome = dt_image_is_mono_sraw(img);
 
   uint8_t(*const xtrans)[6] = piece->xtrans;
@@ -1001,7 +1001,7 @@ int process_cl(dt_iop_module_t *self,
   }
 
   const gboolean direct = roi_out->width == iwidth && roi_out->height == iheight && feqf(roi_in->scale, roi_out->scale, 1e-8f);
-  const gboolean no_masking = pipe->mask_display == DT_DEV_PIXELPIPE_DISPLAY_NONE;
+  const gboolean no_masking = dt_pipe_no_mask_display(pipe);
   const gboolean demosaic_mask = pipe->mask_display == DT_DEV_PIXELPIPE_DISPLAY_PASSTHRU;
   const gboolean dual = (demosaicing_method & DT_DEMOSAIC_DUAL) && !run_fast && !show_sigma && !show_capture && !demosaic_mask;
   const gboolean passthru = method == DT_IOP_DEMOSAIC_PASSTHROUGH_MONOCHROME
@@ -1108,8 +1108,8 @@ int process_cl(dt_iop_module_t *self,
               "tile=%.3d/%.3d, group=%.5d first=%.5d last=%.5d rows=%.4d",
                tile_nr, num_tiles, group, first_in, last_in, t_rows);
 
-        size_t insrc[]  = { 0, first_in };
-        size_t iarea[]  = { iwidth, t_rows };
+        const size_t insrc[2]  = { 0, first_in };
+        const size_t iarea[2]  = { iwidth, t_rows };
         err = dt_opencl_enqueue_copy_image(devid, in_image, t_in, insrc, CLIMG_ORIGIN, iarea);
         if(err != CL_SUCCESS) goto finish;
       }
@@ -1118,7 +1118,7 @@ int process_cl(dt_iop_module_t *self,
         err = demosaic_box3_cl(self, piece, t_in, t_high, dev_xtrans, iwidth, t_rows, filters);
       else if(method == DT_IOP_DEMOSAIC_MONO)
       {
-        size_t iarea[]  = { iwidth, t_rows };
+        const size_t iarea[2]  = { iwidth, t_rows };
         err = dt_opencl_enqueue_copy_image(devid, t_in, t_high, CLIMG_ORIGIN, CLIMG_ORIGIN, iarea);
       }
       else if(passthru || method == DT_IOP_DEMOSAIC_PPG)
@@ -1150,9 +1150,9 @@ int process_cl(dt_iop_module_t *self,
 
       if(tiling)
       {
-        size_t tsrc[]   = { 0, first_out };
-        size_t odest[]  = { 0, group };
-        size_t oarea[]  = { iwidth, out_height };
+        const size_t tsrc[2]   = { 0, first_out };
+        const size_t odest[2]  = { 0, group };
+        const size_t oarea[2]  = { iwidth, out_height };
         err = dt_opencl_enqueue_copy_image(devid, t_out, out_image, tsrc, odest, oarea);
         if(err != CL_SUCCESS) goto finish;
       }
@@ -1620,7 +1620,7 @@ void gui_update(dt_iop_module_t *self)
 
 static void _dual_thrs_callback(GtkWidget *quad, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
   dt_iop_demosaic_gui_data_t *g = self->gui_data;
 
   g->dual_mask = dt_bauhaus_widget_get_quad_active(quad);
@@ -1635,7 +1635,7 @@ static void _dual_thrs_callback(GtkWidget *quad, dt_iop_module_t *self)
 
 static void _cs_thrs_callback(GtkWidget *quad, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
   dt_iop_demosaic_gui_data_t *g = self->gui_data;
   g->cs_mask = dt_bauhaus_widget_get_quad_active(quad);
 
@@ -1649,7 +1649,7 @@ static void _cs_thrs_callback(GtkWidget *quad, dt_iop_module_t *self)
 
 static void _cs_boost_callback(GtkWidget *quad, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
   dt_iop_demosaic_gui_data_t *g = self->gui_data;
   g->cs_boost_mask = dt_bauhaus_widget_get_quad_active(quad);
 
@@ -1663,7 +1663,7 @@ static void _cs_boost_callback(GtkWidget *quad, dt_iop_module_t *self)
 
 static void _cs_radius_callback(GtkWidget *quad, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
   dt_iop_demosaic_gui_data_t *g = self->gui_data;
   g->new_radius = -1.0f;
   dt_dev_reprocess_center(self->dev);
@@ -1672,9 +1672,10 @@ static void _cs_radius_callback(GtkWidget *quad, dt_iop_module_t *self)
 static void _ui_pipe_done(gpointer instance, dt_iop_module_t *self)
 {
   dt_iop_demosaic_gui_data_t *g = self->gui_data;
-  if(!g || darktable.gui->reset) return;
+  if(!g) return;
 
-  ++darktable.gui->reset;
+  DT_TRY_GUI_UPDATE();
+
   const gboolean new_radius = g->new_radius > 0.0f;
   const gboolean new_thrs = g->new_thrs > 0.0f;
   if(new_radius)
@@ -1683,7 +1684,7 @@ static void _ui_pipe_done(gpointer instance, dt_iop_module_t *self)
   if(new_thrs)
     dt_bauhaus_slider_set_val(g->cs_thrs, g->new_thrs);
 
-  --darktable.gui->reset;
+  DT_LEAVE_GUI_UPDATE();
 
   if(new_radius || new_thrs)
   {

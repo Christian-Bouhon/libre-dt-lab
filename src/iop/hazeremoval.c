@@ -588,14 +588,14 @@ void process(dt_iop_module_t *self,
   const float eps = sqrtf(0.025f);    // regularization parameter for guided filter
   const gboolean compatibility_mode = d->compatibility_mode;
   const gboolean gui = self->dev->gui_attached && g;
-  const gboolean fullpipes = piece->pipe->type & (DT_DEV_PIXELPIPE_FULL | DT_DEV_PIXELPIPE_PREVIEW2);
+  const gboolean fullpipes = dt_pipe_is_canvas(piece->pipe);
   const gboolean hq = darktable.develop->late_scaling.enabled;
-  const gboolean fullhq = hq && (piece->pipe->type & DT_DEV_PIXELPIPE_FULL);
+  const gboolean fullhq = hq && dt_pipe_is_full(piece->pipe);
 
   /*  max distance and A0 for ambient light are stored and kept for the opther pipes by the preview pipe.
       If we run in HQ mode let's keep the fullpipe data too for slightly improved results.
   */
-  const gboolean storing = gui && ((piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW) || fullhq);
+  const gboolean storing = gui && (dt_pipe_is_preview(piece->pipe) || fullhq);
 
   const float *const restrict in = (float*)ivoid;
   float *const restrict out = (float*)ovoid;
@@ -637,9 +637,8 @@ void process(dt_iop_module_t *self,
     dt_iop_gui_leave_critical_section(self);
   }
 
-  // FIXME in pipe->type |= DT_DEV_PIXELPIPE_IMAGE mode we currently can't receive data from preview
-  // so we at least leave a note to the user
-  if((piece->pipe->type & DT_DEV_PIXELPIPE_IMAGE) && !hq)
+  // As we can't receive data from preview we at least leave a note to the user
+  if(dt_pipe_is_image(piece->pipe) && !hq)
     dt_control_log(_("inconsistent output"));
 
   // In all other cases we calculate distance_max and A0 here.
@@ -864,13 +863,13 @@ int process_cl(dt_iop_module_t *self,
   const float eps = sqrtf(0.025f);    // regularization parameter for guided filter
   const gboolean compatibility_mode = d->compatibility_mode;
   const gboolean gui = self->dev->gui_attached && g;
-  const gboolean fullpipes = piece->pipe->type & (DT_DEV_PIXELPIPE_FULL | DT_DEV_PIXELPIPE_PREVIEW2);
+  const gboolean fullpipes = dt_pipe_is_canvas(piece->pipe);
   const gboolean hq = darktable.develop->late_scaling.enabled;
-  const gboolean fullhq = hq && (piece->pipe->type & DT_DEV_PIXELPIPE_FULL);
+  const gboolean fullhq = hq && dt_pipe_is_full(piece->pipe);
   /*  max distance and A0 for ambient light are stored and kept for the opther pipes by the preview pipe.
       If we run in HQ mode let's keep the fullpipe data too for slightly improved results.
   */
-  const gboolean storing = gui && ((piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW) || fullhq);
+  const gboolean storing = gui && (dt_pipe_is_preview(piece->pipe) || fullhq);
   rgb_pixel A0 = { NAN, NAN, NAN, 0.0f };
   float distance_max = NAN;
 
@@ -907,9 +906,8 @@ int process_cl(dt_iop_module_t *self,
     dt_iop_gui_leave_critical_section(self);
   }
 
-  // FIXME in pipe->type |= DT_DEV_PIXELPIPE_IMAGE mode we currently can't receive data from preview
-  // so we at least leave a note to the user
-  if((piece->pipe->type & DT_DEV_PIXELPIPE_IMAGE) && !hq)
+  // As we can't receive data from preview we at least leave a note to the user
+  if(dt_pipe_is_image(piece->pipe) && !hq)
     dt_control_log(_("inconsistent output"));
 
   // In all other cases we calculate distance_max and A0 here.

@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2009-2025 darktable developers.
+    Copyright (C) 2009-2026 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -491,7 +491,7 @@ void cleanup_global(dt_iop_module_so_t *self)
 
 static void _profile_changed(GtkWidget *widget, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
   dt_iop_request_focus(self);
   dt_iop_colorin_params_t *p = self->params;
   dt_iop_colorin_gui_data_t *g = self->gui_data;
@@ -527,7 +527,7 @@ static void _profile_changed(GtkWidget *widget, dt_iop_module_t *self)
 static void _workicc_changed(GtkWidget *widget, dt_iop_module_t *self)
 {
   dt_iop_colorin_params_t *p = self->params;
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
 
   dt_iop_request_focus(self);
 
@@ -646,7 +646,7 @@ int process_cl(dt_iop_module_t *self,
 
   if(d->type == DT_COLORSPACE_LAB)
   {
-    size_t region[] = { width, height };
+    const size_t region[2] = { width, height };
     return dt_opencl_enqueue_copy_image(devid, dev_in, dev_out, CLIMG_ORIGIN, CLIMG_ORIGIN, region);
   }
 
@@ -1324,7 +1324,7 @@ void commit_params(dt_iop_module_t *self,
     piece->enabled = FALSE;
     return;
   }
-  if(!(piece->pipe->type & DT_DEV_PIXELPIPE_IMAGE_FINAL))
+  if(!dt_pipe_is_image_final(piece->pipe))
     piece->enabled = TRUE;
 
   if(type == DT_COLORSPACE_ENHANCED_MATRIX)

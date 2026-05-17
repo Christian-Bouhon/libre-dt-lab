@@ -108,7 +108,7 @@ GPU-enabled build of [ONNX Runtime](https://onnxruntime.ai/) separately:
   * [cuDNN 9.x](https://developer.nvidia.com/cudnn-downloads)
 * **AMD (ROCm):** Linux only.
   * Supported AMD GPU with up-to-date drivers (RDNA2/CDNA or newer), see [compatibility matrix](https://rocm.docs.amd.com/en/latest/compatibility/compatibility-matrix.html)
-  * [ROCm 6](https://rocm.docs.amd.com/projects/install-on-linux/en/docs-6.4.0/index.html) or [ROCm 7](https://rocm.docs.amd.com/projects/install-on-linux/en/docs-7.2.1/) 
+  * [ROCm 6+](https://rocm.docs.amd.com/projects/install-on-linux/en/latest/) 
   * [MIGraphX](https://rocm.docs.amd.com/projects/AMDMIGraphX/en/latest/install/install-migraphx.html) (may require separate install, e.g. `apt install migraphx migraphx-dev` on Ubuntu)
 * **Intel (OpenVINO):** Linux and Windows.
   * Supported Intel GPU with up-to-date drivers (integrated Gen9+, discrete Arc, or NPU Meteor Lake+)
@@ -122,12 +122,26 @@ GPU-enabled build of [ONNX Runtime](https://onnxruntime.ai/) separately:
   * macOS 11+ (Big Sur)
   * Apple Silicon (M1+)
 
-**GPU memory:** 4 GB VRAM minimum, 8 GB+ recommended. With less memory
-darktable will use smaller tiles, which is slower but still works.
+**GPU memory:** 4 GB VRAM minimum. If GPU inference fails (out of
+memory, unsupported op, EP crash), darktable automatically retries
+on CPU and continues.
 
-To enable GPU acceleration, set the path to the GPU-enabled ONNX Runtime library in
-preferences → processing → AI. darktable will auto-detect available execution providers.
-You can verify which provider is active by running darktable with `-d ai` for debug output.
+To enable GPU acceleration, run one of the install scripts:
+
+Linux:
+```bash
+curl -fsSL https://raw.githubusercontent.com/darktable-org/darktable/refs/heads/master/tools/ai/install-ort-gpu.sh | bash
+```
+
+Windows (PowerShell):
+```powershell
+irm https://raw.githubusercontent.com/darktable-org/darktable/refs/heads/master/tools/ai/install-ort-gpu.ps1 | iex
+```
+
+Then point darktable at the installed library via the **AI** tab in preferences
+(click **detect**). See [tools/ai/README.md](tools/ai/README.md) for flags,
+prerequisites, manual install, and troubleshooting. Verify the active provider
+with `darktable -d ai`.
 
 Installing
 ----------
@@ -237,7 +251,7 @@ Optional dependencies (minimum version):
 * libgphoto2 2.5 *(for camera tethering)*
 * Imath 3.1.0 *(for 16-bit "half" float TIFF export and faster import)*
 * libavif 0.9.3 *(for AVIF import & export)*
-* ONNX Runtime 1.16 *(for AI inference)*
+* ONNX Runtime 1.18 *(for AI inference)*
 * libarchive 3.8.5 *(for AI models download)*
 * libheif 1.13.0 *(for HEIF/HEIC/HIF import; also for AVIF import if no libavif)*
 * libjxl 0.7.0 *(for JPEG XL import & export)*

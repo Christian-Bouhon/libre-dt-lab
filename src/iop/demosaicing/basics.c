@@ -266,8 +266,8 @@ static int color_smoothing_cl(const dt_iop_module_t *self,
   cl_mem dev_t1 = dev_out;
   cl_mem dev_t2 = dev_tmp;
 
-  const size_t sizes[] = { ROUNDUP(width, locopt.sizex), ROUNDUP(height, locopt.sizey) };
-  const size_t local[] = { locopt.sizex, locopt.sizey };
+  const size_t sizes[2] = { ROUNDUP(width, locopt.sizex), ROUNDUP(height, locopt.sizey) };
+  const size_t local[2] = { locopt.sizex, locopt.sizey };
   for(int pass = 0; pass < passes; pass++)
   {
     err = dt_opencl_enqueue_kernel_2d_local_args(devid, gd->kernel_color_smoothing, sizes, local,
@@ -286,7 +286,7 @@ static int color_smoothing_cl(const dt_iop_module_t *self,
   if(dev_t1 == dev_tmp)
   {
     // copy data from dev_tmp -> dev_out
-    size_t region[] = { width, height };
+    const size_t region[2] = { width, height };
     err = dt_opencl_enqueue_copy_image(devid, dev_tmp, dev_out, CLIMG_ORIGIN, CLIMG_ORIGIN, region);
   }
 
@@ -411,7 +411,7 @@ static int green_equilibration_cl(const dt_iop_module_t *self,
     }
 
     err = dt_opencl_read_buffer_from_device(devid, (void *)sumsum, dev_r, 0,
-                                            sizeof(float) * 2 * reducesize, CL_TRUE);
+                                            sizeof(float) * 2 * reducesize, TRUE);
     if(err != CL_SUCCESS) goto error;
 
     double sum1 = 0.0;

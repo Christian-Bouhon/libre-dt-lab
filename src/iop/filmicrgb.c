@@ -2063,7 +2063,7 @@ void tiling_callback(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   const int scales = get_scales(roi_in, piece);
   const int max_filter_radius = (1 << scales);
   const dt_iop_filmicrgb_data_t *const data = piece->data;
-  const gboolean run_fast = !data->enable_highlight_reconstruction || piece->pipe->type & DT_DEV_PIXELPIPE_FAST;
+  const gboolean run_fast = !data->enable_highlight_reconstruction || dt_pipe_is_fast(piece->pipe);
 
   // without reconstruction: in + out + 1ch_mask
   // with reconstruction: in + out + reconst + inpaint + 2 * scales + temp + 1ch_mask
@@ -2116,7 +2116,7 @@ void process(dt_iop_module_t *self,
     && mask_clipped_pixels(in, mask, data->normalize, data->reconstruct_feather, roi_out->width, roi_out->height);
 
   // display mask and exit
-  if(self->dev->gui_attached && (piece->pipe->type & DT_DEV_PIXELPIPE_FULL) && mask)
+  if(self->dev->gui_attached && dt_pipe_is_full(piece->pipe) && mask)
   {
     const dt_iop_filmicrgb_gui_data_t *g = self->gui_data;
 
@@ -2128,7 +2128,7 @@ void process(dt_iop_module_t *self,
     }
   }
 
-  const gboolean run_fast = piece->pipe->type & DT_DEV_PIXELPIPE_FAST;
+  const gboolean run_fast = dt_pipe_is_fast(piece->pipe);
   // allocate reconstruction buffer, but only if we actually want to use it
   float *const restrict reconstructed
     = run_fast ? NULL : dt_alloc_align_float((size_t)roi_out->width * roi_out->height * 4);
@@ -2231,7 +2231,7 @@ static inline cl_int reconstruct_highlights_cl(const cl_mem in, const cl_mem mas
   const int devid = piece->pipe->devid;
   const int width = roi_in->width;
   const int height = roi_in->height;
-  size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid) };
+  const size_t sizes[2] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid) };
 
   // wavelets scales
   const int scales = get_scales(roi_in, piece);
@@ -2321,15 +2321,14 @@ static inline cl_int reconstruct_highlights_cl(const cl_mem in, const cl_mem mas
     if(err != CL_SUCCESS) goto error;
 
     // interpolate/blur/inpaint (same thing) the RGB high-frequency to fill holes
-    const int blur_size = 1;
     err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_filmic_bspline_vertical, width, height,
       CLARG(HF_RGB), CLARG(temp),
-      CLARG(width), CLARG(height), CLARG(blur_size));
+      CLARG(width), CLARG(height), CLARGINT(1));
     if(err != CL_SUCCESS) goto error;
 
     err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_filmic_bspline_horizontal, width, height,
       CLARG(temp), CLARG(HF_RGB),
-      CLARG(width), CLARG(height), CLARG(blur_size));
+      CLARG(width), CLARG(height), CLARGINT(1));
     if(err != CL_SUCCESS) goto error;
 
     // Reconstruct clipped parts
@@ -2372,7 +2371,7 @@ int process_cl(dt_iop_module_t *self,
   const int width = roi_in->width;
   const int height = roi_in->height;
 
-  const size_t sizes[] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid), 1 };
+  const size_t sizes[2] = { ROUNDUPDWD(width, devid), ROUNDUPDHT(height, devid) };
 
   cl_mem in = dev_in;
   cl_mem inpainted = NULL;
@@ -2433,7 +2432,7 @@ int process_cl(dt_iop_module_t *self,
 
   uint32_t is_clipped = 0;
   clipped = dt_opencl_alloc_device_buffer(devid, sizeof(uint32_t));
-  err = dt_opencl_write_buffer_to_device(devid, &is_clipped, clipped, 0, sizeof(uint16_t), CL_TRUE);
+  err = dt_opencl_write_buffer_to_device(devid, &is_clipped, clipped, 0, sizeof(uint16_t), TRUE);
   if(err != CL_SUCCESS) goto error;
 
   // build a mask of clipped pixels
@@ -2444,13 +2443,13 @@ int process_cl(dt_iop_module_t *self,
   if(err != CL_SUCCESS) goto error;
 
   // check for clipped pixels
-  err = dt_opencl_read_buffer_from_device(devid, &is_clipped, clipped, 0, sizeof(uint32_t), CL_TRUE);
+  err = dt_opencl_read_buffer_from_device(devid, &is_clipped, clipped, 0, sizeof(uint32_t), TRUE);
   if(err != CL_SUCCESS) goto error;
   dt_opencl_release_mem_object(clipped);
   clipped = NULL;
 
   // display mask and exit
-  if(self->dev->gui_attached && (piece->pipe->type & DT_DEV_PIXELPIPE_FULL))
+  if(self->dev->gui_attached && dt_pipe_is_full(piece->pipe))
   {
     const dt_iop_filmicrgb_gui_data_t *g = self->gui_data;
 
@@ -2464,7 +2463,7 @@ int process_cl(dt_iop_module_t *self,
     }
   }
 
-  const gboolean run_fast = piece->pipe->type & DT_DEV_PIXELPIPE_FAST;
+  const gboolean run_fast = dt_pipe_is_fast(piece->pipe);
 
   if(!run_fast && is_clipped > 0 && d->enable_highlight_reconstruction)
   {
@@ -2582,7 +2581,7 @@ static inline void _compute_output_power(const dt_iop_module_t *self,
 
 static void apply_auto_grey(dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
   dt_iop_filmicrgb_params_t *p = self->params;
   const dt_iop_filmicrgb_gui_data_t *g = self->gui_data;
 
@@ -2597,12 +2596,12 @@ static void apply_auto_grey(dt_iop_module_t *self)
   p->white_point_source = p->white_point_source + grey_var;
   _compute_output_power(self, p);
 
-  ++darktable.gui->reset;
+  DT_ENTER_GUI_UPDATE();
   dt_bauhaus_slider_set(g->grey_point_source, p->grey_point_source);
   dt_bauhaus_slider_set(g->black_point_source, p->black_point_source);
   dt_bauhaus_slider_set(g->white_point_source, p->white_point_source);
   dt_bauhaus_slider_set(g->output_power, p->output_power);
-  --darktable.gui->reset;
+  DT_LEAVE_GUI_UPDATE();
 
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
   dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -2610,7 +2609,7 @@ static void apply_auto_grey(dt_iop_module_t *self)
 
 static void apply_auto_black(dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
   dt_iop_filmicrgb_params_t *p = self->params;
   const dt_iop_filmicrgb_gui_data_t *g = self->gui_data;
 
@@ -2625,10 +2624,10 @@ static void apply_auto_black(dt_iop_module_t *self)
   p->black_point_source = fmaxf(EVmin, -16.0f);
   _compute_output_power(self, p);
 
-  ++darktable.gui->reset;
+  DT_ENTER_GUI_UPDATE();
   dt_bauhaus_slider_set(g->black_point_source, p->black_point_source);
   dt_bauhaus_slider_set(g->output_power, p->output_power);
-  --darktable.gui->reset;
+  DT_LEAVE_GUI_UPDATE();
 
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
   dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -2637,7 +2636,7 @@ static void apply_auto_black(dt_iop_module_t *self)
 
 static void apply_auto_white_point_source(dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  DT_GUARD_GUI_UPDATE();
   dt_iop_filmicrgb_params_t *p = self->params;
   const dt_iop_filmicrgb_gui_data_t *g = self->gui_data;
 
@@ -2652,10 +2651,10 @@ static void apply_auto_white_point_source(dt_iop_module_t *self)
   p->white_point_source = EVmax;
   _compute_output_power(self, p);
 
-  ++darktable.gui->reset;
+  DT_ENTER_GUI_UPDATE();
   dt_bauhaus_slider_set(g->white_point_source, p->white_point_source);
   dt_bauhaus_slider_set(g->output_power, p->output_power);
-  --darktable.gui->reset;
+  DT_LEAVE_GUI_UPDATE();
 
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
   dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -2689,12 +2688,12 @@ static void apply_autotune(dt_iop_module_t *self)
   p->white_point_source = EVmax;
   _compute_output_power(self, p);
 
-  ++darktable.gui->reset;
+  DT_ENTER_GUI_UPDATE();
   dt_bauhaus_slider_set(g->grey_point_source, p->grey_point_source);
   dt_bauhaus_slider_set(g->black_point_source, p->black_point_source);
   dt_bauhaus_slider_set(g->white_point_source, p->white_point_source);
   dt_bauhaus_slider_set(g->output_power, p->output_power);
-  --darktable.gui->reset;
+  DT_LEAVE_GUI_UPDATE();
 
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
   dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -2717,12 +2716,11 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker,
 
 static void show_mask_callback(GtkToggleButton *button, GdkEventButton *event, const dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return;
+  DT_TRY_GUI_UPDATE();
   dt_iop_filmicrgb_gui_data_t *g = self->gui_data;
-  ++darktable.gui->reset;
   g->show_mask = !(g->show_mask);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->show_highlight_mask), g->show_mask);
-  --darktable.gui->reset;
+  DT_LEAVE_GUI_UPDATE();
   dt_dev_reprocess_center(self->dev);
 }
 
@@ -4169,7 +4167,7 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget, cairo_t *crf, dt_iop_mo
 
 static gboolean area_button_press(GtkWidget *widget, const GdkEventButton *event, dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return TRUE;
+  DT_GUARD_GUI_UPDATE(TRUE);
 
   dt_iop_filmicrgb_gui_data_t *g = self->gui_data;
 
@@ -4263,7 +4261,7 @@ static gboolean area_enter_leave_notify(GtkWidget *widget, const GdkEventCrossin
 
 static gboolean area_motion_notify(GtkWidget *widget, const GdkEventMotion *event, const dt_iop_module_t *self)
 {
-  if(darktable.gui->reset) return 1;
+  DT_GUARD_GUI_UPDATE(1);
 
   dt_iop_filmicrgb_gui_data_t *g = self->gui_data;
   if(!g->gui_sizes_inited) return FALSE;
@@ -4638,7 +4636,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   if(!w || w == g->auto_hardness || w == g->security_factor || w == g->grey_point_source
      || w == g->black_point_source || w == g->white_point_source)
   {
-    ++darktable.gui->reset;
+    DT_ENTER_GUI_UPDATE();
 
     if(w == g->security_factor || w == g->grey_point_source)
     {
@@ -4673,7 +4671,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     gtk_widget_set_visible(GTK_WIDGET(g->output_power), !p->auto_hardness);
     dt_bauhaus_slider_set(g->output_power, p->output_power);
 
-    --darktable.gui->reset;
+    DT_LEAVE_GUI_UPDATE();
   }
 
   if(!w || w == g->version)
@@ -4716,10 +4714,10 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     gtk_widget_set_sensitive(g->reconstruct_grey_vs_color, TRUE);
     gtk_widget_set_sensitive(g->reconstruct_structure_vs_texture, TRUE);
 
-    ++darktable.gui->reset;
+    DT_ENTER_GUI_UPDATE();
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->enable_highlight_reconstruction), TRUE);
     p->enable_highlight_reconstruction = TRUE;
-    --darktable.gui->reset;
+    DT_LEAVE_GUI_UPDATE();
   }
 
   if(!w || w == g->enable_highlight_reconstruction)
