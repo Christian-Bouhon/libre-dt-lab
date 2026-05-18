@@ -262,7 +262,6 @@ typedef struct dt_iop_colorequal_gui_data_t
   GtkDrawingArea *area;
   GtkStack *stack;
   dt_gui_collapsible_section_t cs;
-  GtkWidget *display_mode; // combobox: graph / sliders / both
   float *LUT;
   dt_iop_colorequal_channel_t channel;
 
@@ -913,9 +912,9 @@ static void _guide_with_chromaticity(float *const restrict UV,
     const float uv[2] = { UV[2 * k + 0], UV[2 * k + 1] };
     const float cv[2] = { a[4 * k + 0] * uv[0] + a[4 * k + 1] * uv[1] + b[2 * k + 0],
                           a[4 * k + 2] * uv[0] + a[4 * k + 3] * uv[1] + b[2 * k + 1] };
-    corrections[2 * k + 1] = 1.0f + (cv[0] - 1.0f) * _get_satweight(saturation[k] - sat_shift);
+    corrections[2 * k + 1] = interpolatef(_get_satweight(saturation[k] - sat_shift), cv[0], 1.0f);
     const float gradient_weight = 1.0f - CLIP(gradients[k]);
-    b_corrections[k] = cv[1] * gradient_weight * _get_satweight(saturation[k] - bright_shift);
+    b_corrections[k] = interpolatef(gradient_weight * _get_satweight(saturation[k] - bright_shift), cv[1], 0.0f);
   }
   dt_free_align(a);
   dt_free_align(b);
@@ -1004,9 +1003,9 @@ void process(dt_iop_module_t *self,
   }
   const dt_iop_colorequal_data_t *d = piece->data;
   const dt_iop_colorequal_gui_data_t *g = self->gui_data;
-  const gboolean fullpipe = dt_pipe_is_full(piece->pipe);
+  const gboolean fullpipe = piece->pipe->type & DT_DEV_PIXELPIPE_FULL;
   const int mask_mode = g && fullpipe ? g->mask_mode : 0;
-  const gboolean run_fast = dt_pipe_is_fast(piece->pipe);
+  const gboolean run_fast = piece->pipe->type & DT_DEV_PIXELPIPE_FAST;
 
   const float *const restrict in = (float*)i;
   float *const restrict out = (float*)o;
@@ -1566,10 +1565,10 @@ int process_cl(dt_iop_module_t *self,
   const size_t bsize = (size_t) width * height * sizeof(float);
 
   const dt_iop_colorequal_gui_data_t *g = (dt_iop_colorequal_gui_data_t *)self->gui_data;
-  const gboolean fullpipe = dt_pipe_is_full(piece->pipe);
+  const gboolean fullpipe = piece->pipe->type & DT_DEV_PIXELPIPE_FULL;
   const int mask_mode = g && fullpipe ? g->mask_mode : 0;
   const int guiding = d->use_filter;
-  const gboolean run_fast = dt_pipe_is_fast(piece->pipe);
+  const gboolean run_fast = piece->pipe->type & DT_DEV_PIXELPIPE_FAST;
 
   float white, sat_shift, max_brightness_shift, corr_max_brightness_shift, bright_shift, gradient_amp, hue_sigma, par_sigma, sat_sigma, scharr_sigma;
   _prepare_process(roi_in->scale / piece->iscale, d,
@@ -1955,7 +1954,7 @@ static inline void _draw_sliders_hue_gradient
   for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
   {
     const float stop = ((float)i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1));
-    const float hue_temp = hue_min + stop * DT_2PI_F;
+    const float hue_temp = hue_min + stop * 2.f * M_PI_F;
     dt_aligned_pixel_t RGB = {  1.0f, 1.0f, 1.0f, 1.0f };
     _build_dt_UCS_HSB_gradients((dt_aligned_pixel_t){ hue_temp, sat, brightness, 0.f },
                                 RGB, work_profile, gamut_LUT);
@@ -2058,7 +2057,7 @@ static void _init_graph_backgrounds(dt_iop_colorequal_gui_data_t *g,
       const float x = 360.0f * (float)(gwidth - j - 1) / (graph_width - 1.0f) - 90.0f;
       const float y = 1.0f - (float)i / (graph_height - 1.0f);
       const float hue = (x < -180.0f) ? _conventional_hue_deg_to_ucs_rad(x +180.0f) : _conventional_hue_deg_to_ucs_rad(x);
-      const float hhue = hue - (y - 0.5f) * DT_2PI_F;
+      const float hhue = hue - (y - 0.5f) * 2.f * M_PI_F;
 
       dt_aligned_pixel_t RGB;
       dt_aligned_pixel_t HSB[NUM_CHANNELS] = {{ hhue, max_saturation,     SLIDER_BRIGHTNESS,              1.0f },
@@ -2470,7 +2469,7 @@ static gboolean _iop_colorequalizer_draw(GtkWidget *widget,
       smoothing = p->smoothing_hue;
       clip = FALSE;
       offset = 0.5f;
-      factor = 1.f / DT_2PI_F;
+      factor = 1.f / (2.f * M_PI_F);
       break;
     }
     case BRIGHTNESS:
@@ -2493,7 +2492,7 @@ static gboolean _iop_colorequalizer_draw(GtkWidget *widget,
   {
     const float x = ((float)k / (float)(360 - 1) + dx) * graph_width;
     float hue = _conventional_hue_deg_to_ucs_rad(k);
-    hue = (hue < M_PI_F) ? hue : -DT_2PI_F + hue; // The LUT is defined in [-pi; pi[
+    hue = (hue < M_PI_F) ? hue : -2.f * M_PI_F + hue; // The LUT is defined in [-pi; pi[
     const float y = (offset - lookup_gamut(g->LUT, hue) * factor) * graph_height;
 
     if(k == first)
@@ -2508,7 +2507,7 @@ static gboolean _iop_colorequalizer_draw(GtkWidget *widget,
   {
     float hue = _get_hue_node(k, 0.0f); // in radians
     const float xn = (k / ((float)NODES) + dx    ) * graph_width;
-    hue = (hue < M_PI_F) ? hue : -DT_2PI_F + hue; // The LUT is defined in [-pi; pi[
+    hue = (hue < M_PI_F) ? hue : -2.f * M_PI_F + hue; // The LUT is defined in [-pi; pi[
     const float yn = (offset - lookup_gamut(g->LUT, hue) * factor) * graph_height;
 
     // fill bars
@@ -2575,7 +2574,7 @@ static void _pipe_RGB_to_Ych(dt_iop_module_t *self,
   XYZ_to_Ych(XYZ_D65, Ych);
 
   if(Ych[2] < 0.f)
-    Ych[2] = DT_2PI_F + Ych[2];
+    Ych[2] = 2.f * M_PI_F + Ych[2];
 }
 
 /* mouse_moved — updates the hue read under the mouse cursor.
@@ -2602,6 +2601,9 @@ int mouse_moved(dt_iop_module_t *self,
 {
   dt_iop_colorequal_gui_data_t *g = self->gui_data;
   if(!g) return 0;
+
+  // Disable cursor tracking when drawing a mask (brush/path/etc.)
+  if(self->dev->form_gui && self->dev->form_gui->creation) return 0;
 
   // Read hue from the preview buffer
   dt_iop_gui_enter_critical_section(self);
@@ -2672,6 +2674,9 @@ void gui_post_expose(dt_iop_module_t *self,
 {
   dt_iop_colorequal_gui_data_t *g = self->gui_data;
   if(!g || !g->cursor_valid) return;
+
+  // Hide cursor indicator when drawing a mask (brush/path/etc.)
+  if(self->dev->form_gui && self->dev->form_gui->creation) return;
 
   // Read the color from the preview pipe backbuf
   dt_develop_t *dev = self->dev;
@@ -2893,10 +2898,10 @@ void color_picker_apply(dt_iop_module_t *self,
     dt_aligned_pixel_t max_Ych = { 0.0f, 0.0f, 0.0f, 0.0f };
     _pipe_RGB_to_Ych(self, pipe, (const float *)self->picked_color_max, max_Ych);
 
-    DT_ENTER_GUI_UPDATE();
+    ++darktable.gui->reset;
     p->white_level = log2f(max_Ych[0]);
     dt_bauhaus_slider_set(g->white_level, p->white_level);
-    DT_LEAVE_GUI_UPDATE();
+    --darktable.gui->reset;
 
     gui_changed(self, picker, NULL);
     dt_dev_add_history_item(darktable.develop, self, TRUE);
@@ -2907,7 +2912,7 @@ void color_picker_apply(dt_iop_module_t *self,
 
 static void _masking_callback_p(GtkWidget *quad, dt_iop_module_t *self)
 {
-  DT_GUARD_GUI_UPDATE();
+  if(darktable.gui->reset) return;
   dt_iop_colorequal_gui_data_t *g = self->gui_data;
   dt_bauhaus_widget_set_quad_active(g->threshold, FALSE);
   g->mask_mode = (dt_bauhaus_widget_get_quad_active(quad)) ? g->channel + 1 : 0;
@@ -2916,7 +2921,7 @@ static void _masking_callback_p(GtkWidget *quad, dt_iop_module_t *self)
 
 static void _masking_callback_t(GtkWidget *quad, dt_iop_module_t *self)
 {
-  DT_GUARD_GUI_UPDATE();
+  if(darktable.gui->reset) return;
   dt_iop_colorequal_gui_data_t *g = self->gui_data;
   dt_bauhaus_widget_set_quad_active(g->param_size, FALSE);
   g->mask_mode = (dt_bauhaus_widget_get_quad_active(quad)) ? GRAD_SWITCH + g->channel + 1 : 0;
@@ -2928,7 +2933,7 @@ static void _channel_tabs_switch_callback(GtkNotebook *notebook,
                                           const guint page_num,
                                           dt_iop_module_t *self)
 {
-  DT_GUARD_GUI_UPDATE();
+  if(darktable.gui->reset) return;
   dt_iop_colorequal_gui_data_t *g = self->gui_data;
 
   // The 4th tab is options, in which case we do nothing
@@ -2955,14 +2960,6 @@ static void _channel_tabs_switch_callback(GtkNotebook *notebook,
   gtk_widget_queue_draw(GTK_WIDGET(g->area));
 }
 
-static void _display_mode_callback(GtkComboBox *combo, dt_iop_module_t *self)
-{
-  if(darktable.gui->reset) return;
-  const int mode = gtk_combo_box_get_active(combo);
-  dt_conf_set_int("plugins/darkroom/colorequal/display_mode", mode);
-  gui_update(self);
-}
-
 static void _area_set_value(const dt_iop_colorequal_gui_data_t *g,
                             const float graph_height,
                             const float pos)
@@ -2981,7 +2978,7 @@ static void _area_set_value(const dt_iop_colorequal_gui_data_t *g,
          max = 100.0f;
          break;
        case(HUE):
-         factor = 1.f / DT_2PI_F;
+         factor = 1.f / (2.f * M_PI_F);
          max = (100.0f / 180.0f) * 100.0f;
          break;
        case(BRIGHTNESS):
@@ -3059,11 +3056,36 @@ static gboolean _area_scrolled_callback(GtkWidget *widget,
   // On the graph, we use the last known value.
 
   // If no valid hue, classic behavior:
-  // adjust the selected node's in the graph.
+  // adjust the selected node's slider directly
   if(!g->cursor_valid)
   {
+    double delta_x = 0.0, delta_y = 0.0;
+    switch(event->direction)
+    {
+      case GDK_SCROLL_UP:    delta_y = +1.0; break;
+      case GDK_SCROLL_DOWN:  delta_y = -1.0; break;
+      case GDK_SCROLL_SMOOTH:
+        dt_gui_get_scroll_deltas(event, &delta_x, &delta_y);
+        delta_y = -delta_y;
+        break;
+      default: return FALSE;
+    }
+
+    const float base_step = (g->channel == HUE) ? 1.0f : 0.01f;
+    const float step = dt_modifier_is(event->state, GDK_CONTROL_MASK)
+                       ? base_step * 0.1f : base_step;
+    const float move = (float)delta_y * step;
+
+    float vmin, vmax;
+    float *val = _get_param_ptr(p, g->channel, g->selected, &vmin, &vmax);
+    *val = CLAMP(*val + move, vmin, vmax);
+
     GtkWidget *w = _get_slider(g, g->selected);
-    return gtk_widget_event(w, (GdkEvent*)event);
+    if(w) dt_bauhaus_slider_set(w, *val);
+
+    dt_dev_add_history_item(self->dev, self, TRUE);
+    gtk_widget_queue_draw(GTK_WIDGET(g->area));
+    return TRUE;
   }
 
   // --- Gaussian mode -------------------------------------------------------
@@ -3180,10 +3202,8 @@ static gboolean _area_button_press_callback(GtkWidget *widget,
      || (event->button == GDK_BUTTON_PRIMARY // Ctrl+Click alias for macOS
          && dt_modifier_is(event->state, GDK_CONTROL_MASK)))
   {
-    // Cycle through display modes: graph → sliders → both → graph
-    int mode = dt_conf_get_int("plugins/darkroom/colorequal/display_mode");
-    mode = (mode + 1) % 3;
-    dt_conf_set_int("plugins/darkroom/colorequal/display_mode", mode);
+    dt_conf_set_bool("plugins/darkroom/colorequal/show_sliders",
+                     gtk_notebook_get_n_pages(g->notebook) != 4);
     gui_update(self);
   }
   else if(event->button == GDK_BUTTON_PRIMARY)
@@ -3312,43 +3332,33 @@ void gui_update(dt_iop_module_t *self)
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->use_filter), p->use_filter);
   gui_changed(self, NULL, NULL);
 
-  // Display mode: 0=graph, 1=sliders, 2=both
-  const int display_mode = dt_conf_get_int("plugins/darkroom/colorequal/display_mode");
-  const gboolean show_graph   = (display_mode == 0 || display_mode == 2);
-  const gboolean show_sliders = (display_mode == 1 || display_mode == 2);
-
-  ++darktable.gui->reset;
-  gtk_combo_box_set_active(GTK_COMBO_BOX(g->display_mode), display_mode);
-  --darktable.gui->reset;
+  const gboolean show_sliders = dt_conf_get_bool("plugins/darkroom/colorequal/show_sliders");
 
   // reset masking
   g->mask_mode = 0;
   dt_bauhaus_widget_set_quad_active(g->param_size, FALSE);
   dt_bauhaus_widget_set_quad_active(g->threshold, FALSE);
 
-  const gboolean on_channel_tab = (g->page_num < 3);
+  const int nbpage = gtk_notebook_get_n_pages(g->notebook);
+  if((nbpage == 4) ^ show_sliders)
+  {
+    if(show_sliders)
+      gtk_widget_show(dt_ui_notebook_page(g->notebook, N_("options"), _("options")));
+    else
+      gtk_notebook_remove_page(g->notebook, 3);
 
-  // Graph: only on channel tabs, and only in graph/both modes
-  gtk_widget_set_visible(GTK_WIDGET(g->area), on_channel_tab && show_graph);
-  gtk_widget_set_visible(GTK_WIDGET(g->hue_shift), on_channel_tab && show_graph);
+    GtkDarktableExpander *exp = DTGTK_EXPANDER(g->cs.expander);
+    gtk_widget_set_visible(dtgtk_expander_get_header(exp), !show_sliders);
+    gtk_widget_set_name(GTK_WIDGET(g->cs.container), show_sliders ? NULL : "collapsible");
+    gtk_revealer_set_reveal_child(GTK_REVEALER(exp->frame), show_sliders || exp->expanded);
+  }
 
-  // Sliders: only on channel tabs, and only in sliders/both modes
-  if(on_channel_tab && show_sliders)
-  {
-    const char numstr[] = {'0' + g->page_num, 0};
-    gtk_stack_set_visible_child_name(g->stack, numstr);
-    gtk_widget_show(GTK_WIDGET(g->stack));
-  }
-  else if(on_channel_tab)
-  {
-    gtk_widget_hide(GTK_WIDGET(g->stack));
-  }
-  else
-  {
-    // Options tab: always show the options content
-    gtk_stack_set_visible_child_name(g->stack, "3");
-    gtk_widget_show(GTK_WIDGET(g->stack));
-  }
+  // display widgets depending on the selected notebook page
+  gtk_widget_set_visible(GTK_WIDGET(g->area), g->page_num < 3);
+  gtk_widget_set_visible(GTK_WIDGET(g->hue_shift), g->page_num < 3);
+
+  const char numstr[] = {'0' + (show_sliders ? g->page_num : 3), 0};
+  gtk_stack_set_visible_child_name(g->stack, numstr);
 }
 
 static float _action_process_colorequal(const gpointer target,
@@ -3538,26 +3548,15 @@ void gui_init(dt_iop_module_t *self)
   g->bright_sliders[7] = g->bright_magenta =
     dt_bauhaus_slider_from_params(sect, "bright_magenta");
 
-  // Options tab
-  dt_ui_notebook_page(g->notebook, N_("options"), _("options and display mode"));
   GtkWidget *options = dt_gui_vbox();
   gtk_stack_add_named(g->stack, options, "3");
-
-  // Display mode combobox
-  g->display_mode = gtk_combo_box_text_new();
-  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(g->display_mode), NULL, _("graph"));
-  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(g->display_mode), NULL, _("sliders"));
-  gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(g->display_mode), NULL, _("graph + sliders"));
-  gtk_combo_box_set_active(GTK_COMBO_BOX(g->display_mode),
-                           dt_conf_get_int("plugins/darkroom/colorequal/display_mode"));
-  gtk_widget_set_tooltip_text(g->display_mode, _("select display mode"));
-  g_signal_connect(G_OBJECT(g->display_mode), "changed",
-                   G_CALLBACK(_display_mode_callback), self);
-  gtk_box_pack_start(GTK_BOX(options),
-                     dt_gui_hbox(dt_gui_expand(dt_ui_label_new(_("display mode"))), 
-                     g->display_mode), FALSE, FALSE, 0);
-
-  self->widget = options;
+  dt_gui_new_collapsible_section
+    (&g->cs,
+     "plugins/darkroom/colorequal/expand_options",
+     _("options"),
+     GTK_BOX(options),
+     DT_ACTION(self));
+  self->widget = GTK_WIDGET(g->cs.container);
 
   g->white_level = dt_color_picker_new(self, DT_COLOR_PICKER_AREA,
                                        dt_bauhaus_slider_from_params(self, "white_level"));
