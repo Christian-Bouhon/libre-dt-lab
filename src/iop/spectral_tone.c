@@ -70,7 +70,7 @@
 
 #include "spectral_tone/spectral_tone.h"
 
-DT_MODULE_INTROSPECTION(2, dt_iop_spectral_tone_params_t)
+DT_MODULE_INTROSPECTION(1, dt_iop_spectral_tone_params_t)
 
 typedef enum dt_iop_st_colorspace_t
 {
@@ -220,19 +220,13 @@ int legacy_params(dt_iop_module_t *self,
                   void **new_params, int32_t *new_params_size,
                   int *new_version)
 {
-  if(old_version == 1)
-  {
-    dt_iop_spectral_tone_params_t *p = calloc(1, sizeof(dt_iop_spectral_tone_params_t));
-    memcpy(p, old_params, 6 * sizeof(float)); // copie contrast -> hl_hue_shift
-    p->gamut_knee = 0.25f;
-    p->gamut_steepness = 0.25f;
-    p->output_cs = ((const int *)old_params)[6]; // l'enum était le 7ème champ
-    *new_params = p;
-    *new_params_size = sizeof(dt_iop_spectral_tone_params_t);
-    *new_version = 2;
-    return 0;
-  }
-  return 1;
+  (void)self;
+  (void)old_params;
+  (void)old_version;
+  (void)new_params;
+  (void)new_params_size;
+  (void)new_version;
+  return 1; // Nouveau module : pas de migration nécessaire pour la v1
 }
 
 const char *name()
@@ -475,11 +469,10 @@ void gui_cleanup(dt_iop_module_t *self)
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_spectral_tone_gui_data_t *g = self->gui_data;
-  (void)g;
+  (void)self;
   (void)w;
   (void)previous;
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  // Les widgets bauhaus gèrent déjà l'historique automatiquement.
 }
 
 // clang-format off
