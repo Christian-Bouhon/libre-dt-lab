@@ -84,6 +84,8 @@ typedef struct
   float white_chroma_z;    /* D50 white chromaticity z = Z/Y */
   float gray_point;        /* mid-tone gamma adjustment */
   float vibrance;          /* vibrance (saturation with high-sat protection) */
+  float gamut_knee;        /* gamut compression knee point */
+  float gamut_steepness;   /* gamut compression steepness */
   dt_st_ssts_params_t ssts; /* ACES 2.0 SSTS precomputed params */
 } dt_st_context_t;
 
