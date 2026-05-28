@@ -87,10 +87,10 @@ typedef struct dt_iop_spectral_tone_params_t
   float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "spectral brilliance"
   float gray_point;            // $MIN: -1 $MAX: 1 $DEFAULT: 0 $DESCRIPTION: "mid-tone"
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
-  float hl_desaturation;       // $MIN: 0 $MAX: 2 $DEFAULT: 1 $DESCRIPTION: "HL desaturation"
+  float hl_desaturation;       // $MIN: 0 $MAX: 2 $DEFAULT: 0.15 $DESCRIPTION: "HL desaturation"
   float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "HL hue shift"
-  float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.05 $DESCRIPTION: "gamut knee"
-  float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.15 $DESCRIPTION: "gamut steepness"
+  float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.15 $DESCRIPTION: "gamut knee"
+  float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "gamut steepness"
   dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "color space"
   int color_look;              // $DEFAULT: 0 $DESCRIPTION: "color look"
   float look_opacity;          // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "look opacity"
@@ -344,6 +344,32 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     const size_t idx = k * ch;
     float rgb_in[3] = { in[idx], in[idx + 1], in[idx + 2] };
     float rgb_out[3];
+
+    /* --- Luma-clipping desaturation (Safety Net) --- */
+    /* On protège l'entrée de la reconstruction spectrale contre le clipping différentiel.
+       Si un canal approche de 1.0 (valeur nominale du blanc avant exposition), 
+       on force la neutralité pour éviter les dérives (ex: le magenta en studio). */
+    
+    const float luma_in = fmaxf(fmaxf(rgb_in[0], rgb_in[1]), rgb_in[2]);
+    const float safety_threshold = 0.9f; // Début de la zone de danger
+    const float hard_clip = 1.1f;        // Zone où l'on ne croit plus du tout à la couleur
+
+    if(luma_in > safety_threshold)
+    {
+      // Calcul d'un facteur de mélange progressif (0.0 à 1.0)
+      float amount = (luma_in - safety_threshold) / (hard_clip - safety_threshold);
+      amount = fminf(fmaxf(amount, 0.0f), 1.0f);
+      
+      // On utilisehl_desaturation pour pondérer cette protection
+      // Si hl_desat est à 0 (gauche), on réduit l'agressivité de cette protection
+      const float weight = amount * d->ctx.hl_desat;
+
+      rgb_in[0] = rgb_in[0] * (1.0f - weight) + luma_in * weight;
+      rgb_in[1] = rgb_in[1] * (1.0f - weight) + luma_in * weight;
+      rgb_in[2] = rgb_in[2] * (1.0f - weight) + luma_in * weight;
+    }
+    /* ----------------------------------------------- */
+
     dt_st_pipeline_eval(rgb_in, rgb_out, &d->ctx);
 
     if(mat)
@@ -380,10 +406,10 @@ void init_presets(dt_iop_module_so_t *self)
   p.spectral_brilliance = 5.0f;
   p.gray_point = 0.0f;
   p.vibrance = 1.0f;
-  p.hl_desaturation = 1.0f;
+  p.hl_desaturation = 0.15f;
   p.hl_hue_shift = 0.0f;
-  p.gamut_knee = 0.05f;
-  p.gamut_steepness = 0.15f;
+  p.gamut_knee = 0.15f;
+  p.gamut_steepness = 0.50f;
   p.output_cs = DT_ST_CS_REC2020;
   p.color_look = 0;
   p.look_opacity = 1.0f;
@@ -508,12 +534,12 @@ void gui_init(dt_iop_module_t *self)
 
   g->hl_desaturation = dt_bauhaus_slider_from_params(self, "hl_desaturation");
   dt_bauhaus_slider_set_factor(g->hl_desaturation, 100.0f);
-  dt_bauhaus_slider_set_offset(g->hl_desaturation, -100.0f);
+  // dt_bauhaus_slider_set_offset(g->hl_desaturation, -100.0f);
   dt_bauhaus_slider_set_format(g->hl_desaturation, " %");
   dt_bauhaus_slider_set_digits(g->hl_desaturation, 0);
   gtk_widget_set_tooltip_text(g->hl_desaturation,
     _("Desaturates highlights toward achromatic luma to prevent out-of-gamut colors. "
-      "-100% = off, 0% = natural rolloff, +100% = maximum desaturation."));
+      "0% = off, 25% = natural rolloff, 100% = maximum desaturation."));
 
   g->hl_hue_shift = dt_bauhaus_slider_from_params(self, "hl_hue_shift");
   dt_bauhaus_slider_set_factor(g->hl_hue_shift, 100.0f);
