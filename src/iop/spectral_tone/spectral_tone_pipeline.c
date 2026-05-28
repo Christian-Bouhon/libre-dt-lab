@@ -197,7 +197,8 @@ static inline void st_gamut_compress(float rgb[3])
  */
 static inline void st_spectral_gamut(
   double *x_tm, double *z_tm, double y_tm,
-  const double white_x_ratio, const double white_z_ratio)
+  const double white_x_ratio, const double white_z_ratio,
+  const double knee, const double steepness)
 {
   if(y_tm <= 0.0) return;
 
@@ -225,8 +226,6 @@ static inline void st_spectral_gamut(
    * saturated primaries reach ~0.37-0.40. Knee=0.25 protects natural colors
    * while compressing very saturated/artificial colors beyond Rec.2020 gamut.
    * Steepness: higher = more aggressive compression. */
-  const double knee = 0.25;
-  const double steepness = 0.25;
 
   if(chroma_sq > knee * knee)
   {
@@ -304,7 +303,9 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
   /* Step 6: Spectral gamut — film-like chromaticity roll-off in CIE xy */
   st_spectral_gamut(&x_tm, &z_tm, y_tm,
                     (double)ctx->white_chroma_x,
-                    (double)ctx->white_chroma_z);
+                    (double)ctx->white_chroma_z,
+                    (double)ctx->gamut_knee,
+                    (double)ctx->gamut_steepness);
 
   /* Step 7: XYZ → Output RGB via precomputed matrix */
   const float *M = ctx->output_matrix;
