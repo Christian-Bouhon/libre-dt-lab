@@ -70,7 +70,7 @@
 
 #include "spectral_tone/spectral_tone.h"
 
-DT_MODULE_INTROSPECTION(1, dt_iop_spectral_tone_params_t)
+DT_MODULE_INTROSPECTION(2, dt_iop_spectral_tone_params_t)
 
 typedef enum dt_iop_st_colorspace_t
 {
@@ -89,9 +89,11 @@ typedef struct dt_iop_spectral_tone_params_t
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
   float hl_desaturation;       // $MIN: 0 $MAX: 2 $DEFAULT: 1 $DESCRIPTION: "HL desaturation"
   float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "HL hue shift"
-  float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.25 $DESCRIPTION: "gamut knee"
-  float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.25 $DESCRIPTION: "gamut steepness"
+  float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.05 $DESCRIPTION: "gamut knee"
+  float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.15 $DESCRIPTION: "gamut steepness"
   dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "color space"
+  int color_look;              // $DEFAULT: 0 $DESCRIPTION: "color look"
+  float look_opacity;          // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "look opacity"
 } dt_iop_spectral_tone_params_t;
 
 typedef struct dt_iop_spectral_tone_data_t
@@ -110,7 +112,10 @@ typedef struct dt_iop_spectral_tone_gui_data_t
   GtkWidget *hl_hue_shift;
   GtkWidget *gamut_knee;
   GtkWidget *gamut_steepness;
+  dt_gui_collapsible_section_t advanced_section;
   GtkWidget *color_space;
+  GtkWidget *color_look;
+  GtkWidget *look_opacity;
 } dt_iop_spectral_tone_gui_data_t;
 
 /* Conversion matrices */
@@ -119,6 +124,20 @@ static const float st_luma_rec2020[3]   = { 0.2627f,  0.6780f,  0.0593f };
 static const float st_luma_displayp3[3] = { 0.2289f,  0.6918f,  0.0793f };
 static const float st_luma_prophoto[3]  = { 0.2880f,  0.7119f,  0.0001f };
 static const float st_luma_adobergb[3]  = { 0.2973f,  0.6274f,  0.0753f };
+
+static const float color_looks[11][9] = {
+  {1.000f, 0.000f, 0.000f,  0.000f, 1.000f, 0.000f,  0.000f, 0.000f, 1.000f}, // 1. neutral
+  {1.076f, -0.047f, -0.058f, -0.014f, 1.044f, -0.052f, -0.105f, 0.049f, 1.076f}, // 2. natural look
+  {1.029f, -0.023f, -0.002f, -0.008f, 1.008f, 0.007f, -0.074f, 0.046f, 1.010f}, // 3. portrait
+  {1.074f, -0.054f, -0.071f, 0.006f, 1.009f, -0.059f, -0.103f, 0.060f, 1.086f}, // 4. vibrant
+  {1.084f, -0.006f, -0.093f, -0.074f, 1.008f, 0.060f, -0.011f, 0.005f, 1.024f}, // 5. nature
+  {1.218f, -0.119f, -0.099f, 0.007f, 1.076f, -0.069f, -0.192f, 0.048f, 1.154f}, // 6. blue sky
+  {1.050f, 0.020f, -0.010f, -0.020f, 1.020f, 0.000f, -0.010f, -0.020f, 1.030f}, // 7. soft warm
+  {1.082f, -0.051f, -0.047f, -0.020f, 1.052f, -0.045f, 0.103f, 0.042f, 1.073f}, // 8. soft
+  {0.980f, -0.010f, -0.010f,  0.000f, 1.050f, -0.020f,  0.020f, 0.010f, 1.100f}, // 9. deep cool
+  {1.020f, -0.010f, -0.010f, -0.030f, 1.040f, -0.010f, 0.000f, -0.030f, 1.030f}, // 10. authentic cinema
+  {1.067f, -0.049f, -0.031f, -0.017f, 1.033f, -0.026f, -0.088f, 0.042f, 1.055f}  // 11. bright atmosphere
+};
 
 static const float *st_get_luma_coeff(dt_iop_st_colorspace_t cs)
 {
@@ -220,13 +239,18 @@ int legacy_params(dt_iop_module_t *self,
                   void **new_params, int32_t *new_params_size,
                   int *new_version)
 {
-  (void)self;
-  (void)old_params;
-  (void)old_version;
-  (void)new_params;
-  (void)new_params_size;
-  (void)new_version;
-  return 1; // Nouveau module : pas de migration nécessaire pour la v1
+  if(old_version == 1)
+  {
+    dt_iop_spectral_tone_params_t *n = calloc(1, sizeof(dt_iop_spectral_tone_params_t));
+    memcpy(n, old_params, 8 * sizeof(float) + sizeof(int));
+    n->color_look = 0;
+    n->look_opacity = 1.0f;
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_spectral_tone_params_t);
+    *new_version = 2;
+    return 0;
+  }
+  return 1;
 }
 
 const char *name()
@@ -308,9 +332,12 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   const float *const in = (const float *)ivoid;
   float *const out = (float *)ovoid;
 
+  const float *const mat = (d->params.color_look > 0) ? color_looks[d->params.color_look] : NULL;
+  const float look_opacity = d->params.look_opacity;
+
   #ifdef _OPENMP
   #pragma omp parallel for default(none) \
-    shared(in, out, width, height, ch, d, npixels)
+    shared(in, out, width, height, ch, d, npixels, mat, look_opacity)
   #endif
   for(size_t k = 0; k < npixels; k++)
   {
@@ -318,6 +345,21 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     float rgb_in[3] = { in[idx], in[idx + 1], in[idx + 2] };
     float rgb_out[3];
     dt_st_pipeline_eval(rgb_in, rgb_out, &d->ctx);
+
+    if(mat)
+    {
+      const float r = rgb_out[0], g = rgb_out[1], b = rgb_out[2];
+      const float tr = r * mat[0] + g * mat[1] + b * mat[2];
+      const float tg = r * mat[3] + g * mat[4] + b * mat[5];
+      const float tb = r * mat[6] + g * mat[7] + b * mat[8];
+
+      rgb_out[0] = r * (1.0f - look_opacity) + tr * look_opacity;
+      rgb_out[1] = g * (1.0f - look_opacity) + tg * look_opacity;
+      rgb_out[2] = b * (1.0f - look_opacity) + tb * look_opacity;
+
+      for(int i = 0; i < 3; i++) rgb_out[i] = fmaxf(rgb_out[i], 0.0f);
+    }
+
     out[idx]     = rgb_out[0];
     out[idx + 1] = rgb_out[1];
     out[idx + 2] = rgb_out[2];
@@ -340,9 +382,11 @@ void init_presets(dt_iop_module_so_t *self)
   p.vibrance = 1.0f;
   p.hl_desaturation = 1.0f;
   p.hl_hue_shift = 0.0f;
-  p.gamut_knee = 0.25f;
-  p.gamut_steepness = 0.25f;
+  p.gamut_knee = 0.05f;
+  p.gamut_steepness = 0.15f;
   p.output_cs = DT_ST_CS_REC2020;
+  p.color_look = 0;
+  p.look_opacity = 1.0f;
 
   if(auto_apply_st)
   {
@@ -386,12 +430,19 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->gamut_knee, p->gamut_knee);
   dt_bauhaus_slider_set(g->gamut_steepness, p->gamut_steepness);
   dt_bauhaus_combobox_set(g->color_space, p->output_cs);
+  dt_bauhaus_combobox_set(g->color_look, p->color_look);
+  dt_bauhaus_slider_set(g->look_opacity, p->look_opacity);
+
+  gui_changed(self, NULL, NULL);
 }
 
 void gui_init(dt_iop_module_t *self)
 {
   dt_iop_spectral_tone_gui_data_t *g = IOP_GUI_ALLOC(spectral_tone);
   self->gui_data = g;
+
+  GtkWidget *main_vbox = dt_gui_vbox();
+  self->widget = main_vbox;
 
   g->contrast = dt_bauhaus_slider_from_params(self, "contrast");
   dt_bauhaus_slider_set_factor(g->contrast, 50.0f);
@@ -424,6 +475,36 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_digits(g->vibrance, 0);
   gtk_widget_set_tooltip_text(g->vibrance,
     _("Smart saturation boost. Protects already-saturated colors while enhancing pastels."));
+
+  g->color_look = dt_bauhaus_combobox_from_params(self, "color_look");
+  dt_bauhaus_widget_set_label(g->color_look, NULL, _("color look"));
+  dt_bauhaus_combobox_add(g->color_look, _("neutral"));
+  dt_bauhaus_combobox_add(g->color_look, _("natural look"));
+  dt_bauhaus_combobox_add(g->color_look, _("portrait"));
+  dt_bauhaus_combobox_add(g->color_look, _("vibrant"));
+  dt_bauhaus_combobox_add(g->color_look, _("nature"));
+  dt_bauhaus_combobox_add(g->color_look, _("blue sky"));
+  dt_bauhaus_combobox_add(g->color_look, _("soft warm"));
+  dt_bauhaus_combobox_add(g->color_look, _("soft"));
+  dt_bauhaus_combobox_add(g->color_look, _("deep cool"));
+  dt_bauhaus_combobox_add(g->color_look, _("authentic cinema"));
+  dt_bauhaus_combobox_add(g->color_look, _("bright atmosphere"));
+  gtk_widget_set_tooltip_text(g->color_look, _("Apply a color style to the image."));
+
+  g->look_opacity = dt_bauhaus_slider_from_params(self, "look_opacity");
+  dt_bauhaus_widget_set_label(g->look_opacity, NULL, _("look opacity"));
+  dt_bauhaus_slider_set_format(g->look_opacity, "%");
+  dt_bauhaus_slider_set_factor(g->look_opacity, 100.0);
+  gtk_widget_set_tooltip_text(g->look_opacity, _("Adjust the strength of the selected color style."));
+
+  // Advanced section
+  dt_gui_new_collapsible_section(&g->advanced_section,
+                                 "plugins/darkroom/spectral_tone/expand_advanced",
+                                 _("advanced"),
+                                 GTK_BOX(main_vbox),
+                                 DT_ACTION(self));
+
+  self->widget = GTK_WIDGET(g->advanced_section.container);
 
   g->hl_desaturation = dt_bauhaus_slider_from_params(self, "hl_desaturation");
   dt_bauhaus_slider_set_factor(g->hl_desaturation, 100.0f);
@@ -459,6 +540,8 @@ void gui_init(dt_iop_module_t *self)
   g->color_space = dt_bauhaus_combobox_from_params(self, "output_cs");
   gtk_widget_set_tooltip_text(g->color_space,
     _("Output color space used for luma coefficients in vibrance computation."));
+
+  self->widget = main_vbox;
 }
 
 void gui_cleanup(dt_iop_module_t *self)
@@ -469,10 +552,13 @@ void gui_cleanup(dt_iop_module_t *self)
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  (void)self;
-  (void)w;
-  (void)previous;
-  // Les widgets bauhaus gèrent déjà l'historique automatiquement.
+  dt_iop_spectral_tone_gui_data_t *g = self->gui_data;
+  dt_iop_spectral_tone_params_t *p = self->params;
+
+  if(!w || w == g->color_look)
+  {
+    gtk_widget_set_visible(g->look_opacity, p->color_look > 0);
+  }
 }
 
 // clang-format off
