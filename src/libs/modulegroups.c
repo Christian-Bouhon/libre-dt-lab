@@ -1503,6 +1503,14 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
         AM("basecurve/shadow correction");                                                                              \
         AM("basecurve/color look");                                                                               \
       }                                                                                                           \
+      else if(wf_spectral_tone)                                                                                   \
+      {                                                                                                           \
+        AM("spectral_tone/contrast");                                                                             \
+        AM("spectral_tone/mid-tone");                                                                             \
+        AM("spectral_tone/vibrance");                                                                             \
+        AM("spectral_tone/spectral brilliance");                                                                  \
+        AM("spectral_tone/color look");                                                                           \
+      }                                                                                                           \
       AM("channelmixerrgb/temperature");                                                                          \
       AM("channelmixerrgb/chroma");                                                                               \
       AM("channelmixerrgb/hue");                                                                                  \
@@ -1562,6 +1570,8 @@ void init_presets(dt_lib_module_t *self)
     dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (AgX)");
   const gboolean wf_basecurve =
     dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (basecurve)");
+  const gboolean wf_spectral_tone =
+    dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (spectral tone)");
   const gboolean wf_none =
     dt_conf_is_equal("plugins/darkroom/workflow", "none");
 
@@ -1587,6 +1597,7 @@ void init_presets(dt_lib_module_t *self)
   AM("rawprepare");
   AM("shadhi");
   AM("temperature");
+  AM("spectral_tone");
   AM("toneequal");
 
   SMG(C_("modulegroup", "tone"), "tone");
@@ -1668,7 +1679,14 @@ void init_presets(dt_lib_module_t *self)
   AM("ashift");
 
   if(is_scene_referred)
-    AM("sigmoid");
+  {
+    if(wf_filmic) AM("filmicrgb");
+    else if(wf_sigmoid) AM("sigmoid");
+    else if(wf_agx) AM("agx");
+    else if(wf_basecurve) AM("basecurve");
+    else if(wf_spectral_tone) AM("spectral_tone");
+    else AM("sigmoid");
+  }
   else
     AM("basecurve");
 
@@ -1764,6 +1782,8 @@ void init_presets(dt_lib_module_t *self)
     AM("agx");
   if(wf_basecurve || wf_none)
     AM("basecurve");
+  if(wf_spectral_tone || wf_none)
+    AM("spectral_tone");
   AM("toneequal");
   AM("crop");
   AM("ashift");
@@ -1867,6 +1887,8 @@ static gchar *_presets_get_minimal(dt_lib_module_t *self)
                                                "scene-referred (AgX)");
   const gboolean wf_basecurve = dt_conf_is_equal("plugins/darkroom/workflow",
                                                "scene-referred (basecurve)");
+  const gboolean wf_spectral_tone = dt_conf_is_equal("plugins/darkroom/workflow",
+                                               "scene-referred (spectral tone)");
 
   // all modules
   gchar *tx = NULL;
@@ -1886,6 +1908,8 @@ static gchar *_presets_get_minimal(dt_lib_module_t *self)
       AM("agx");
     else if(wf_basecurve)
       AM("basecurve");
+    else if(wf_spectral_tone)
+      AM("spectral_tone");
   }
   else
     AM("basecurve");

@@ -84,11 +84,11 @@ typedef enum dt_iop_st_colorspace_t
 typedef struct dt_iop_spectral_tone_params_t
 {
   float contrast;              // $MIN: 0.25 $MAX: 4.25 $DEFAULT: 2.25 $DESCRIPTION: "contrast"
-  float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "spectral brilliance"
   float gray_point;            // $MIN: -1 $MAX: 1 $DEFAULT: 0 $DESCRIPTION: "mid-tone"
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
-  float hl_desaturation;       // $MIN: 0 $MAX: 2 $DEFAULT: 0.15 $DESCRIPTION: "HL desaturation"
+  float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "spectral brilliance"
   float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "HL hue shift"
+  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.15 $DESCRIPTION: "HL desaturation"
   float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.15 $DESCRIPTION: "gamut knee"
   float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "gamut steepness"
   dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "color space"
@@ -360,7 +360,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       float amount = (luma_in - safety_threshold) / (hard_clip - safety_threshold);
       amount = fminf(fmaxf(amount, 0.0f), 1.0f);
       
-      // On utilisehl_desaturation pour pondérer cette protection
+      // On utilise hl_desaturation pour pondérer cette protection
       // Si hl_desat est à 0 (gauche), on réduit l'agressivité de cette protection
       const float weight = amount * d->ctx.hl_desat;
 
@@ -479,13 +479,6 @@ void gui_init(dt_iop_module_t *self)
     _("S-curve contrast pivoted at mid-gray. -100% = minimum contrast, "
       "0% = neutral, +100% = maximum. Negative values soften, positive values sharpen."));
 
-  g->spectral_brilliance = dt_bauhaus_slider_from_params(self, "spectral_brilliance");
-  dt_bauhaus_slider_set_format(g->spectral_brilliance, "%");
-  gtk_widget_set_tooltip_text(g->spectral_brilliance,
-    _("Tone curve character with auto-exposure compensation. Higher values increase "
-      "highlight headroom with a softer, film-like rolloff. Brightness is automatically "
-      "stabilised across the full range."));
-
   g->mid_tone = dt_bauhaus_slider_from_params(self, "gray_point");
   dt_bauhaus_slider_set_factor(g->mid_tone, 100.0f);
   dt_bauhaus_slider_set_format(g->mid_tone, " %");
@@ -501,6 +494,13 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_digits(g->vibrance, 0);
   gtk_widget_set_tooltip_text(g->vibrance,
     _("Smart saturation boost. Protects already-saturated colors while enhancing pastels."));
+  
+    g->spectral_brilliance = dt_bauhaus_slider_from_params(self, "spectral_brilliance");
+  dt_bauhaus_slider_set_format(g->spectral_brilliance, "%");
+  gtk_widget_set_tooltip_text(g->spectral_brilliance,
+    _("Tone curve character with auto-exposure compensation. Higher values increase "
+      "highlight headroom with a softer, film-like rolloff. Brightness is automatically "
+      "stabilised across the full range."));
 
   g->color_look = dt_bauhaus_combobox_from_params(self, "color_look");
   dt_bauhaus_widget_set_label(g->color_look, NULL, _("color look"));
@@ -532,15 +532,6 @@ void gui_init(dt_iop_module_t *self)
 
   self->widget = GTK_WIDGET(g->advanced_section.container);
 
-  g->hl_desaturation = dt_bauhaus_slider_from_params(self, "hl_desaturation");
-  dt_bauhaus_slider_set_factor(g->hl_desaturation, 100.0f);
-  // dt_bauhaus_slider_set_offset(g->hl_desaturation, -100.0f);
-  dt_bauhaus_slider_set_format(g->hl_desaturation, " %");
-  dt_bauhaus_slider_set_digits(g->hl_desaturation, 0);
-  gtk_widget_set_tooltip_text(g->hl_desaturation,
-    _("Desaturates highlights toward achromatic luma to prevent out-of-gamut colors. "
-      "0% = off, 25% = natural rolloff, 100% = maximum desaturation."));
-
   g->hl_hue_shift = dt_bauhaus_slider_from_params(self, "hl_hue_shift");
   dt_bauhaus_slider_set_factor(g->hl_hue_shift, 100.0f);
   dt_bauhaus_slider_set_format(g->hl_hue_shift, " %");
@@ -548,6 +539,14 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->hl_hue_shift,
     _("Abney hue shift in highlights. Positive rotates toward cool (blue), "
       "negative toward warm (salmon). Independent of desaturation strength."));
+
+  g->hl_desaturation = dt_bauhaus_slider_from_params(self, "hl_desaturation");
+  dt_bauhaus_slider_set_factor(g->hl_desaturation, 100.0f);
+  dt_bauhaus_slider_set_format(g->hl_desaturation, " %");
+  dt_bauhaus_slider_set_digits(g->hl_desaturation, 0);
+  gtk_widget_set_tooltip_text(g->hl_desaturation,
+    _("Desaturates highlights toward achromatic luma to prevent out-of-gamut colors. "
+      "0% = off, 15% = natural rolloff, 100% = maximum desaturation."));
 
   g->gamut_knee = dt_bauhaus_slider_from_params(self, "gamut_knee");
   dt_bauhaus_slider_set_factor(g->gamut_knee, 100.0f);

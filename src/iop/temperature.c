@@ -1174,7 +1174,11 @@ void gui_update(dt_iop_module_t *self)
   dt_iop_temperature_params_t *p = self->params;
   dt_iop_temperature_params_t *d = self->default_params;
 
-  d->preset = dt_is_scene_referred() ? DT_IOP_TEMP_D65_LATE : DT_IOP_TEMP_AS_SHOT;
+  const char *workflow = dt_conf_get_string_const("plugins/darkroom/workflow");
+  const gboolean is_st_workflow = workflow && 
+    (strcmp(workflow, "scene-referred (spectral tone)") == 0 || 
+     strcmp(workflow, "scene-referred (basecurve)") == 0);
+  d->preset = (dt_is_scene_referred() || is_st_workflow) ? DT_IOP_TEMP_D65_LATE : DT_IOP_TEMP_AS_SHOT;
 
   const gboolean true_monochrome =
     dt_image_monochrome_flags(&self->dev->image_storage) & DT_IMAGE_MONOCHROME;
@@ -1515,7 +1519,13 @@ void reload_defaults(dt_iop_module_t *self)
   dt_iop_temperature_params_t *d = self->default_params;
   dt_iop_temperature_params_t *p = self->params;
 
-  d->preset = dt_is_scene_referred() ? DT_IOP_TEMP_D65_LATE : DT_IOP_TEMP_AS_SHOT;
+  const char *workflow = dt_conf_get_string_const("plugins/darkroom/workflow");
+  const gboolean is_st_workflow = workflow && 
+    (strcmp(workflow, "scene-referred (spectral tone)") == 0 || 
+     strcmp(workflow, "scene-referred (basecurve)") == 0);
+  const gboolean scene_referred = dt_is_scene_referred() || is_st_workflow;
+
+  d->preset = scene_referred ? DT_IOP_TEMP_D65_LATE : DT_IOP_TEMP_AS_SHOT;
 
   float *dcoeffs = (float *)d;
   for_four_channels(k)
@@ -1532,14 +1542,14 @@ void reload_defaults(dt_iop_module_t *self)
 
   gboolean another_cat_defined = FALSE;
 
-  if(!dt_is_scene_referred())
+  if(!scene_referred)
   {
     another_cat_defined =
       dt_history_check_module_exists(self->dev->image_storage.id,
                                      "channelmixerrgb", TRUE);
   }
 
-  const gboolean is_modern = dt_is_scene_referred() || another_cat_defined;
+  const gboolean is_modern = scene_referred || another_cat_defined;
 
   self->default_enabled = FALSE;
   self->hide_enable_button = true_monochrome;
@@ -2225,7 +2235,12 @@ void gui_reset(dt_iop_module_t *self)
   dt_iop_temperature_gui_data_t *g = self->gui_data;
   dt_iop_temperature_params_t *d = self->default_params;
 
-  const int preset = d->preset = dt_is_scene_referred() ? DT_IOP_TEMP_D65_LATE : DT_IOP_TEMP_AS_SHOT;
+  const char *workflow = dt_conf_get_string_const("plugins/darkroom/workflow");
+  const gboolean is_st_workflow = workflow && 
+    (strcmp(workflow, "scene-referred (spectral tone)") == 0 || 
+     strcmp(workflow, "scene-referred (basecurve)") == 0);
+  const int preset = d->preset = (dt_is_scene_referred() || is_st_workflow) ? DT_IOP_TEMP_D65_LATE : DT_IOP_TEMP_AS_SHOT;
+
   dt_iop_color_picker_reset(self, TRUE);
 
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->btn_asshot),
