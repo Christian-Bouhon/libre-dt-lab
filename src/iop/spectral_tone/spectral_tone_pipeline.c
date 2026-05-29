@@ -138,7 +138,7 @@ double dt_st_compute_y_tm(double y_scene, const dt_st_context_t *ctx)
   if(ctx->contrast != 1.0f)
   {
     const double c = (double)ctx->contrast;
-    const double p = 0.5;
+    const double p = (double)ctx->contrast_pivot;
     if(y_tm <= p)
       y_tm = p * pow(fmax(y_tm / p, 0.0), c);
     else

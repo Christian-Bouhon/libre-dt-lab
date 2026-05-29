@@ -70,6 +70,7 @@ typedef struct
 {
   float exposure_factor;
   float contrast;          /* post-SSTS contrast S-curve */
+  float contrast_pivot;    /* pivot for contrast S-curve */
   float input_matrix[9];   /* D50 Rec.2020 RGB → D50 XYZ (CAT_adapted) */
   float output_matrix[9];  /* D50 XYZ → D50 output RGB (CAT_adapted) */
   float luma_coeff[3];     /* luma coefficients for output space */

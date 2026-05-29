@@ -68,7 +68,7 @@
 
 #include "spectral_tone/spectral_tone.h"
 
-DT_MODULE_INTROSPECTION(2, dt_iop_spectral_tone_params_t)
+DT_MODULE_INTROSPECTION(3, dt_iop_spectral_tone_params_t)
 
 typedef enum dt_iop_st_colorspace_t
 {
@@ -92,6 +92,7 @@ typedef struct dt_iop_spectral_tone_params_t
   dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "color space"
   int color_look;              // $DEFAULT: 0 $DESCRIPTION: "color look"
   float look_opacity;          // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "look opacity"
+  float contrast_pivot;        // $MIN: 0.01 $MAX: 0.99 $DEFAULT: 0.5 $DESCRIPTION: "contrast pivot"
 } dt_iop_spectral_tone_params_t;
 
 typedef struct dt_iop_spectral_tone_data_t
@@ -103,6 +104,7 @@ typedef struct dt_iop_spectral_tone_data_t
 typedef struct dt_iop_spectral_tone_gui_data_t
 {
   GtkWidget *contrast;
+  GtkWidget *contrast_pivot;
   GtkWidget *spectral_brilliance;
   GtkWidget *mid_tone;
   GtkWidget *vibrance;
@@ -192,6 +194,9 @@ static void st_compute_context(dt_iop_spectral_tone_params_t *p,
   ctx->luma_coeff[2] = lc[2];
 
   ctx->contrast = fmaxf(p->contrast, 0.001f);
+  /* Inversion du pivot pour que 'droite' (valeur élevée) éclaircisse l'image */
+  ctx->contrast_pivot = 1.0f - fmaxf(fminf(p->contrast_pivot, 0.99f), 0.01f);
+
   ctx->hl_desat = fmaxf(p->hl_desaturation, 0.0f);
   ctx->hl_rotation = p->hl_hue_shift;
   ctx->gamut_knee = p->gamut_knee;
@@ -220,8 +225,9 @@ static void st_compute_context(dt_iop_spectral_tone_params_t *p,
     }
   }
 
-  /* Mid-tone gamma adjustment */
-  ctx->gray_point = fmaxf(fminf(p->gray_point, 1.0f), -1.0f);
+  /* Mid-tone gamma adjustment - Inversion pour que 'droite' éclaircisse (Gamma < 1.0) */
+  ctx->gray_point = -fmaxf(fminf(p->gray_point, 1.0f), -1.0f);
+
   ctx->vibrance = fmaxf(p->vibrance, 0.0f);
 
   /* Initialize ACES 2.0 SSTS for the target roll-off character */
@@ -237,15 +243,30 @@ int legacy_params(dt_iop_module_t *self,
                   void **new_params, int32_t *new_params_size,
                   int *new_version)
 {
-  if(old_version == 1)
+  if(old_version == 1 || old_version == 2)
   {
+    typedef struct dt_iop_spectral_tone_params_v2_t
+    {
+      float contrast, gray_point, vibrance, spectral_brilliance;
+      float hl_hue_shift, hl_desaturation, gamut_knee, gamut_steepness;
+      int output_cs, color_look;
+      float look_opacity;
+    } dt_iop_spectral_tone_params_v2_t;
+
     dt_iop_spectral_tone_params_t *n = calloc(1, sizeof(dt_iop_spectral_tone_params_t));
-    memcpy(n, old_params, 8 * sizeof(float) + sizeof(int));
-    n->color_look = 0;
-    n->look_opacity = 1.0f;
+    if(old_version == 1)
+    {
+      memcpy(n, old_params, 8 * sizeof(float) + sizeof(int));
+      n->color_look = 0;
+      n->look_opacity = 1.0f;
+    }
+    else // v2
+      memcpy(n, old_params, sizeof(dt_iop_spectral_tone_params_v2_t));
+
+    n->contrast_pivot = 0.5f;
     *new_params = n;
     *new_params_size = sizeof(dt_iop_spectral_tone_params_t);
-    *new_version = 2;
+    *new_version = 3;
     return 0;
   }
   return 1;
@@ -411,6 +432,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.output_cs = DT_ST_CS_REC2020;
   p.color_look = 0;
   p.look_opacity = 1.0f;
+  p.contrast_pivot = 0.5f;
 
   if(auto_apply_st)
   {
@@ -446,6 +468,7 @@ void gui_update(dt_iop_module_t *self)
   dt_iop_spectral_tone_params_t *p = self->params;
 
   dt_bauhaus_slider_set(g->contrast, p->contrast);
+  dt_bauhaus_slider_set(g->contrast_pivot, p->contrast_pivot);
   dt_bauhaus_slider_set(g->spectral_brilliance, p->spectral_brilliance);
   dt_bauhaus_slider_set(g->mid_tone, p->gray_point);
   dt_bauhaus_slider_set(g->vibrance, p->vibrance);
@@ -477,13 +500,22 @@ void gui_init(dt_iop_module_t *self)
     _("S-curve contrast pivoted at mid-gray. -100% = minimum contrast, "
       "0% = neutral, +100% = maximum. Negative values soften, positive values sharpen."));
 
+  g->contrast_pivot = dt_bauhaus_slider_from_params(self, "contrast_pivot");
+  dt_bauhaus_slider_set_factor(g->contrast_pivot, 100.0f);
+  dt_bauhaus_slider_set_offset(g->contrast_pivot, -50.0f);
+  dt_bauhaus_slider_set_format(g->contrast_pivot, " %");
+  dt_bauhaus_slider_set_digits(g->contrast_pivot, 0);
+  gtk_widget_set_tooltip_text(g->contrast_pivot,
+    _("Pivot point for the contrast S-curve. Higher values (right) shift the fulcrum towards "
+      "shadows, brightening the image. Lower values (left) shift it towards highlights, darkening it."));
+
   g->mid_tone = dt_bauhaus_slider_from_params(self, "gray_point");
   dt_bauhaus_slider_set_factor(g->mid_tone, 100.0f);
   dt_bauhaus_slider_set_format(g->mid_tone, " %");
   dt_bauhaus_slider_set_digits(g->mid_tone, 0);
   gtk_widget_set_tooltip_text(g->mid_tone,
-    _("Mid-tone brightness adjustment. -100% = darker mid-tones, "
-      "0% = neutral, +100% = brighter mid-tones."));
+    _("Mid-tone brightness adjustment (gamma). Moving to the right (+100%) brightens mid-tones, "
+      "moving to the left (-100%) darkens them."));
 
   g->vibrance = dt_bauhaus_slider_from_params(self, "vibrance");
   dt_bauhaus_slider_set_factor(g->vibrance, 100.0f);
