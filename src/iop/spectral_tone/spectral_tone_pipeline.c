@@ -47,8 +47,6 @@
     - Rec.2020 colour space : ITU-R BT.2020 ultra-high definition television
       standard, used as the working space for wide-gamut spectral processing.
 
-    - Mallett2019 spectral basis : spectral reconstruction from RGB values
-      using precomputed basis functions for accurate spectral rendering.
     ---------------------------------------------------------------------------
 
     */

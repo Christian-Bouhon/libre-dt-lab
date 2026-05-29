@@ -47,17 +47,12 @@
     - Rec.2020 colour space : ITU-R BT.2020 ultra-high definition television
       standard, used as the working space for wide-gamut spectral processing.
 
-    - Mallett2019 spectral basis : spectral reconstruction from RGB values
-      using precomputed basis functions for accurate spectral rendering.
     ---------------------------------------------------------------------------
 
     */
 
-#ifndef DT_SPEKTRAL_TONE_H
-#define DT_SPEKTRAL_TONE_H
-
-#define ST_NWL 81
-#define ST_NBASIS 3
+#ifndef DT_SPECTRAL_TONE_H
+#define DT_SPECTRAL_TONE_H
 
 /* Precomputed SSTS (ACES 2.0 Single-Stage Tone Scale) parameters */
 typedef struct
@@ -78,7 +73,7 @@ typedef struct
   float input_matrix[9];   /* D50 Rec.2020 RGB → D50 XYZ (CAT_adapted) */
   float output_matrix[9];  /* D50 XYZ → D50 output RGB (CAT_adapted) */
   float luma_coeff[3];     /* luma coefficients for output space */
-  float hl_desat;          /* highlight desaturation amount (1.0 + |offset|) */
+  float hl_desat;          /* highlight desaturation amount */
   float hl_rotation;       /* Abney hue rotation (−1..+1, cold/warm) */
   float white_chroma_x;    /* D50 white chromaticity x = X/Y */
   float white_chroma_z;    /* D50 white chromaticity z = Z/Y */
@@ -89,17 +84,7 @@ typedef struct
   dt_st_ssts_params_t ssts; /* ACES 2.0 SSTS precomputed params */
 } dt_st_context_t;
 
-/* Spectral data */
-extern const double dt_st_cmf_xyz[ST_NWL * 3];
-extern const double dt_st_basis_mallett2019[ST_NWL * 3];
-extern const double dt_st_illuminant_d50[ST_NWL];
-extern const double dt_st_illuminant_d65[ST_NWL];
-extern const double dt_st_rgb_to_xyz[9];
-extern const double dt_st_xyz_to_rec709[9];
-extern const double dt_st_xyz_to_rec2020[9];
-extern const double dt_st_rec709_to_xyz[9];
 extern const double dt_st_rec2020_to_xyz[9];
-extern const double dt_st_cat_d50_to_d65[9];
 extern const double dt_st_cat_d65_to_d50[9];
 
 /* Init SSTS params for a given peak luminance (nits) */

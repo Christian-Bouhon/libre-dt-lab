@@ -47,8 +47,6 @@
     - Rec.2020 colour space : ITU-R BT.2020 ultra-high definition television
       standard, used as the working space for wide-gamut spectral processing.
 
-    - Mallett2019 spectral basis : spectral reconstruction from RGB values
-      using precomputed basis functions for accurate spectral rendering.
     ---------------------------------------------------------------------------
 
     */
@@ -84,7 +82,7 @@ typedef enum dt_iop_st_colorspace_t
 typedef struct dt_iop_spectral_tone_params_t
 {
   float contrast;              // $MIN: 0.25 $MAX: 4.25 $DEFAULT: 2.25 $DESCRIPTION: "contrast"
-  float gray_point;            // $MIN: -1 $MAX: 1 $DEFAULT: 0 $DESCRIPTION: "mid-tone"
+  float gray_point;            // $MIN: -1 $MAX: 1 $DEFAULT: 0 $DESCRIPTION: "mid-tones"
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
   float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "spectral brilliance"
   float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "HL hue shift"
@@ -260,7 +258,7 @@ const char *name()
 
 const char *aliases()
 {
-  return _("tone mapping|spectral|highlight reconstruction");
+  return _("tone mapping|spectral");
 }
 
 int default_group()
