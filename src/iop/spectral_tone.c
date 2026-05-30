@@ -65,11 +65,58 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+
+/* Reliable cross-platform debugging: writes to a file and, on Windows, also
+ * calls OutputDebugStringA (viewable with DebugView).  Enable by passing
+ * -DSPECTRAL_TONE_DEBUG to the compiler.
+ *
+ * On Windows, stderr is not attached to a visible console for a GUI app, so
+ * fprintf(stderr) silently produces no output.  This file-based logger works
+ * unconditionally.
+ *
+ * Windows: check C:\temp\st_debug.log  (or run DebugView)
+ * Linux:   tail -f /tmp/st_debug.log
+ *
+ * Note: fopen is poison-guarded on Linux; we use open() + write() instead.
+ */
+#include <unistd.h>
+#include <fcntl.h>
+#ifdef _WIN32
+#include <windows.h>
+static void _dt_st_log(const char *msg)
+{
+  int fd = -1;
+  fd = _open("C:\\temp\\st_debug.log", _O_WRONLY | _O_CREAT | _O_APPEND, _S_IWRITE);
+  if(fd == -1) fd = _open("st_debug.log", _O_WRONLY | _O_CREAT | _O_APPEND, _S_IWRITE);
+  if(fd != -1) { _write(fd, msg, strlen(msg)); _write(fd, "\n", 1); _close(fd); }
+  OutputDebugStringA(msg);
+}
+#define DT_ST_LOG(msg) _dt_st_log("[DT_ST] " __FILE__ ":" DT_STRINGIFY(__LINE__) " " msg)
+/* Critical debug on Windows: shows a MessageBox so the user always sees it. */
+#define DT_ST_CRIT(msg) do { \
+    DT_ST_LOG(msg); \
+    MessageBoxA(NULL, "[DT_ST] " msg, "Spectral Tone Debug", MB_OK); \
+  } while(0)
+#else
+static void _dt_st_log(const char *msg)
+{
+  int fd = open("/tmp/st_debug.log", O_WRONLY | O_CREAT | O_APPEND, 0644);
+  if(fd != -1) { write(fd, msg, strlen(msg)); write(fd, "\n", 1); close(fd); }
+}
+#define DT_ST_LOG(msg) _dt_st_log("[DT_ST] " __FILE__ ":" DT_STRINGIFY(__LINE__) " " msg)
+#define DT_ST_CRIT(msg) DT_ST_LOG(msg)
+#endif
+
 #ifdef SPECTRAL_TONE_DEBUG
-#define DT_ST_DEBUG(msg) fprintf(stderr, "[DT_ST] %s: " msg "\n", __func__)
+#define DT_ST_DEBUG(msg) DT_ST_LOG(msg)
 #else
 #define DT_ST_DEBUG(msg)
 #endif
+
+/* Helper for stringification of line numbers */
+#define DT_STRINGIFY(x) DT_STRINGIFY_(x)
+#define DT_STRINGIFY_(x) #x
 
 #ifdef _WIN32
 #include <float.h>
@@ -488,7 +535,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  DT_ST_DEBUG("enter");
+  DT_ST_CRIT("init_presets: enter — MessageBox means DLL loaded + init_presets reached");
   self->pref_based_presets = TRUE;
 
   DT_ST_DEBUG("bef_config_access");
