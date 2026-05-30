@@ -145,7 +145,11 @@ else(GMIC_FOUND)
 endif(GMIC_FOUND)
 add_iop(toneequal "toneequal.c" DEFAULT_VISIBLE)
 add_iop(filmicrgb "filmicrgb.c")
-add_iop(spectral_tone "spectral_tone.c" "spectral_tone/spectral_tone_pipeline.c" "spectral_tone/spectral_tone_data.c")
+add_iop(spectral_tone "spectral_tone.c")
+# spectral_tone_data.c and spectral_tone_pipeline.c are #included directly
+# from spectral_tone.c (single-TU build). Do NOT list them here — they were
+# causing duplicate-symbol link errors because the #include already pulls them
+# in when the introspection wrapper compiles spectral_tone.c.
 add_iop(negadoctor "negadoctor.c")
 add_iop(channelmixerrgb "channelmixerrgb.c" "../chart/common.c")
 add_iop(censorize "censorize.c")
