@@ -65,6 +65,27 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef SPECTRAL_TONE_DEBUG
+#define DT_ST_DEBUG(msg) fprintf(stderr, "[DT_ST] %s: " msg "\n", __func__)
+#else
+#define DT_ST_DEBUG(msg)
+#endif
+
+#ifdef _WIN32
+#include <float.h>
+/* Save / restore the FP control word to mask all floating-point exceptions
+ * (division by zero, invalid operation, overflow).  On Windows these raise
+ * structured exceptions (SEH) that crash the process, whereas on Unix they
+ * silently produce NaN/Inf and execution continues. */
+#define DT_ST_FPE_GUARD_BEGIN \
+  unsigned int _dt_st_fpe_old = _controlfp(0, 0); \
+  _controlfp(_MCW_EM, _MCW_EM)
+#define DT_ST_FPE_GUARD_END \
+  _controlfp(_dt_st_fpe_old, _MCW_EM)
+#else
+#define DT_ST_FPE_GUARD_BEGIN
+#define DT_ST_FPE_GUARD_END
+#endif
 
 #include "spectral_tone/spectral_tone.h"
 
@@ -159,6 +180,9 @@ static const float *st_get_luma_coeff(dt_iop_st_colorspace_t cs)
 static void st_compute_context(dt_iop_spectral_tone_params_t *p,
                                 dt_st_context_t *ctx)
 {
+  DT_ST_DEBUG("enter");
+  DT_ST_FPE_GUARD_BEGIN;
+
   /* Auto-exposure compensation: single slider controls both SSTS tone curve
    * character and brightness. Higher spectral brilliance makes SSTS less
    * compressive, requiring positive exposure to maintain consistent perceived
@@ -237,6 +261,8 @@ static void st_compute_context(dt_iop_spectral_tone_params_t *p,
   const double rolloff_t = fmin(fmax((double)p->spectral_brilliance / 100.0, 0.0), 1.0);
   const double peak = 100.0 * pow(100.0, rolloff_t);
   dt_st_ssts_init(&ctx->ssts, peak);
+
+  DT_ST_FPE_GUARD_END;
 }
 
 /* Begin framework functions */
@@ -305,6 +331,7 @@ dt_iop_colorspace_type_t default_colorspace(dt_iop_module_t *self,
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
                dt_dev_pixelpipe_iop_t *piece)
 {
+  DT_ST_DEBUG("enter");
   piece->data = dt_alloc1_align_type(dt_iop_spectral_tone_data_t);
   if(!piece->data) return;
   dt_iop_spectral_tone_data_t *d = piece->data;
@@ -331,10 +358,17 @@ void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
 void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1,
                    dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
+  DT_ST_DEBUG("enter");
   dt_iop_spectral_tone_params_t *p = (dt_iop_spectral_tone_params_t *)p1;
   dt_iop_spectral_tone_data_t *d = piece->data;
 
-  st_compute_context(p, &d->ctx);
+  if(!d) return;
+
+  /* Defer the heavy context computation (mat3inv, SSTS init) to process()
+   * because on Windows the DLL loader may not have resolved all framework
+   * symbols yet when commit_params is called early during the first pipe
+   * setup at startup.  The sentinel ctx.ssts.n == 0 signals process() to
+   * perform the lazy init before the first pixel is touched. */
   memcpy(&d->params, p, sizeof(dt_iop_spectral_tone_params_t));
 }
 
@@ -361,14 +395,25 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   const int ch = piece->colors;
   const size_t npixels = (size_t)width * height;
 
-  /* Safety guard: ctx.ssts.n = 0 means commit_params() has not yet fired
-   * (init_pipe only zeroes the struct). Pass the image through unchanged
-   * rather than dividing by zero or crashing. Hits only on the very first
-   * preview render on startup; commit_params() corrects this immediately. */
-  if(!d || d->ctx.ssts.n <= 0.0)
+  DT_ST_DEBUG("enter");
+
+  /* Guard: if data is NULL (allocation failure in init_pipe) pass through */
+  if(!d)
   {
     memcpy(ovoid, ivoid, sizeof(float) * npixels * ch);
     return;
+  }
+
+  /* Lazy context initialisation: commit_params() has been deferred to avoid
+   * calling mat3inv / SSTS init during the Windows DLL loader's early setup
+   * phase.  We compute the context on demand here, at the very first pixel
+   * process call — by this point all framework symbols are guaranteed to be
+   * fully resolved across DLL boundaries. */
+  DT_ST_FPE_GUARD_BEGIN;
+  if(d->ctx.ssts.n <= 0.0)
+  {
+    DT_ST_DEBUG("lazy_init_context");
+    st_compute_context(&d->params, &d->ctx);
   }
 
   /* Bounds check: color_looks has 11 entries (0–10).
@@ -438,12 +483,15 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     out[idx + 2] = rgb_out[2];
     if(ch == 4) out[idx + 3] = in[idx + 3];
   }
+  DT_ST_FPE_GUARD_END;
 }
 
 void init_presets(dt_iop_module_so_t *self)
 {
+  DT_ST_DEBUG("enter");
   self->pref_based_presets = TRUE;
 
+  DT_ST_DEBUG("bef_config_access");
   const char *workflow = dt_conf_get_string_const("plugins/darkroom/workflow");
   const gboolean auto_apply_st = workflow && strcmp(workflow, "scene-referred (spectral tone)") == 0;
 
@@ -464,6 +512,7 @@ void init_presets(dt_iop_module_so_t *self)
 
   if(auto_apply_st)
   {
+    DT_ST_DEBUG("bef_add_preset_scene");
     dt_gui_presets_add_generic(_("scene-referred default"), self->op,
                                 self->version(),
                                 &p, sizeof(p),
@@ -476,10 +525,12 @@ void init_presets(dt_iop_module_so_t *self)
                                     self->op, self->version(), TRUE);
   }
 
+  DT_ST_DEBUG("bef_add_preset_default");
   dt_gui_presets_add_generic(_("default spectral tone"), self->op,
                               self->version(),
                               &p, sizeof(p),
                               TRUE, DEVELOP_BLEND_CS_RGB_SCENE);
+  DT_ST_DEBUG("end");
 }
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker,
