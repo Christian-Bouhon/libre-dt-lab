@@ -128,6 +128,11 @@ double dt_st_ssts_fwd(const dt_st_ssts_params_t *p, double x)
 /* Compute tone-mapped Y from scene-linear Y (SSTS + BT.1886 + contrast) */
 double dt_st_compute_y_tm(double y_scene, const dt_st_context_t *ctx)
 {
+  /* Guard: ssts.n is set by dt_st_ssts_init() to peak_luminance (≥100).
+   * A value of 0 means the context was never initialised — return black
+   * rather than raising a FPE (0.0/0.0) which crashes on Windows. */
+  if(ctx->ssts.n <= 0.0) return 0.0;
+
   double y_disp = dt_st_ssts_fwd(&ctx->ssts, y_scene * ctx->exposure_factor);
   double y_tm = y_disp / ctx->ssts.n;
 
@@ -345,10 +350,15 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
       u *= (float)(1.0 - w);
       v *= (float)(1.0 - w);
 
-      /* YUV → RGB (G reconstructed from Y, U, V) */
+      /* YUV → RGB (G reconstructed from Y, U, V)
+       * Guard: lc[1] is the green luma coefficient, always > 0 after a proper
+       * context init. A value of 0 would cause a FPE (0.0/0.0) on Windows. */
       rgb[0] = y + u;
       rgb[2] = y + v;
-      rgb[1] = y - (lc[0] / lc[1]) * u - (lc[2] / lc[1]) * v;
+      if(lc[1] > 0.0f)
+        rgb[1] = y - (lc[0] / lc[1]) * u - (lc[2] / lc[1]) * v;
+      else
+        rgb[1] = y;
     }
   }
 

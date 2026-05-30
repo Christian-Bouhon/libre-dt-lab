@@ -67,6 +67,8 @@
 #include <string.h>
 
 #include "spectral_tone/spectral_tone.h"
+#include "spectral_tone/spectral_tone_data.c"
+#include "spectral_tone/spectral_tone_pipeline.c"
 
 DT_MODULE_INTROSPECTION(3, dt_iop_spectral_tone_params_t)
 
@@ -303,16 +305,26 @@ void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
                dt_dev_pixelpipe_iop_t *piece)
 {
   piece->data = dt_alloc1_align_type(dt_iop_spectral_tone_data_t);
+  if(!piece->data) return;
   dt_iop_spectral_tone_data_t *d = piece->data;
-  memset(&d->ctx, 0, sizeof(dt_st_context_t)); // Ensure context is initialized
+  /* Zero the whole struct so every field has a known, safe value.
+   * ctx.ssts.n = 0 acts as a sentinel: process() detects this and
+   * passes through without processing until commit_params() fires.
+   * We intentionally do NOT call st_compute_context / mat3inv here —
+   * framework matrix functions must not be called at pipe-init time
+   * on Windows (DLL loader constraints). */
+  memset(d, 0, sizeof(dt_iop_spectral_tone_data_t));
   memcpy(&d->params, self->default_params, sizeof(dt_iop_spectral_tone_params_t));
 }
 
 void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
                   dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_free_align(piece->data);
-  piece->data = NULL;
+  if(piece->data)
+  {
+    dt_free_align(piece->data);
+    piece->data = NULL;
+  }
 }
 
 void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1,
@@ -348,10 +360,25 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   const int ch = piece->colors;
   const size_t npixels = (size_t)width * height;
 
+  /* Safety guard: ctx.ssts.n = 0 means commit_params() has not yet fired
+   * (init_pipe only zeroes the struct). Pass the image through unchanged
+   * rather than dividing by zero or crashing. Hits only on the very first
+   * preview render on startup; commit_params() corrects this immediately. */
+  if(!d || d->ctx.ssts.n <= 0.0)
+  {
+    memcpy(ovoid, ivoid, sizeof(float) * npixels * ch);
+    return;
+  }
+
+  /* Bounds check: color_looks has 11 entries (0–10).
+   * Clamp defensively in case a stale preset carries an out-of-range value. */
+  const int look_idx = (d->params.color_look > 0 && d->params.color_look <= 10)
+                       ? d->params.color_look : 0;
+
   const float *const in = (const float *)ivoid;
   float *const out = (float *)ovoid;
 
-  const float *const mat = (d->params.color_look > 0) ? color_looks[d->params.color_look] : NULL;
+  const float *const mat = (look_idx > 0) ? color_looks[look_idx] : NULL;
   const float look_opacity = d->params.look_opacity;
 
   #ifdef _OPENMP
