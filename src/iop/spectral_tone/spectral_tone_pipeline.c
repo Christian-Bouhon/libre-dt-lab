@@ -397,10 +397,10 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
   /* Step 10: Gamut compression — desaturate out-of-gamut colors toward white */
   st_gamut_compress(rgb);
 
-  /* Step 11: Clamp negative channels (safety) */
-  rgb_out[0] = fmaxf(rgb[0], 0.0f);
-  rgb_out[1] = fmaxf(rgb[1], 0.0f);
-  rgb_out[2] = fmaxf(rgb[2], 0.0f);
+  /* Step 11: Clamp channels (safety) - display-referred output */
+  rgb_out[0] = fmaxf(fminf(rgb[0], 1.0f), 0.0f);
+  rgb_out[1] = fmaxf(fminf(rgb[1], 1.0f), 0.0f);
+  rgb_out[2] = fmaxf(fminf(rgb[2], 1.0f), 0.0f);
 }
 
 // clang-format off

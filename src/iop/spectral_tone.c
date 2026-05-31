@@ -432,7 +432,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       rgb_out[1] = g * (1.0f - look_opacity) + tg * look_opacity;
       rgb_out[2] = b * (1.0f - look_opacity) + tb * look_opacity;
 
-      for(int i = 0; i < 3; i++) rgb_out[i] = fmaxf(rgb_out[i], 0.0f);
+      for(int i = 0; i < 3; i++) rgb_out[i] = fmaxf(fminf(rgb_out[i], 1.0f), 0.0f);
     }
 
     out[idx]     = rgb_out[0];
@@ -589,10 +589,12 @@ void gui_init(dt_iop_module_t *self)
                                  _("advanced"),
                                  GTK_BOX(main_vbox),
                                  DT_ACTION(self));
+  
+  dt_iop_module_t sect;
+  memcpy(&sect, self, sizeof(dt_iop_module_t));
+  sect.widget = GTK_WIDGET(g->advanced_section.container);
 
-  self->widget = GTK_WIDGET(g->advanced_section.container);
-
-  g->hl_hue_shift = dt_bauhaus_slider_from_params(self, "hl_hue_shift");
+  g->hl_hue_shift = dt_bauhaus_slider_from_params(&sect, "hl_hue_shift");
   dt_bauhaus_slider_set_factor(g->hl_hue_shift, 100.0f);
   dt_bauhaus_slider_set_format(g->hl_hue_shift, " %");
   dt_bauhaus_slider_set_digits(g->hl_hue_shift, 0);
@@ -600,7 +602,7 @@ void gui_init(dt_iop_module_t *self)
     _("Abney hue shift in highlights. Positive rotates toward cool (blue), "
       "negative toward warm (salmon). Independent of desaturation strength."));
 
-  g->hl_desaturation = dt_bauhaus_slider_from_params(self, "hl_desaturation");
+  g->hl_desaturation = dt_bauhaus_slider_from_params(&sect, "hl_desaturation");
   dt_bauhaus_slider_set_factor(g->hl_desaturation, 100.0f);
   dt_bauhaus_slider_set_format(g->hl_desaturation, " %");
   dt_bauhaus_slider_set_digits(g->hl_desaturation, 0);
@@ -608,25 +610,23 @@ void gui_init(dt_iop_module_t *self)
     _("Desaturates highlights toward achromatic luma to prevent out-of-gamut colors. "
       "0% = off, 15% = natural rolloff, 100% = maximum desaturation."));
 
-  g->gamut_knee = dt_bauhaus_slider_from_params(self, "gamut_knee");
+  g->gamut_knee = dt_bauhaus_slider_from_params(&sect, "gamut_knee");
   dt_bauhaus_slider_set_factor(g->gamut_knee, 100.0f);
   dt_bauhaus_slider_set_format(g->gamut_knee, " %");
   dt_bauhaus_slider_set_digits(g->gamut_knee, 0);
   gtk_widget_set_tooltip_text(g->gamut_knee,
     _("Knee point for gamut roll-off. Lower values start compression earlier in the luminance range."));
 
-  g->gamut_steepness = dt_bauhaus_slider_from_params(self, "gamut_steepness");
+  g->gamut_steepness = dt_bauhaus_slider_from_params(&sect, "gamut_steepness");
   dt_bauhaus_slider_set_factor(g->gamut_steepness, 100.0f);
   dt_bauhaus_slider_set_format(g->gamut_steepness, " %");
   dt_bauhaus_slider_set_digits(g->gamut_steepness, 0);
   gtk_widget_set_tooltip_text(g->gamut_steepness,
     _("Steepness of the gamut roll-off curve. Higher values result in a harder transition towards the gamut boundary."));
 
-  g->color_space = dt_bauhaus_combobox_from_params(self, "output_cs");
+  g->color_space = dt_bauhaus_combobox_from_params(&sect, "output_cs");
   gtk_widget_set_tooltip_text(g->color_space,
     _("Output color space used for luma coefficients in vibrance computation."));
-
-  self->widget = main_vbox;
 }
 
 void gui_cleanup(dt_iop_module_t *self)
