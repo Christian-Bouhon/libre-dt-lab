@@ -65,77 +65,8 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
-
-/* Reliable cross-platform debugging: writes to a file and, on Windows, also
- * calls OutputDebugStringA (viewable with DebugView).  Enable by passing
- * -DSPECTRAL_TONE_DEBUG to the compiler.
- *
- * On Windows, stderr is not attached to a visible console for a GUI app, so
- * fprintf(stderr) silently produces no output.  This file-based logger works
- * unconditionally.
- *
- * Windows: check C:\temp\st_debug.log  (or run DebugView)
- * Linux:   tail -f /tmp/st_debug.log
- *
- * Note: fopen is poison-guarded on Linux; we use open() + write() instead.
- */
-#include <unistd.h>
-#include <fcntl.h>
-#ifdef _WIN32
-#include <windows.h>
-static void _dt_st_log(const char *msg)
-{
-  int fd = -1;
-  fd = _open("C:\\temp\\st_debug.log", _O_WRONLY | _O_CREAT | _O_APPEND, _S_IWRITE);
-  if(fd == -1) fd = _open("st_debug.log", _O_WRONLY | _O_CREAT | _O_APPEND, _S_IWRITE);
-  if(fd != -1) { _write(fd, msg, strlen(msg)); _write(fd, "\n", 1); _close(fd); }
-  OutputDebugStringA(msg);
-}
-#define DT_ST_LOG(msg) _dt_st_log("[DT_ST] " __FILE__ ":" DT_STRINGIFY(__LINE__) " " msg)
-/* Critical debug on Windows: shows a MessageBox so the user always sees it. */
-#define DT_ST_CRIT(msg) do { \
-    DT_ST_LOG(msg); \
-    MessageBoxA(NULL, "[DT_ST] " msg, "Spectral Tone Debug", MB_OK); \
-  } while(0)
-#else
-static void _dt_st_log(const char *msg)
-{
-  int fd = open("/tmp/st_debug.log", O_WRONLY | O_CREAT | O_APPEND, 0644);
-  if(fd != -1) { write(fd, msg, strlen(msg)); write(fd, "\n", 1); close(fd); }
-}
-#define DT_ST_LOG(msg) _dt_st_log("[DT_ST] " __FILE__ ":" DT_STRINGIFY(__LINE__) " " msg)
-#define DT_ST_CRIT(msg) DT_ST_LOG(msg)
-#endif
-
-#ifdef SPECTRAL_TONE_DEBUG
-#define DT_ST_DEBUG(msg) DT_ST_LOG(msg)
-#else
-#define DT_ST_DEBUG(msg)
-#endif
-
-/* Helper for stringification of line numbers */
-#define DT_STRINGIFY(x) DT_STRINGIFY_(x)
-#define DT_STRINGIFY_(x) #x
-
-#ifdef _WIN32
-#include <float.h>
-/* Save / restore the FP control word to mask all floating-point exceptions
- * (division by zero, invalid operation, overflow).  On Windows these raise
- * structured exceptions (SEH) that crash the process, whereas on Unix they
- * silently produce NaN/Inf and execution continues. */
-#define DT_ST_FPE_GUARD_BEGIN \
-  unsigned int _dt_st_fpe_old = _controlfp(0, 0); \
-  _controlfp(_MCW_EM, _MCW_EM)
-#define DT_ST_FPE_GUARD_END \
-  _controlfp(_dt_st_fpe_old, _MCW_EM)
-#else
-#define DT_ST_FPE_GUARD_BEGIN
-#define DT_ST_FPE_GUARD_END
-#endif
 
 #include "spectral_tone/spectral_tone.h"
-
 #include "spectral_tone/spectral_tone_data.c"
 #include "spectral_tone/spectral_tone_pipeline.c"
 
@@ -227,9 +158,6 @@ static const float *st_get_luma_coeff(dt_iop_st_colorspace_t cs)
 static void st_compute_context(dt_iop_spectral_tone_params_t *p,
                                 dt_st_context_t *ctx)
 {
-  DT_ST_DEBUG("enter");
-  DT_ST_FPE_GUARD_BEGIN;
-
   /* Auto-exposure compensation: single slider controls both SSTS tone curve
    * character and brightness. Higher spectral brilliance makes SSTS less
    * compressive, requiring positive exposure to maintain consistent perceived
@@ -308,15 +236,15 @@ static void st_compute_context(dt_iop_spectral_tone_params_t *p,
   const double rolloff_t = fmin(fmax((double)p->spectral_brilliance / 100.0, 0.0), 1.0);
   const double peak = 100.0 * pow(100.0, rolloff_t);
   dt_st_ssts_init(&ctx->ssts, peak);
-
-  DT_ST_FPE_GUARD_END;
 }
 
 /* Begin framework functions */
 
 int legacy_params(dt_iop_module_t *self,
-                  const void *const old_params, const int old_version,
-                  void **new_params, int32_t *new_params_size,
+                  const void *const old_params, 
+                  const int old_version,
+                  void **new_params, 
+                  int32_t *new_params_size,
                   int *new_version)
 {
   if(old_version == 1 || old_version == 2)
@@ -375,19 +303,22 @@ dt_iop_colorspace_type_t default_colorspace(dt_iop_module_t *self,
   return IOP_CS_RGB;
 }
 
+void init(dt_iop_module_t *self)
+{
+  dt_iop_default_init(self);
+}
+
+void cleanup(dt_iop_module_t *self)
+{
+  dt_iop_default_cleanup(self);
+}
+
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
                dt_dev_pixelpipe_iop_t *piece)
 {
-  DT_ST_DEBUG("enter");
   piece->data = dt_alloc1_align_type(dt_iop_spectral_tone_data_t);
   if(!piece->data) return;
   dt_iop_spectral_tone_data_t *d = piece->data;
-  /* Zero the whole struct so every field has a known, safe value.
-   * ctx.ssts.n = 0 acts as a sentinel: process() detects this and
-   * passes through without processing until commit_params() fires.
-   * We intentionally do NOT call st_compute_context / mat3inv here —
-   * framework matrix functions must not be called at pipe-init time
-   * on Windows (DLL loader constraints). */
   memset(d, 0, sizeof(dt_iop_spectral_tone_data_t));
   memcpy(&d->params, self->default_params, sizeof(dt_iop_spectral_tone_params_t));
 }
@@ -405,17 +336,10 @@ void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
 void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1,
                    dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  DT_ST_DEBUG("enter");
   dt_iop_spectral_tone_params_t *p = (dt_iop_spectral_tone_params_t *)p1;
   dt_iop_spectral_tone_data_t *d = piece->data;
 
-  if(!d) return;
-
-  /* Defer the heavy context computation (mat3inv, SSTS init) to process()
-   * because on Windows the DLL loader may not have resolved all framework
-   * symbols yet when commit_params is called early during the first pipe
-   * setup at startup.  The sentinel ctx.ssts.n == 0 signals process() to
-   * perform the lazy init before the first pixel is touched. */
+  st_compute_context(p, &d->ctx);
   memcpy(&d->params, p, sizeof(dt_iop_spectral_tone_params_t));
 }
 
@@ -442,25 +366,11 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   const int ch = piece->colors;
   const size_t npixels = (size_t)width * height;
 
-  DT_ST_DEBUG("enter");
 
-  /* Guard: if data is NULL (allocation failure in init_pipe) pass through */
-  if(!d)
+  if(!d || d->ctx.ssts.n <= 0.0)
   {
     memcpy(ovoid, ivoid, sizeof(float) * npixels * ch);
     return;
-  }
-
-  /* Lazy context initialisation: commit_params() has been deferred to avoid
-   * calling mat3inv / SSTS init during the Windows DLL loader's early setup
-   * phase.  We compute the context on demand here, at the very first pixel
-   * process call — by this point all framework symbols are guaranteed to be
-   * fully resolved across DLL boundaries. */
-  DT_ST_FPE_GUARD_BEGIN;
-  if(d->ctx.ssts.n <= 0.0)
-  {
-    DT_ST_DEBUG("lazy_init_context");
-    st_compute_context(&d->params, &d->ctx);
   }
 
   /* Bounds check: color_looks has 11 entries (0–10).
@@ -530,15 +440,12 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     out[idx + 2] = rgb_out[2];
     if(ch == 4) out[idx + 3] = in[idx + 3];
   }
-  DT_ST_FPE_GUARD_END;
 }
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  DT_ST_CRIT("init_presets: enter — MessageBox means DLL loaded + init_presets reached");
   self->pref_based_presets = TRUE;
 
-  DT_ST_DEBUG("bef_config_access");
   const char *workflow = dt_conf_get_string_const("plugins/darkroom/workflow");
   const gboolean auto_apply_st = workflow && strcmp(workflow, "scene-referred (spectral tone)") == 0;
 
@@ -559,7 +466,6 @@ void init_presets(dt_iop_module_so_t *self)
 
   if(auto_apply_st)
   {
-    DT_ST_DEBUG("bef_add_preset_scene");
     dt_gui_presets_add_generic(_("scene-referred default"), self->op,
                                 self->version(),
                                 &p, sizeof(p),
@@ -572,12 +478,10 @@ void init_presets(dt_iop_module_so_t *self)
                                     self->op, self->version(), TRUE);
   }
 
-  DT_ST_DEBUG("bef_add_preset_default");
   dt_gui_presets_add_generic(_("default spectral tone"), self->op,
                               self->version(),
                               &p, sizeof(p),
                               TRUE, DEVELOP_BLEND_CS_RGB_SCENE);
-  DT_ST_DEBUG("end");
 }
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker,
