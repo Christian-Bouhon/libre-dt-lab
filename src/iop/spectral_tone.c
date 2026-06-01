@@ -656,18 +656,46 @@ int legacy_params(dt_iop_module_t *self,
       float look_opacity;
     } dt_iop_spectral_tone_params_v2_t;
 
-    /* MUST use g_malloc0, NOT calloc. darktable frees *new_params with g_free().
-     * On Windows, g_free(calloc(...)) mixes two separate heap allocators,
-     * silently corrupting the heap → crash at end of _init_presets_actions. */
+    typedef struct dt_iop_spectral_tone_params_v1_t
+    {
+      float contrast, gray_point, vibrance, spectral_brilliance;
+      float hl_hue_shift, hl_desaturation, gamut_knee, gamut_steepness;
+      int output_cs;
+    } dt_iop_spectral_tone_params_v1_t;
+
     dt_iop_spectral_tone_params_t *n = g_malloc0(sizeof(dt_iop_spectral_tone_params_t));
+    if(!n) return 1;
+
     if(old_version == 1)
     {
-      memcpy(n, old_params, 8 * sizeof(float) + sizeof(int));
+      const dt_iop_spectral_tone_params_v1_t *o = (const dt_iop_spectral_tone_params_v1_t*)old_params;
+      n->contrast = o->contrast;
+      n->gray_point = o->gray_point;
+      n->vibrance = o->vibrance;
+      n->spectral_brilliance = o->spectral_brilliance;
+      n->hl_hue_shift = o->hl_hue_shift;
+      n->hl_desaturation = o->hl_desaturation;
+      n->gamut_knee = o->gamut_knee;
+      n->gamut_steepness = o->gamut_steepness;
+      n->output_cs = (dt_iop_st_colorspace_t)o->output_cs;
       n->color_look = DT_ST_LOOK_NEUTRAL;
       n->look_opacity = 1.0f;
     }
-    else // v2
-      memcpy(n, old_params, sizeof(dt_iop_spectral_tone_params_v2_t));
+    else /* v2 */
+    {
+      const dt_iop_spectral_tone_params_v2_t *o = (const dt_iop_spectral_tone_params_v2_t*)old_params;
+      n->contrast = o->contrast;
+      n->gray_point = o->gray_point;
+      n->vibrance = o->vibrance;
+      n->spectral_brilliance = o->spectral_brilliance;
+      n->hl_hue_shift = o->hl_hue_shift;
+      n->hl_desaturation = o->hl_desaturation;
+      n->gamut_knee = o->gamut_knee;
+      n->gamut_steepness = o->gamut_steepness;
+      n->output_cs = (dt_iop_st_colorspace_t)o->output_cs;
+      n->color_look = (dt_iop_st_look_t)o->color_look;
+      n->look_opacity = o->look_opacity;
+    }
 
     n->contrast_pivot = 0.5f;
     *new_params = n;
@@ -944,7 +972,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->contrast, " %");
   dt_bauhaus_slider_set_digits(g->contrast, 0);
   gtk_widget_set_tooltip_text(g->contrast,
-    _("S-curve contrast pivoted at mid-gray. -100% = minimum contrast, /n"
+    _("S-curve contrast pivoted at mid-gray. -100% = minimum contrast, \n"
       "0% = neutral, +100% = maximum. Negative values soften, positive values sharpen."));
 
   g->contrast_pivot = dt_bauhaus_slider_from_params(self, "contrast_pivot");
