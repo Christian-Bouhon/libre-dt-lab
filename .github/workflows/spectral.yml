@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - main
+      - spectral_tone
 
 permissions:
   contents: read
