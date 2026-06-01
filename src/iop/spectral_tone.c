@@ -585,7 +585,23 @@ static void st_compute_context(dt_iop_spectral_tone_params_t *p,
   {
     float M_in_ws[9];
     for(int i = 0; i < 9; i++) M_in_ws[i] = ctx->input_matrix[i];
-    mat3inv(ctx->output_matrix, M_in_ws);
+    
+    /* Guard: check determinant before inversion */
+    float det = M_in_ws[0] * (M_in_ws[4] * M_in_ws[8] - M_in_ws[5] * M_in_ws[7])
+              - M_in_ws[1] * (M_in_ws[3] * M_in_ws[8] - M_in_ws[5] * M_in_ws[6])
+              + M_in_ws[2] * (M_in_ws[3] * M_in_ws[7] - M_in_ws[4] * M_in_ws[6]);
+    
+    if(fabsf(det) < 1e-10f)
+    {
+      /* Fallback identity matrix if inversion would fail */
+      ctx->output_matrix[0] = ctx->output_matrix[4] = ctx->output_matrix[8] = 1.0f;
+      ctx->output_matrix[1] = ctx->output_matrix[2] = ctx->output_matrix[3] = 0.0f;
+      ctx->output_matrix[5] = ctx->output_matrix[6] = ctx->output_matrix[7] = 0.0f;
+    }
+    else
+    {
+      mat3inv(ctx->output_matrix, M_in_ws);
+    }
   }
 
   /* Luma coefficients matching the output color space */
@@ -748,14 +764,12 @@ void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
   piece->data = dt_alloc1_align_type(dt_iop_spectral_tone_data_t);
   if(!piece->data) return;
   dt_iop_spectral_tone_data_t *d = piece->data;
-  /* Zero the whole struct so every field has a known, safe value.
-   * ctx.ssts.n = 0 acts as a sentinel: process() detects this and
-   * passes through without processing until commit_params() fires.
-   * We intentionally do NOT call st_compute_context / mat3inv here —
-   * framework matrix functions must not be called at pipe-init time
-   * on Windows (DLL loader constraints). */
   memset(d, 0, sizeof(dt_iop_spectral_tone_data_t));
   memcpy(&d->params, self->default_params, sizeof(dt_iop_spectral_tone_params_t));
+  
+  /* Initialise le contexte avec les params par défaut MAINTENANT, 
+     pas plus tard au commit. Évite les race conditions sous Windows. */
+  st_compute_context(&d->params, &d->ctx);
 }
 
 void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
