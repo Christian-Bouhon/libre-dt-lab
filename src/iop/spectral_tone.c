@@ -81,24 +81,25 @@ typedef enum dt_iop_st_colorspace_t
   DT_ST_CS_ADOBERGB,      // $DESCRIPTION: "Adobe RGB"
 } dt_iop_st_colorspace_t;
 
-/* Using a proper enum (not int) is MANDATORY for dt_bauhaus_combobox_from_params.
- * from_params uses introspection to populate items from $DESCRIPTION annotations.
- * With a plain int, the combobox is created EMPTY, then from_params tries to set
- * the default index on an empty list — safe on Linux (silent no-op), crash on
- * Windows (GTK asserts or out-of-bounds access in the native list widget). */
+/* MUST be a proper enum, NOT int.
+ * dt_bauhaus_combobox_from_params uses introspection: for a plain int it creates
+ * an empty combobox and immediately tries to set the default index on it.
+ * Setting index 0 on an empty combobox is a silent no-op on Linux/GTK but
+ * an assertion failure or out-of-bounds access on Windows/GTK → crash at
+ * module mount, before any image is loaded. */
 typedef enum dt_iop_st_look_t
 {
-  DT_ST_LOOK_NEUTRAL = 0,      // $DESCRIPTION: "neutral"
-  DT_ST_LOOK_NATURAL,          // $DESCRIPTION: "natural look"
-  DT_ST_LOOK_PORTRAIT,         // $DESCRIPTION: "portrait"
-  DT_ST_LOOK_VIBRANT,          // $DESCRIPTION: "vibrant"
-  DT_ST_LOOK_NATURE,           // $DESCRIPTION: "nature"
-  DT_ST_LOOK_BLUESKY,          // $DESCRIPTION: "blue sky"
-  DT_ST_LOOK_SOFTWARM,         // $DESCRIPTION: "soft warm"
-  DT_ST_LOOK_SOFT,             // $DESCRIPTION: "soft"
-  DT_ST_LOOK_DEEPCOOL,         // $DESCRIPTION: "deep cool"
-  DT_ST_LOOK_CINEMA,           // $DESCRIPTION: "authentic cinema"
-  DT_ST_LOOK_BRIGHT,           // $DESCRIPTION: "bright atmosphere"
+  DT_ST_LOOK_NEUTRAL = 0,    // $DESCRIPTION: "neutral"
+  DT_ST_LOOK_NATURAL,        // $DESCRIPTION: "natural look"
+  DT_ST_LOOK_PORTRAIT,       // $DESCRIPTION: "portrait"
+  DT_ST_LOOK_VIBRANT,        // $DESCRIPTION: "vibrant"
+  DT_ST_LOOK_NATURE,         // $DESCRIPTION: "nature"
+  DT_ST_LOOK_BLUESKY,        // $DESCRIPTION: "blue sky"
+  DT_ST_LOOK_SOFTWARM,       // $DESCRIPTION: "soft warm"
+  DT_ST_LOOK_SOFT,           // $DESCRIPTION: "soft"
+  DT_ST_LOOK_DEEPCOOL,       // $DESCRIPTION: "deep cool"
+  DT_ST_LOOK_CINEMA,         // $DESCRIPTION: "authentic cinema"
+  DT_ST_LOOK_BRIGHT,         // $DESCRIPTION: "bright atmosphere"
 } dt_iop_st_look_t;
 
 typedef struct dt_iop_spectral_tone_params_t
@@ -657,8 +658,7 @@ int legacy_params(dt_iop_module_t *self,
 
     /* MUST use g_malloc0, NOT calloc. darktable frees *new_params with g_free().
      * On Windows, g_free(calloc(...)) mixes two separate heap allocators,
-     * silently corrupting the heap and crashing several operations later
-     * (typically at the end of _init_presets_actions — no log, no stack trace). */
+     * silently corrupting the heap → crash at end of _init_presets_actions. */
     dt_iop_spectral_tone_params_t *n = g_malloc0(sizeof(dt_iop_spectral_tone_params_t));
     if(old_version == 1)
     {
@@ -909,11 +909,6 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker,
   (void)pipe;
 }
 
-/* Forward declaration: gui_update calls gui_changed which is defined later.
- * Without this, C treats it as an implicit int() — undefined behaviour,
- * crash on Windows. */
-static void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous);
-
 void gui_update(dt_iop_module_t *self)
 {
   dt_iop_spectral_tone_gui_data_t *g = self->gui_data;
@@ -985,11 +980,9 @@ void gui_init(dt_iop_module_t *self)
       "highlight headroom with a softer, film-like rolloff. Brightness is automatically \n"
       "stabilised across the full range."));
 
-  /* color_look is now a dt_iop_st_look_t enum with $DESCRIPTION annotations.
-   * dt_bauhaus_combobox_from_params reads the introspection data and populates
-   * all 11 entries automatically — NO manual combobox_add calls needed.
-   * This eliminates the Windows crash caused by from_params trying to set the
-   * default index on an empty combobox (empty because it was a plain int). */
+  /* color_look est maintenant un enum dt_iop_st_look_t avec $DESCRIPTION sur chaque
+   * valeur. dt_bauhaus_combobox_from_params lit l'introspection et peuple les 11
+   * entrées automatiquement — aucun combobox_add manuel nécessaire. */
   g->color_look = dt_bauhaus_combobox_from_params(self, "color_look");
   gtk_widget_set_tooltip_text(g->color_look, _("Apply a color style to the image."));
 
@@ -1047,12 +1040,14 @@ void gui_init(dt_iop_module_t *self)
 
 void gui_cleanup(dt_iop_module_t *self)
 {
-  /* IOP_GUI_ALLOC uses GLib's g_malloc0. MUST match with IOP_GUI_FREE (g_free).
-   * free(g_malloc(...)) mixes CRT and GLib heaps on Windows → heap corruption. */
-  IOP_GUI_FREE;
+  /* IOP_GUI_ALLOC uses GLib's g_malloc0. MUST free with g_free, NOT free().
+   * On Windows, free(g_malloc(...)) mixes CRT and GLib heaps → heap corruption.
+   * IOP_GUI_FREE is not defined in this fork — expand it manually. */
+  g_free(self->gui_data);
+  self->gui_data = NULL;
 }
 
-static void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
+void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_spectral_tone_gui_data_t *g = self->gui_data;
   dt_iop_spectral_tone_params_t *p = self->params;
