@@ -81,6 +81,26 @@ typedef enum dt_iop_st_colorspace_t
   DT_ST_CS_ADOBERGB,      // $DESCRIPTION: "Adobe RGB"
 } dt_iop_st_colorspace_t;
 
+/* Using a proper enum (not int) is MANDATORY for dt_bauhaus_combobox_from_params.
+ * from_params uses introspection to populate items from $DESCRIPTION annotations.
+ * With a plain int, the combobox is created EMPTY, then from_params tries to set
+ * the default index on an empty list — safe on Linux (silent no-op), crash on
+ * Windows (GTK asserts or out-of-bounds access in the native list widget). */
+typedef enum dt_iop_st_look_t
+{
+  DT_ST_LOOK_NEUTRAL = 0,      // $DESCRIPTION: "neutral"
+  DT_ST_LOOK_NATURAL,          // $DESCRIPTION: "natural look"
+  DT_ST_LOOK_PORTRAIT,         // $DESCRIPTION: "portrait"
+  DT_ST_LOOK_VIBRANT,          // $DESCRIPTION: "vibrant"
+  DT_ST_LOOK_NATURE,           // $DESCRIPTION: "nature"
+  DT_ST_LOOK_BLUESKY,          // $DESCRIPTION: "blue sky"
+  DT_ST_LOOK_SOFTWARM,         // $DESCRIPTION: "soft warm"
+  DT_ST_LOOK_SOFT,             // $DESCRIPTION: "soft"
+  DT_ST_LOOK_DEEPCOOL,         // $DESCRIPTION: "deep cool"
+  DT_ST_LOOK_CINEMA,           // $DESCRIPTION: "authentic cinema"
+  DT_ST_LOOK_BRIGHT,           // $DESCRIPTION: "bright atmosphere"
+} dt_iop_st_look_t;
+
 typedef struct dt_iop_spectral_tone_params_t
 {
   float contrast;              // $MIN: 0.25 $MAX: 4.25 $DEFAULT: 2.25 $DESCRIPTION: "contrast"
@@ -92,7 +112,7 @@ typedef struct dt_iop_spectral_tone_params_t
   float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.15 $DESCRIPTION: "gamut knee"
   float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "gamut steepness"
   dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "color space"
-  int color_look;              // $DEFAULT: 0 $DESCRIPTION: "color look"
+  dt_iop_st_look_t color_look;       // $DEFAULT: DT_ST_LOOK_NEUTRAL $DESCRIPTION: "color look"
   float look_opacity;          // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "look opacity"
   float contrast_pivot;        // $MIN: 0.01 $MAX: 0.99 $DEFAULT: 0.5 $DESCRIPTION: "contrast pivot"
 } dt_iop_spectral_tone_params_t;
@@ -635,11 +655,15 @@ int legacy_params(dt_iop_module_t *self,
       float look_opacity;
     } dt_iop_spectral_tone_params_v2_t;
 
-    dt_iop_spectral_tone_params_t *n = calloc(1, sizeof(dt_iop_spectral_tone_params_t));
+    /* MUST use g_malloc0, NOT calloc. darktable frees *new_params with g_free().
+     * On Windows, g_free(calloc(...)) mixes two separate heap allocators,
+     * silently corrupting the heap and crashing several operations later
+     * (typically at the end of _init_presets_actions — no log, no stack trace). */
+    dt_iop_spectral_tone_params_t *n = g_malloc0(sizeof(dt_iop_spectral_tone_params_t));
     if(old_version == 1)
     {
       memcpy(n, old_params, 8 * sizeof(float) + sizeof(int));
-      n->color_look = 0;
+      n->color_look = DT_ST_LOOK_NEUTRAL;
       n->look_opacity = 1.0f;
     }
     else // v2
@@ -885,6 +909,11 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker,
   (void)pipe;
 }
 
+/* Forward declaration: gui_update calls gui_changed which is defined later.
+ * Without this, C treats it as an implicit int() — undefined behaviour,
+ * crash on Windows. */
+static void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous);
+
 void gui_update(dt_iop_module_t *self)
 {
   dt_iop_spectral_tone_gui_data_t *g = self->gui_data;
@@ -920,7 +949,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->contrast, " %");
   dt_bauhaus_slider_set_digits(g->contrast, 0);
   gtk_widget_set_tooltip_text(g->contrast,
-    _("S-curve contrast pivoted at mid-gray. -100% = minimum contrast, "
+    _("S-curve contrast pivoted at mid-gray. -100% = minimum contrast, /n"
       "0% = neutral, +100% = maximum. Negative values soften, positive values sharpen."));
 
   g->contrast_pivot = dt_bauhaus_slider_from_params(self, "contrast_pivot");
@@ -929,7 +958,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->contrast_pivot, " %");
   dt_bauhaus_slider_set_digits(g->contrast_pivot, 0);
   gtk_widget_set_tooltip_text(g->contrast_pivot,
-    _("Pivot point for the contrast S-curve. Higher values (right) shift the fulcrum towards "
+    _("Pivot point for the contrast S-curve. Higher values (right) shift the fulcrum towards \n"
       "shadows, brightening the image. Lower values (left) shift it towards highlights, darkening it."));
 
   g->mid_tone = dt_bauhaus_slider_from_params(self, "gray_point");
@@ -937,7 +966,8 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->mid_tone, " %");
   dt_bauhaus_slider_set_digits(g->mid_tone, 0);
   gtk_widget_set_tooltip_text(g->mid_tone,
-    _("Mid-tone brightness adjustment (gamma). Moving to the right (+100%) brightens mid-tones, "
+    _("Mid-tone brightness adjustment (gamma). \n"
+      "Moving to the right (+100%) brightens mid-tones, \n"
       "moving to the left (-100%) darkens them."));
 
   g->vibrance = dt_bauhaus_slider_from_params(self, "vibrance");
@@ -951,23 +981,16 @@ void gui_init(dt_iop_module_t *self)
     g->spectral_brilliance = dt_bauhaus_slider_from_params(self, "spectral_brilliance");
   dt_bauhaus_slider_set_format(g->spectral_brilliance, "%");
   gtk_widget_set_tooltip_text(g->spectral_brilliance,
-    _("Tone curve character with auto-exposure compensation. Higher values increase "
-      "highlight headroom with a softer, film-like rolloff. Brightness is automatically "
+    _("Tone curve character with auto-exposure compensation. Higher values increase \n"
+      "highlight headroom with a softer, film-like rolloff. Brightness is automatically \n"
       "stabilised across the full range."));
 
+  /* color_look is now a dt_iop_st_look_t enum with $DESCRIPTION annotations.
+   * dt_bauhaus_combobox_from_params reads the introspection data and populates
+   * all 11 entries automatically — NO manual combobox_add calls needed.
+   * This eliminates the Windows crash caused by from_params trying to set the
+   * default index on an empty combobox (empty because it was a plain int). */
   g->color_look = dt_bauhaus_combobox_from_params(self, "color_look");
-  dt_bauhaus_widget_set_label(g->color_look, NULL, _("color look"));
-  dt_bauhaus_combobox_add(g->color_look, _("neutral"));
-  dt_bauhaus_combobox_add(g->color_look, _("natural look"));
-  dt_bauhaus_combobox_add(g->color_look, _("portrait"));
-  dt_bauhaus_combobox_add(g->color_look, _("vibrant"));
-  dt_bauhaus_combobox_add(g->color_look, _("nature"));
-  dt_bauhaus_combobox_add(g->color_look, _("blue sky"));
-  dt_bauhaus_combobox_add(g->color_look, _("soft warm"));
-  dt_bauhaus_combobox_add(g->color_look, _("soft"));
-  dt_bauhaus_combobox_add(g->color_look, _("deep cool"));
-  dt_bauhaus_combobox_add(g->color_look, _("authentic cinema"));
-  dt_bauhaus_combobox_add(g->color_look, _("bright atmosphere"));
   gtk_widget_set_tooltip_text(g->color_look, _("Apply a color style to the image."));
 
   g->look_opacity = dt_bauhaus_slider_from_params(self, "look_opacity");
@@ -990,7 +1013,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->hl_hue_shift, " %");
   dt_bauhaus_slider_set_digits(g->hl_hue_shift, 0);
   gtk_widget_set_tooltip_text(g->hl_hue_shift,
-    _("Abney hue shift in highlights. Positive rotates toward cool (blue), "
+    _("Abney hue shift in highlights. Positive rotates toward cool (blue), \n"
       "negative toward warm (salmon). Independent of desaturation strength."));
 
   g->hl_desaturation = dt_bauhaus_slider_from_params(self, "hl_desaturation");
@@ -998,7 +1021,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->hl_desaturation, " %");
   dt_bauhaus_slider_set_digits(g->hl_desaturation, 0);
   gtk_widget_set_tooltip_text(g->hl_desaturation,
-    _("Desaturates highlights toward achromatic luma to prevent out-of-gamut colors. "
+    _("Desaturates highlights toward achromatic luma to prevent out-of-gamut colors. \n"
       "0% = off, 15% = natural rolloff, 100% = maximum desaturation."));
 
   g->gamut_knee = dt_bauhaus_slider_from_params(self, "gamut_knee");
@@ -1024,18 +1047,19 @@ void gui_init(dt_iop_module_t *self)
 
 void gui_cleanup(dt_iop_module_t *self)
 {
-  free(self->gui_data);
-  self->gui_data = NULL;
+  /* IOP_GUI_ALLOC uses GLib's g_malloc0. MUST match with IOP_GUI_FREE (g_free).
+   * free(g_malloc(...)) mixes CRT and GLib heaps on Windows → heap corruption. */
+  IOP_GUI_FREE;
 }
 
-void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
+static void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_spectral_tone_gui_data_t *g = self->gui_data;
   dt_iop_spectral_tone_params_t *p = self->params;
 
   if(!w || w == g->color_look)
   {
-    gtk_widget_set_visible(g->look_opacity, p->color_look > 0);
+    gtk_widget_set_visible(g->look_opacity, p->color_look > DT_ST_LOOK_NEUTRAL);
   }
 }
 
