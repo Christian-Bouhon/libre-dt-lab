@@ -70,8 +70,6 @@
  * spectral_tone_data.c and spectral_tone_pipeline.c have been merged
  * into this single translation unit for Windows/MinGW compatibility. */
 
-DT_MODULE_INTROSPECTION(3, dt_iop_spectral_tone_params_t)
-
 typedef enum dt_iop_st_colorspace_t
 {
   DT_ST_CS_REC709 = 0,    // $DESCRIPTION: "Rec. 709"
@@ -735,13 +733,8 @@ dt_iop_colorspace_type_t default_colorspace(dt_iop_module_t *self,
 
 void init(dt_iop_module_t *self)
 {
-  /* Allocate self->params and copy defaults into it.
-   * This is mandatory in darktable 4.x: without it self->params is an
-   * uninitialised pointer. gui_init(), gui_update() and commit_params()
-   * all dereference self->params — a NULL or garbage pointer crashes
-   * darktable at module-mount time on Windows (hard crash, no log)
-   * while Linux may accidentally survive due to lazy page allocation. */
   dt_iop_default_init(self);
+  g_assert(self->default_params != NULL);
 }
 
 void cleanup(dt_iop_module_t *self)
@@ -1085,6 +1078,8 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     gtk_widget_set_visible(g->look_opacity, p->color_look > DT_ST_LOOK_NEUTRAL);
   }
 }
+
+DT_MODULE_INTROSPECTION(3, dt_iop_spectral_tone_params_t)
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
