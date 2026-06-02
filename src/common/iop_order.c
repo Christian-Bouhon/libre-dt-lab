@@ -749,7 +749,7 @@ void dt_ioppr_migrate_legacy_iop_order_list(GList *iop_order_list)
   _insert_before(iop_order_list, "colorbalancergb", "colorequal");
   _insert_before(iop_order_list, "highlights", "rasterfile");
   _insert_before(iop_order_list, "colorbalance", "colorharmonizer");
-  _insert_before(iop_order_list, "filmic", "spectral_tone");
+  _insert_before(iop_order_list, "filmicrgb", "spectral_tone");
 }
 
 static dt_iop_order_t _ioppr_get_default_iop_order_version(const dt_imgid_t imgid)
