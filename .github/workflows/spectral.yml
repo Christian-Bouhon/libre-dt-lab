@@ -22,7 +22,7 @@ jobs:
       matrix:
         os: [ubuntu-22.04, ubuntu-24.04-arm]
         branch:
-          - { code: spectral_tone, label: spectral }
+          - { code: master, label: gitmaster }
         include:
           - os: ubuntu-22.04
             compiler: { compiler: GNU12, CC: gcc-12, CXX: g++-12, packages: gcc-12 g++-12 }
@@ -159,7 +159,7 @@ jobs:
       - name: Cancel workflow if job fails
         if: ${{ failure() }}
         uses: andymckay/cancel-action@0.5
-      - name: Checkout darktable branch
+      - name: Checkout darktable master branch
         run: |
           # Note that we can't make a shallow clone to reduce clone traffic and time, as we have to
           # fetch the entire history to correctly generate the version for the AppImage filename
@@ -392,7 +392,7 @@ jobs:
       GENERATOR: ${{ matrix.generator }}
       TARGET: ${{ matrix.target }}
     steps:
-      - name: Checkout darktable branch
+      - name: Checkout darktable master branch
         run: |
           # Note that we can't make a shallow clone to reduce clone traffic and time, as we have to
           # fetch the entire history to correctly generate the version for the disk image filename
@@ -409,20 +409,11 @@ jobs:
           cd src/.ci
           export HOMEBREW_NO_INSTALL_UPGRADE=1
           brew bundle --quiet || true
-cosx/3_make_hb_libre-dt-lab_package.sh
-      - name: Create DMG file
-        run: |
-          ./src/packaging/ma
+
           # rebuild graphicsmagick for macOS bundling
           export HOMEBREW_NO_INSTALL_FROM_API=1
           brew developer on
-          gm_formula=`brcosx/3_make_hb_libre-dt-lab_package.sh
-      - name: Create DMGcosx/3_make_hb_libre-dt-lab_package.sh
-      - name: Create DMG file
-        run: |
-          ./src/packaging/ma file
-        run: |
-          ./src/packaging/maew edit --quiet --print-path graphicsmagick`
+          gm_formula=`brew edit --quiet --print-path graphicsmagick`
           cat $gm_formula | sed 's/--with-modules/--disable-installed/1' > gm_formula.tmp
           mv gm_formula.tmp $gm_formula
           brew reinstall --build-from-source --force --quiet graphicsmagick
@@ -439,10 +430,7 @@ cosx/3_make_hb_libre-dt-lab_package.sh
           echo "Testing libre-dt-lab executable..."
           ls -la ${INSTALL_PREFIX}/bin/
           ${INSTALL_PREFIX}/bin/libre-dt-lab --version || echo "Version check failed (expected on headless)"
-        continue-on-error: tcosx/3_make_hb_libre-dt-lab_package.sh
-      - name: Create DMG file
-        run: |
-          ./src/packaging/marue
+        continue-on-error: true
       - name: Build macOS package
         run: |
           ./src/packaging/macosx/3_make_hb_libre-dt-lab_package.sh
@@ -452,10 +440,7 @@ cosx/3_make_hb_libre-dt-lab_package.sh
       - name: Package upload
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ env.INSTs/checkout@v6
-        with:
-          ref: master
-          submodulesALL_PREFIX }}/libre-dt-lab-*.dmg
+          path: ${{ env.INSTALL_PREFIX }}/libre-dt-lab-*.dmg
           name: artifact-macos-${{ runner.arch }}
           retention-days: 2
 
@@ -466,16 +451,16 @@ cosx/3_make_hb_libre-dt-lab_package.sh
     runs-on: ubuntu-latest
     needs: [AppImage, Windows, macOS]
     steps:
-      - name: Checkout spectral_tone to update 'Spectral' tag
-        if: github.ref_name == 'spectral_tone' # will be true only for Spectral builds
+      - name: Checkout master to update 'Spectral' tag
+        if: github.ref_name == 'master' # will be true only for Spectral builds
         uses: actions/checkout@v6
         with:
-          ref: spectral_tone
+          ref: master
           submodules: false
           path: src
           fetch-depth: 1
       - name: Force move 'Spectral' tag
-        if: github.ref_name == 'spectral_tone' # will be true only for Spectral builds
+        if: github.ref_name == 'master' # will be true only for Spectral builds
         run: |
           pushd src
           # Delete and recreate Spectral tag instead of just force retargeting.
@@ -484,7 +469,7 @@ cosx/3_make_hb_libre-dt-lab_package.sh
           git tag -d Spectral || true
           git push origin --delete Spectral
           git tag Spectral
-          git push origin Spectral
+          git push origin spectral_tone
           popd
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -502,14 +487,14 @@ cosx/3_make_hb_libre-dt-lab_package.sh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          allowUpdates: true     # required to allow Main release updates
-          removeArtifacts: true  # we don't want to pile up old artifacts in the Main release
+          allowUpdates: true     # required to allow Spectral release updates
+          removeArtifacts: true  # we don't want to pile up old artifacts in the Spectral release
           tag: Spectral
           prerelease: true
           # We don't want a stable release that is in the process of being prepared
           # and not yet ready for publication to be visible
           draft: ${{ startsWith(github.ref, 'refs/tags/') }}
-          name: 'Libre DT-Lab "Spectral build" ${{ env.RELEASE_DATE }}'
+          name: 'Libre DT-Lab "experimental build" ${{ env.RELEASE_DATE }}'
           # Please do not modify the body text by adding line breaks in paragraphs, as this text should display well on screens of different widths
           body: |
             This is a experimental version of the darktable raw development software. This fork serves as a development lab for exploring new approaches to the photographic workflow. It includes specific modules and modifications to existing tools that are not part of the official release.
