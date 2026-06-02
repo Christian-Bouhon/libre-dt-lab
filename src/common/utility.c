@@ -1218,7 +1218,8 @@ gboolean dt_is_scene_referred(void)
   return dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (filmic)")
     || dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (sigmoid)")
     || dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (AgX)")
-    || dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (basecurve)");
+    || dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (basecurve)")
+    || dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (spectral tone)");
 }
 
 gboolean dt_is_display_referred(void)

@@ -63,6 +63,7 @@ Contrast is modeled through three complementary components:
 #include "common/darktable.h"
 #include "common/fast_guided_filter.h"
 #include "common/eigf.h"
+#include "common/imagebuf.h"
 #include "common/luminance_mask.h"
 #include "control/conf.h"
 #include "control/control.h"
@@ -85,12 +86,6 @@ Contrast is modeled through three complementary components:
 #ifdef _OPENMP
 #include <omp.h>
 #endif
-
-static inline float dt_smoothstep(const float edge0, const float edge1, const float x)
-{
-  const float t = CLAMP((fabsf(x) - edge0) / fmaxf(edge1 - edge0, 1e-6f), 0.0f, 1.0f);
-  return t * t * (3.0f - 2.0f * t);
-}
 
 DT_MODULE_INTROSPECTION(1, dt_iop_contrast_params_t)
 
@@ -351,15 +346,22 @@ static inline void apply_local_contrast(const float *const restrict in,
   for(size_t k = 0; k < npixels; k++)
   {
     const float lum_pixel = fmaxf(luminance_pixel[k], MIN_FLOAT);
-    const float lum_smoothed = fmaxf(luminance_smoothed[k], MIN_FLOAT);
+
+    // The correction is the sum of (gain - 1) * detail for each scale
+    float correction_ev = 0.0f;
 
     // Detail in log space (EV): how much brighter/darker is this pixel
     // compared to its local neighborhood
     // detail = log2(pixel_lum / smoothed_lum) = log2(pixel_lum) - log2(smoothed_lum)
-    const float local_ev = log2f(lum_pixel / lum_smoothed);
-
-    // The correction is the sum of (gain - 1) * detail for each scale
-    float correction_ev = (gain_local - 1.0f) * local_ev;
+    // luminance_smoothed (local scale) is only computed when local_scale != 1.0;
+    // when it is NULL the local term is exactly 0 (gain_local == 1.0), so we skip
+    // it instead of reading an uninitialised buffer.
+    if(luminance_smoothed)
+    {
+      const float lum_smoothed = fmaxf(luminance_smoothed[k], MIN_FLOAT);
+      const float local_ev = log2f(lum_pixel / lum_smoothed);
+      correction_ev += (gain_local - 1.0f) * local_ev;
+    }
 
     if(luminance_smoothed_coarse)
     {
@@ -533,10 +535,18 @@ static void spatial_contrast_process(dt_iop_module_t *self,
   // Get the hash of the upstream pipe to track changes
   const dt_hash_t hash = dt_dev_pixelpipe_piece_hash(piece, roi_out, TRUE);
 
-  // Sanity checks
+  // Sanity checks — none of these are expected in a correct pipe.
   if(width < 1 || height < 1) return;
-  if(roi_in->width < roi_out->width || roi_in->height < roi_out->height) return;
-  if(piece->colors != 4) return;
+  // For the remaining bail-outs, pass the image through unchanged rather than
+  // leaving the output buffer uninitialised, but only when the geometry matches
+  // (otherwise a copy would read out of bounds).
+  if(roi_in->width < roi_out->width || roi_in->height < roi_out->height
+     || piece->colors != 4)
+  {
+    if(roi_in->width == roi_out->width && roi_in->height == roi_out->height)
+      dt_iop_image_copy_by_size(ovoid, ivoid, roi_out->width, roi_out->height, piece->colors);
+    return;
+  }
 
   // Init the luminance mask buffers
   gboolean cached = FALSE;
@@ -680,6 +690,13 @@ static void spatial_contrast_process(dt_iop_module_t *self,
         if(d->micro_scale != 1.0f || g->mask_display == DT_LC_MASK_MICRO)
           compute_smoothed_luminance_mask(in, luminance_smoothed_micro, width, height, d, d->radius_micro, base_eps * fmaxf(d->f_mult_micro, 0.5f));
         hash_set_get(&hash, &g->ui_preview_hash, &self->gui_lock);
+
+        // Mark the cache valid for this (full) pipe as well. Previously only the
+        // PREVIEW branch set this flag, so the full pipe recomputed all five EIGF
+        // passes on every interaction until the preview pipe happened to run.
+        dt_iop_gui_enter_critical_section(self);
+        g->luminance_valid = TRUE;
+        dt_iop_gui_leave_critical_section(self);
       }
     }
     else if(piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW)
@@ -756,7 +773,8 @@ static void spatial_contrast_process(dt_iop_module_t *self,
   }
   else
   {
-    apply_local_contrast(in, luminance_pixel, luminance_smoothed, 
+    apply_local_contrast(in, luminance_pixel,
+                         d->local_scale != 1.0f ? luminance_smoothed : NULL,
                          d->coarse_scale != 1.0f ? luminance_smoothed_coarse : NULL,
                          d->broad_scale != 1.0f ? luminance_smoothed_broad : NULL,
                          d->fine_scale != 1.0f ? luminance_smoothed_fine : NULL,
@@ -775,15 +793,150 @@ static void spatial_contrast_process(dt_iop_module_t *self,
   }
 }
 
+#ifdef HAVE_OPENCL
+typedef struct dt_iop_contrast_global_data_t
+{
+  dt_eigf_cl_t eigf;       // shared EIGF kernels (eigf.cl, program 43)
+  int kernel_luminance;    // contrast.cl (program 44)
+  int kernel_apply;
+} dt_iop_contrast_global_data_t;
+#endif
+
 void init_global(dt_iop_module_so_t *self)
 {
+#ifdef HAVE_OPENCL
+  const int program_eigf = 43;     // eigf.cl, from programs.conf
+  const int program_contrast = 44; // contrast.cl, from programs.conf
+  dt_iop_contrast_global_data_t *gd = malloc(sizeof(dt_iop_contrast_global_data_t));
+  self->data = gd;
+  gd->eigf.bilinear1       = dt_opencl_create_kernel(program_eigf, "eigf_bilinear1");
+  gd->eigf.bilinear2       = dt_opencl_create_kernel(program_eigf, "eigf_bilinear2");
+  gd->eigf.build_moments   = dt_opencl_create_kernel(program_eigf, "eigf_build_moments");
+  gd->eigf.finish_variance = dt_opencl_create_kernel(program_eigf, "eigf_finish_variance");
+  gd->eigf.blending        = dt_opencl_create_kernel(program_eigf, "eigf_blending_no_mask");
+  gd->kernel_luminance     = dt_opencl_create_kernel(program_contrast, "contrast_luminance");
+  gd->kernel_apply         = dt_opencl_create_kernel(program_contrast, "contrast_apply");
+#else
   self->data = NULL;
+#endif
 }
 
 void cleanup_global(dt_iop_module_so_t *self)
 {
+#ifdef HAVE_OPENCL
+  dt_iop_contrast_global_data_t *gd = self->data;
+  if(gd)
+  {
+    dt_opencl_free_kernel(gd->eigf.bilinear1);
+    dt_opencl_free_kernel(gd->eigf.bilinear2);
+    dt_opencl_free_kernel(gd->eigf.build_moments);
+    dt_opencl_free_kernel(gd->eigf.finish_variance);
+    dt_opencl_free_kernel(gd->eigf.blending);
+    dt_opencl_free_kernel(gd->kernel_luminance);
+    dt_opencl_free_kernel(gd->kernel_apply);
+    free(self->data);
+  }
+#endif
   self->data = NULL;
 }
+
+#ifdef HAVE_OPENCL
+int process_cl(dt_iop_module_t *self,
+               dt_dev_pixelpipe_iop_t *piece,
+               cl_mem dev_in,
+               cl_mem dev_out,
+               const dt_iop_roi_t *const roi_in,
+               const dt_iop_roi_t *const roi_out)
+{
+  const dt_iop_contrast_global_data_t *const gd = self->global_data;
+  const dt_iop_contrast_data_t *const d = piece->data;
+  dt_iop_contrast_gui_data_t *const g = self->gui_data;
+
+  const int devid = piece->pipe->devid;
+  const int width = roi_in->width;
+  const int height = roi_in->height;
+
+  if(width < 1 || height < 1) return CL_SUCCESS;
+  if(roi_in->width < roi_out->width || roi_in->height < roi_out->height)
+    return DT_OPENCL_PROCESS_CL; // unexpected geometry: let the CPU handle it
+
+  // Detail-mask visualisation is not ported to OpenCL — fall back to the CPU.
+  if(g && g->mask_display != DT_LC_MASK_OFF)
+    return DT_OPENCL_PROCESS_CL;
+
+  cl_int err = CL_SUCCESS;
+  const size_t bsize = sizeof(float) * (size_t)width * height;
+
+  // dev_lum: pixel-wise guide luminance. Inactive scales reuse it as a harmless
+  // placeholder (the (gain-1) factor zeroes their contribution anyway).
+  cl_mem dev_lum    = dt_opencl_alloc_device_buffer(devid, bsize);
+  cl_mem dev_coarse = NULL, dev_broad = NULL, dev_local = NULL, dev_fine = NULL, dev_micro = NULL;
+
+  if(!dev_lum) { err = CL_MEM_OBJECT_ALLOCATION_FAILURE; goto cleanup; }
+
+  // 1. guide luminance from the RGBA input
+  err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_luminance, width, height,
+          CLARG(dev_in), CLARG(dev_lum), CLARG(width), CLARG(height));
+  if(err != CL_SUCCESS) goto cleanup;
+
+  const float base_eps = d->feathering * d->feathering;
+
+  // 2. one edge-aware EIGF blur per active scale (mirrors the CPU guards).
+  //    Helper: allocate, copy the guide in, blur in place.
+  #define ST_BLUR_SCALE(buf, active, radius, fmult)                                   \
+    do {                                                                              \
+      if(active)                                                                      \
+      {                                                                               \
+        buf = dt_opencl_alloc_device_buffer(devid, bsize);                            \
+        if(!buf) { err = CL_MEM_OBJECT_ALLOCATION_FAILURE; goto cleanup; }            \
+        err = dt_opencl_enqueue_copy_buffer_to_buffer(devid, dev_lum, buf, 0, 0, bsize); \
+        if(err != CL_SUCCESS) goto cleanup;                                           \
+        err = fast_eigf_surface_blur_cl(devid, &gd->eigf, buf, width, height,         \
+                                        (float)(radius), base_eps * fmaxf((fmult), 0.5f), \
+                                        d->iterations, DT_GF_BLENDING_LINEAR);        \
+        if(err != CL_SUCCESS) goto cleanup;                                           \
+      }                                                                               \
+    } while(0)
+
+  ST_BLUR_SCALE(dev_coarse, d->coarse_scale != 1.0f, d->radius_coarse, d->f_mult_coarse);
+  ST_BLUR_SCALE(dev_broad,  d->broad_scale  != 1.0f, d->radius_broad,  d->f_mult_broad);
+  ST_BLUR_SCALE(dev_local,  d->local_scale  != 1.0f, d->radius,        d->f_mult_local);
+  ST_BLUR_SCALE(dev_fine,   d->fine_scale   != 1.0f, d->radius_fine,   d->f_mult_fine);
+  ST_BLUR_SCALE(dev_micro,  d->micro_scale  != 1.0f, d->radius_micro,  d->f_mult_micro);
+  #undef ST_BLUR_SCALE
+
+  // Bind dev_lum as placeholder for the inactive scales.
+  const cl_mem b_local  = dev_local  ? dev_local  : dev_lum;
+  const cl_mem b_coarse = dev_coarse ? dev_coarse : dev_lum;
+  const cl_mem b_broad  = dev_broad  ? dev_broad  : dev_lum;
+  const cl_mem b_fine   = dev_fine   ? dev_fine   : dev_lum;
+  const cl_mem b_micro  = dev_micro  ? dev_micro  : dev_lum;
+
+  const float w_local  = (d->contrast_balance < 0.0f) ? (1.0f + d->contrast_balance) : 1.0f;
+  const float w_global = (d->contrast_balance > 0.0f) ? (1.0f - d->contrast_balance) : 1.0f;
+
+  // 3. apply the multi-scale contrast
+  err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_apply, width, height,
+          CLARG(dev_in), CLARG(dev_out),
+          CLARG(dev_lum), CLARG(b_local), CLARG(b_coarse), CLARG(b_broad), CLARG(b_fine), CLARG(b_micro),
+          CLARG(width), CLARG(height),
+          CLARG(d->local_scale), CLARG(d->coarse_scale), CLARG(d->broad_scale),
+          CLARG(d->fine_scale), CLARG(d->micro_scale), CLARG(d->global_scale),
+          CLARG(w_local), CLARG(w_global),
+          CLARG(d->noise_threshold), CLARG(d->csf_adaptation),
+          CLARG(d->color_balance), CLARG(d->colorful_contrast),
+          CLARG(d->green_compensation));
+
+cleanup:
+  dt_opencl_release_mem_object(dev_lum);
+  dt_opencl_release_mem_object(dev_coarse);
+  dt_opencl_release_mem_object(dev_broad);
+  dt_opencl_release_mem_object(dev_local);
+  dt_opencl_release_mem_object(dev_fine);
+  dt_opencl_release_mem_object(dev_micro);
+  return err;
+}
+#endif // HAVE_OPENCL
 
 
 void process(dt_iop_module_t *self,

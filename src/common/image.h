@@ -382,6 +382,8 @@ gboolean dt_image_is_raw(const dt_image_t *img);
 gboolean dt_image_is_mono_sraw(const dt_image_t *img);
 /** returns TRUE if the image contains float data. */
 gboolean dt_image_is_hdr(const dt_image_t *img);
+/** returns TRUE if the global workflow is set to a scene-referred mode */
+gboolean dt_is_scene_referred();
 /** set the monochrome flags if monochrome is TRUE and clear it otherwise */
 void dt_image_set_monochrome_flag(const dt_imgid_t imgid, const gboolean monochrome);
 /** returns TRUE if this image was taken using a monochrome camera either by vendor or debayered */
