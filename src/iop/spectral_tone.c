@@ -687,7 +687,11 @@ int legacy_params(dt_iop_module_t *self,
       int output_cs;
     } dt_iop_spectral_tone_params_v1_t;
 
-    dt_iop_spectral_tone_params_t *n = g_malloc0(sizeof(dt_iop_spectral_tone_params_t));
+    /* Must use malloc(): the framework frees the result with free()
+     * (see dt_iop_legacy_params / imageop.c). Allocating with g_malloc0()
+     * and letting free() release it mixes allocators → heap corruption on
+     * Windows. calloc() matches the previous zero-init semantics. */
+    dt_iop_spectral_tone_params_t *n = calloc(1, sizeof(dt_iop_spectral_tone_params_t));
     if(!n) return 1;
 
     if(old_version == 1)
@@ -1083,14 +1087,15 @@ void gui_init(dt_iop_module_t *self)
   self->widget = main_vbox;
 }
 
-void gui_cleanup(dt_iop_module_t *self)
-{
-  /* IOP_GUI_ALLOC uses GLib's g_malloc0. MUST free with g_free, NOT free().
-   * On Windows, free(g_malloc(...)) mixes CRT and GLib heaps → heap corruption.
-   * IOP_GUI_FREE is not defined in this fork — expand it manually. */
-  g_free(self->gui_data);
-  self->gui_data = NULL;
-}
+/* NOTE: no gui_cleanup() is needed.
+ * IOP_GUI_ALLOC() allocates gui_data via dt_calloc_aligned() → dt_alloc_aligned(),
+ * which on Windows is _aligned_malloc() (and posix_memalign() on Linux/macOS).
+ * The framework already frees it for us in dt_iop_gui_cleanup_module() with the
+ * matching dt_free_align(). Freeing it here with free()/g_free() would release an
+ * _aligned_malloc() block with the wrong deallocator → heap corruption (c0000374)
+ * at module load on Windows. The gui_data struct only holds GtkWidget* and an
+ * embedded collapsible_section (no separately-owned resources), so the default
+ * widget destruction is sufficient. */
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
