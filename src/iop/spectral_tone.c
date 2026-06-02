@@ -66,6 +66,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+DT_MODULE_INTROSPECTION(3, dt_iop_spectral_tone_params_t)
+
 /* Type definitions for the ACES 2.0 SSTS pipeline context.
  * spectral_tone_data.c and spectral_tone_pipeline.c have been merged
  * into this single translation unit for Windows/MinGW compatibility. */
@@ -138,9 +140,12 @@ typedef struct
   float luma_coeff[3];
   float hl_desat;
   float hl_rotation;
+  float abney_cos;
+  float abney_sin;
   float white_chroma_x;
   float white_chroma_z;
   float gray_point;
+  float gray_gamma;
   float vibrance;
   float gamut_knee;
   float gamut_steepness;
@@ -457,7 +462,7 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
   if(ctx->gray_point != 0.0f)
   {
     float y_lvl = fminf(fmaxf((float)y_tm, 0.0f), 1.0f);
-    y_lvl = powf(y_lvl, exp2f(ctx->gray_point));
+    y_lvl = powf(y_lvl, ctx->gray_gamma);
     y_tm = (double)y_lvl;
   }
 
@@ -491,11 +496,10 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
       float v = rgb[2] - y;
 
       /* Abney hue rotation (constant angle, independent of luminance) */
-      const float angle = ctx->hl_rotation * 0.3f;
-      if(angle != 0.0f)
+      if(ctx->hl_rotation != 0.0f)
       {
-        const float ca = cosf(angle);
-        const float sa = sinf(angle);
+        const float ca = ctx->abney_cos;
+        const float sa = ctx->abney_sin;
         const float ur = u * ca - v * sa;
         const float vr = u * sa + v * ca;
         u = ur;
@@ -644,6 +648,12 @@ static void st_compute_context(dt_iop_spectral_tone_params_t *p,
 
   /* Mid-tone gamma adjustment - Inversion pour que 'droite' éclaircisse (Gamma < 1.0) */
   ctx->gray_point = -fmaxf(fminf(p->gray_point, 1.0f), -1.0f);
+  ctx->gray_gamma = exp2f(ctx->gray_point);
+
+  /* Precompute Abney rotation factors */
+  const float angle = ctx->hl_rotation * 0.3f;
+  ctx->abney_cos = cosf(angle);
+  ctx->abney_sin = sinf(angle);
 
   ctx->vibrance = fmaxf(p->vibrance, 0.0f);
 
@@ -1092,8 +1102,6 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
     gtk_widget_set_visible(g->look_opacity, p->color_look > DT_ST_LOOK_NEUTRAL);
   }
 }
-
-DT_MODULE_INTROSPECTION(3, dt_iop_spectral_tone_params_t)
 
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
