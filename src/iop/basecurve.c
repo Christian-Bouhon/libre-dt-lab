@@ -94,7 +94,7 @@ typedef struct dt_iop_basecurve_params_t
   float exposure_stops;   // number of stops between fusion images $MIN: 0.01 $MAX: 4.0 $DEFAULT: 1.0 $DESCRIPTION: "exposure shift"
   float exposure_bias;    // whether to do exposure-fusion with over or under-exposure $MIN: -1.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "exposure bias"
   dt_iop_rgb_norms_t preserve_colors; /* $DEFAULT: DT_RGB_NORM_LUMINANCE $DESCRIPTION: "preserve colors" */
-  int workflow_mode;      // $DEFAULT: 3
+  int workflow_mode;      // $DEFAULT: 2
   float shadow_lift;      // $MIN: 0.25 $MAX: 1.75 $DEFAULT: 1.0 $DESCRIPTION: "shadow correction"
   float highlight_gain;   // $MIN: 0.25 $MAX: 1.75 $DEFAULT: 1.0 $DESCRIPTION: "highlight gain"
   float ucs_saturation_balance; // $MIN: -0.75 $MAX: 0.75 $DEFAULT: 0.2 $DESCRIPTION: "balance saturation ucs"
