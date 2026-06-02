@@ -158,6 +158,45 @@ typedef struct dt_iop_spectral_tone_data_t
   dt_st_context_t ctx;
 } dt_iop_spectral_tone_data_t;
 
+/* GPU-side context — MUST match dt_st_cl_params_t in spectral_tone.cl byte for
+ * byte. Only 4-byte members (float / int) are used so host and device layouts
+ * are identical (no padding); the struct is passed to the kernel by value. The
+ * SSTS parameters are double in dt_st_context_t but narrowed to float here. */
+typedef struct dt_st_cl_params_t
+{
+  float input_matrix[9];
+  float output_matrix[9];
+  float luma_coeff[3];
+  float color_look_mat[9];
+  float exposure_factor;
+  float contrast;
+  float contrast_pivot;
+  float hl_desat;
+  float hl_rotation;
+  float abney_cos;
+  float abney_sin;
+  float white_chroma_x;
+  float white_chroma_z;
+  float gray_point;
+  float gray_gamma;
+  float vibrance;
+  float gamut_knee;
+  float gamut_steepness;
+  float ssts_s_2;
+  float ssts_m_2;
+  float ssts_g;
+  float ssts_t_1;
+  float ssts_n_r;
+  float ssts_n;
+  float look_opacity;
+  int   look_idx;
+} dt_st_cl_params_t;
+
+typedef struct dt_iop_spectral_tone_global_data_t
+{
+  int kernel_spectral_tone;
+} dt_iop_spectral_tone_global_data_t;
+
 typedef struct dt_iop_spectral_tone_gui_data_t
 {
   GtkWidget *contrast;
@@ -907,6 +946,96 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     if(ch == 4) out[idx + 3] = in[idx + 3];
   }
 }
+
+#ifdef HAVE_OPENCL
+/* Pack the precomputed CPU context (+ active color look) into the GPU struct.
+ * Mirrors exactly what process() reads from d->ctx and d->params. */
+static void st_fill_cl_params(const dt_iop_spectral_tone_data_t *d,
+                              dt_st_cl_params_t *clp)
+{
+  const dt_st_context_t *ctx = &d->ctx;
+
+  for(int i = 0; i < 9; i++) clp->input_matrix[i]  = ctx->input_matrix[i];
+  for(int i = 0; i < 9; i++) clp->output_matrix[i] = ctx->output_matrix[i];
+  for(int i = 0; i < 3; i++) clp->luma_coeff[i]    = ctx->luma_coeff[i];
+
+  clp->exposure_factor = ctx->exposure_factor;
+  clp->contrast        = ctx->contrast;
+  clp->contrast_pivot  = ctx->contrast_pivot;
+  clp->hl_desat        = ctx->hl_desat;
+  clp->hl_rotation     = ctx->hl_rotation;
+  clp->abney_cos       = ctx->abney_cos;
+  clp->abney_sin       = ctx->abney_sin;
+  clp->white_chroma_x  = ctx->white_chroma_x;
+  clp->white_chroma_z  = ctx->white_chroma_z;
+  clp->gray_point      = ctx->gray_point;
+  clp->gray_gamma      = ctx->gray_gamma;
+  clp->vibrance        = ctx->vibrance;
+  clp->gamut_knee      = ctx->gamut_knee;
+  clp->gamut_steepness = ctx->gamut_steepness;
+
+  clp->ssts_s_2 = (float)ctx->ssts.s_2;
+  clp->ssts_m_2 = (float)ctx->ssts.m_2;
+  clp->ssts_g   = (float)ctx->ssts.g;
+  clp->ssts_t_1 = (float)ctx->ssts.t_1;
+  clp->ssts_n_r = (float)ctx->ssts.n_r;
+  clp->ssts_n   = (float)ctx->ssts.n;
+
+  /* Same clamp as process(): color_looks has 11 entries (0..10) */
+  const int look_idx = (d->params.color_look > 0 && d->params.color_look <= 10)
+                       ? d->params.color_look : 0;
+  clp->look_idx     = look_idx;
+  clp->look_opacity = d->params.look_opacity;
+  if(look_idx > 0)
+    for(int i = 0; i < 9; i++) clp->color_look_mat[i] = color_looks[look_idx][i];
+  else
+    for(int i = 0; i < 9; i++) clp->color_look_mat[i] = (i % 4 == 0) ? 1.0f : 0.0f;
+}
+
+int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
+               cl_mem dev_in, cl_mem dev_out,
+               const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
+{
+  const dt_iop_spectral_tone_global_data_t *gd = self->global_data;
+  const dt_iop_spectral_tone_data_t *d = piece->data;
+
+  const int devid = piece->pipe->devid;
+  const int width = roi_in->width;
+  const int height = roi_in->height;
+
+  /* Safety guard mirroring process(): if commit_params() has not yet run the
+   * context is all-zero — fall back to the CPU path (which copies through). */
+  if(!d || d->ctx.ssts.n <= 0.0)
+    return DT_OPENCL_PROCESS_CL;
+
+  dt_st_cl_params_t clp;
+  memset(&clp, 0, sizeof(clp));
+  st_fill_cl_params(d, &clp);
+
+  return dt_opencl_enqueue_kernel_2d_args(
+    devid, gd->kernel_spectral_tone, width, height,
+    CLARG(dev_in), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(clp));
+}
+
+void init_global(dt_iop_module_so_t *self)
+{
+  const int program = 42; // spectral_tone.cl, from programs.conf
+  dt_iop_spectral_tone_global_data_t *gd = malloc(sizeof(dt_iop_spectral_tone_global_data_t));
+  self->data = gd;
+  gd->kernel_spectral_tone = dt_opencl_create_kernel(program, "spectral_tone");
+}
+
+void cleanup_global(dt_iop_module_so_t *self)
+{
+  dt_iop_spectral_tone_global_data_t *gd = self->data;
+  if(gd)
+  {
+    dt_opencl_free_kernel(gd->kernel_spectral_tone);
+    free(self->data);
+    self->data = NULL;
+  }
+}
+#endif // HAVE_OPENCL
 
 void init_presets(dt_iop_module_so_t *self)
 {

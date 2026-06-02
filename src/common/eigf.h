@@ -301,6 +301,107 @@ clean:
   dt_free_align(ds_image);
   dt_free_align(mask);
 }
+
+#ifdef HAVE_OPENCL
+#include "common/opencl.h"
+
+// Handles of the eigf.cl kernels (program 43). Filled by the calling module's
+// init_global() so eigf.cl stays a shared building block without depending on
+// darktable's core OpenCL global init.
+typedef struct dt_eigf_cl_t
+{
+  int bilinear1;
+  int bilinear2;
+  int build_moments;
+  int finish_variance;
+  int blending;
+} dt_eigf_cl_t;
+
+/* GPU counterpart of fast_eigf_surface_blur() for the no-mask path
+ * (quantization == 0). Works in place on a 1-channel device buffer.
+ * Mirrors the CPU orchestration step by step:
+ *   downscale -> (g, g^2) -> gaussian(2c) -> variance -> upscale -> blend.
+ * 'filter' is the dt_iop_guided_filter_blending_t value (0 = LINEAR). */
+static inline cl_int fast_eigf_surface_blur_cl(const int devid,
+                                               const dt_eigf_cl_t *const k,
+                                               cl_mem dev_image,
+                                               const int width, const int height,
+                                               const float sigma, const float feathering,
+                                               const int iterations, const int filter)
+{
+  cl_int err = CL_SUCCESS;
+
+  // Same down-scaling rule as the CPU version.
+  const float scaling = fmaxf(fminf(sigma, 4.0f), 1.0f);
+  const float ds_sigma = fmaxf(sigma / scaling, 1.0f);
+  const int ds_width  = (int)((float)width / scaling);
+  const int ds_height = (int)((float)height / scaling);
+  if(ds_width < 1 || ds_height < 1 || iterations < 1)
+    return CL_SUCCESS; // degenerate: leave the image untouched
+
+  cl_mem dev_ds_image = dt_opencl_alloc_device_buffer(devid, sizeof(float) * ds_width * ds_height);
+  cl_mem dev_ds_mom   = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 2 * ds_width * ds_height);
+  cl_mem dev_av       = dt_opencl_alloc_device_buffer(devid, sizeof(float) * 2 * width * height);
+
+  if(!dev_ds_image || !dev_ds_mom || !dev_av)
+  {
+    err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
+    goto cleanup;
+  }
+
+  for(int i = 0; i < iterations; i++)
+  {
+    // LINEAR for all intermediate iterations, the requested filter on the last one.
+    const int blend = (i == iterations - 1) ? filter : DT_GF_BLENDING_LINEAR;
+
+    // 1. down-scale the guide image
+    err = dt_opencl_enqueue_kernel_2d_args(devid, k->bilinear1, ds_width, ds_height,
+            CLARG(dev_image), CLARG(width), CLARG(height),
+            CLARG(dev_ds_image), CLARG(ds_width), CLARG(ds_height));
+    if(err != CL_SUCCESS) goto cleanup;
+
+    // 2. pack (g, g*g)
+    err = dt_opencl_enqueue_kernel_2d_args(devid, k->build_moments, ds_width, ds_height,
+            CLARG(dev_ds_image), CLARG(dev_ds_mom), CLARG(ds_width), CLARG(ds_height));
+    if(err != CL_SUCCESS) goto cleanup;
+
+    // 3. gaussian blur of the two moments (in place), wide bounds like dt_gaussian_mean_blur_cl
+    {
+      const dt_aligned_pixel_t gmax = { 1.0e9f, 1.0e9f, 1.0e9f, 1.0e9f };
+      const dt_aligned_pixel_t gmin = { 0.0f, 0.0f, 0.0f, 0.0f };
+      dt_gaussian_cl_t *g = dt_gaussian_init_cl(devid, ds_width, ds_height, 2,
+                                                gmax, gmin, ds_sigma, DT_IOP_GAUSSIAN_ZERO);
+      if(!g) { err = DT_OPENCL_PROCESS_CL; goto cleanup; }
+      err = dt_gaussian_blur_cl_buffer(g, dev_ds_mom, dev_ds_mom);
+      dt_gaussian_free_cl(g);
+      if(err != CL_SUCCESS) goto cleanup;
+    }
+
+    // 4. variance = E[g^2] - E[g]^2
+    err = dt_opencl_enqueue_kernel_2d_args(devid, k->finish_variance, ds_width, ds_height,
+            CLARG(dev_ds_mom), CLARG(ds_width), CLARG(ds_height));
+    if(err != CL_SUCCESS) goto cleanup;
+
+    // 5. up-scale (average, variance) to full resolution
+    err = dt_opencl_enqueue_kernel_2d_args(devid, k->bilinear2, width, height,
+            CLARG(dev_ds_mom), CLARG(ds_width), CLARG(ds_height),
+            CLARG(dev_av), CLARG(width), CLARG(height));
+    if(err != CL_SUCCESS) goto cleanup;
+
+    // 6. guided blend back into the image
+    err = dt_opencl_enqueue_kernel_2d_args(devid, k->blending, width, height,
+            CLARG(dev_image), CLARG(dev_av), CLARG(width), CLARG(height),
+            CLARG(feathering), CLARG(blend));
+    if(err != CL_SUCCESS) goto cleanup;
+  }
+
+cleanup:
+  dt_opencl_release_mem_object(dev_ds_image);
+  dt_opencl_release_mem_object(dev_ds_mom);
+  dt_opencl_release_mem_object(dev_av);
+  return err;
+}
+#endif // HAVE_OPENCL
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
