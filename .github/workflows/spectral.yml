@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - spectral_tone
+      - spectral-tone
 
 permissions:
   contents: read
@@ -407,7 +407,7 @@ jobs:
         run: |
           brew update > /dev/null || true
           cd src/.ci
-        Spectral  export HOMEBREW_NO_INSTALL_UPGRADE=1
+          export HOMEBREW_NO_INSTALL_UPGRADE=1
           brew bundle --quiet || true
 
           # rebuild graphicsmagick for macOS bundling
@@ -472,7 +472,11 @@ jobs:
           git push origin Spectral
           popd
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITH
+        uses: actions/download-artifact@v4
+      - name: Get current date and set as environment variable
+        run: |
+          # Format date as YYYYMMDDUB_TOKEN }}
       - name: Download artifacts
         uses: actions/download-artifact@v4
       - name: Get current date and set as environment variable
