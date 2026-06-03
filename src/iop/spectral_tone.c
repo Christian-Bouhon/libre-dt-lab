@@ -109,8 +109,8 @@ typedef struct dt_iop_spectral_tone_params_t
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
   float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "spectral brilliance"
   float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "HL hue shift"
-  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.15 $DESCRIPTION: "HL desaturation"
-  float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.15 $DESCRIPTION: "gamut knee"
+  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.05 $DESCRIPTION: "HL desaturation"
+  float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.05 $DESCRIPTION: "gamut knee"
   float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "gamut steepness"
   dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "color space"
   dt_iop_st_look_t color_look;       // $DEFAULT: DT_ST_LOOK_NEUTRAL $DESCRIPTION: "color look"
@@ -374,8 +374,9 @@ double dt_st_compute_y_tm(double y_scene, const dt_st_context_t *ctx)
  */
 static inline double st_desat_weight(double y_norm, float hl_desat)
 {
-  if(hl_desat <= 0.0f || y_norm <= 0.7) return 0.0;
-  const double t = fmax(y_norm - 0.7, 0.0) / y_norm;
+  const double threshold = 0.45; // CB On commence a desaturer beaucoup plus tôt
+  if(hl_desat <= 0.0f || y_norm <= threshold) return 0.0;
+  const double t = fmax(y_norm - threshold, 0.0) / y_norm;
   const double x = fmin(t * (double)hl_desat, 1.0);
   return x * x;
 }
@@ -905,8 +906,8 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
        on force la neutralité pour éviter les dérives (ex: le magenta en studio). */
     
     const float luma_in = fmaxf(fmaxf(rgb_in[0], rgb_in[1]), rgb_in[2]);
-    const float safety_threshold = 0.9f; // Début de la zone de danger
-    const float hard_clip = 1.1f;        // Zone où l'on ne croit plus du tout à la couleur
+    const float safety_threshold = 0.95f; // CB On anticipe le clipping capteur plus tôt
+    const float hard_clip = 1.6f;        // Transition beaucoup plus longue et douce
 
     if(luma_in > safety_threshold)
     {
@@ -1050,9 +1051,9 @@ void init_presets(dt_iop_module_so_t *self)
   p.spectral_brilliance = 5.0f;
   p.gray_point = 0.0f;
   p.vibrance = 1.0f;
-  p.hl_desaturation = 0.15f;
+  p.hl_desaturation = 0.05f;
   p.hl_hue_shift = 0.0f;
-  p.gamut_knee = 0.15f;
+  p.gamut_knee = 0.05f;
   p.gamut_steepness = 0.50f;
   p.output_cs = DT_ST_CS_REC2020;
   p.color_look = 0;
