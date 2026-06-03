@@ -95,8 +95,9 @@ static inline float st_compute_y_tm(const float y_scene, const dt_st_cl_params_t
 /* Highlight desaturation weight */
 static inline float st_desat_weight(const float y_norm, const float hl_desat)
 {
-  if(hl_desat <= 0.0f || y_norm <= 0.7f) return 0.0f;
-  const float t = fmax(y_norm - 0.7f, 0.0f) / y_norm;
+  const float threshold = 0.45f; // CB Doit correspondre à la valeur dans spectral_tone.c
+  if(hl_desat <= 0.0f || y_norm <= threshold) return 0.0f;
+  const float t = fmax(y_norm - threshold, 0.0f) / y_norm;
   const float x = fmin(t * hl_desat, 1.0f);
   return x * x;
 }
@@ -288,8 +289,8 @@ __kernel void spectral_tone(
 
   /* Luma-clipping desaturation safety net (mirrors process() in spectral_tone.c) */
   const float luma_in = fmax(fmax(rgb_in.x, rgb_in.y), rgb_in.z);
-  const float safety_threshold = 0.9f;
-  const float hard_clip = 1.1f;
+  const float safety_threshold = 0.95f; // CB Alignement sur le CPU
+  const float hard_clip = 1.6f;        // Alignement sur le CPU
   if(luma_in > safety_threshold)
   {
     float amount = (luma_in - safety_threshold) / (hard_clip - safety_threshold);
