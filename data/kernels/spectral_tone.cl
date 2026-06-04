@@ -289,13 +289,13 @@ __kernel void spectral_tone(
 
   /* Luma-clipping desaturation safety net (mirrors process() in spectral_tone.c) */
   const float luma_in = fmax(fmax(rgb_in.x, rgb_in.y), rgb_in.z);
-  const float safety_threshold = 0.95f; // CB Alignement sur le CPU
-  const float hard_clip = 1.6f;        // Alignement sur le CPU
+  const float safety_threshold = 0.8f; // CB Alignement sur le CPU
+  const float hard_clip = 1.5f;        // Alignement sur le CPU
   if(luma_in > safety_threshold)
   {
     float amount = (luma_in - safety_threshold) / (hard_clip - safety_threshold);
     amount = fmin(fmax(amount, 0.0f), 1.0f);
-    const float weight = amount * p.hl_desat;
+    const float weight = amount * (p.hl_desat * 0.2f);
     rgb_in = rgb_in * (1.0f - weight) + (float3)(luma_in) * weight;
   }
 

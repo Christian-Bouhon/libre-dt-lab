@@ -109,8 +109,8 @@ typedef struct dt_iop_spectral_tone_params_t
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
   float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "spectral brilliance"
   float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "HL hue shift"
-  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.05 $DESCRIPTION: "HL desaturation"
-  float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.05 $DESCRIPTION: "gamut knee"
+  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.55 $DESCRIPTION: "HL desaturation"
+  float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.15 $DESCRIPTION: "gamut knee"
   float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "gamut steepness"
   dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "color space"
   dt_iop_st_look_t color_look;       // $DEFAULT: DT_ST_LOOK_NEUTRAL $DESCRIPTION: "color look"
@@ -906,8 +906,8 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
        on force la neutralité pour éviter les dérives (ex: le magenta en studio). */
     
     const float luma_in = fmaxf(fmaxf(rgb_in[0], rgb_in[1]), rgb_in[2]);
-    const float safety_threshold = 0.95f; // CB On anticipe le clipping capteur plus tôt
-    const float hard_clip = 1.6f;        // Transition beaucoup plus longue et douce
+    const float safety_threshold = 0.8f; // CB On anticipe le clipping capteur plus tôt
+    const float hard_clip = 1.5f;        // Transition beaucoup plus longue et douce
 
     if(luma_in > safety_threshold)
     {
@@ -917,7 +917,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       
       // On utilise hl_desaturation pour pondérer cette protection
       // Si hl_desat est à 0 (gauche), on réduit l'agressivité de cette protection
-      const float weight = amount * d->ctx.hl_desat;
+      const float weight = amount * (d->ctx.hl_desat * 0.2f);
 
       rgb_in[0] = rgb_in[0] * (1.0f - weight) + luma_in * weight;
       rgb_in[1] = rgb_in[1] * (1.0f - weight) + luma_in * weight;
@@ -1051,9 +1051,9 @@ void init_presets(dt_iop_module_so_t *self)
   p.spectral_brilliance = 5.0f;
   p.gray_point = 0.0f;
   p.vibrance = 1.0f;
-  p.hl_desaturation = 0.05f;
+  p.hl_desaturation = 0.50f;
   p.hl_hue_shift = 0.0f;
-  p.gamut_knee = 0.05f;
+  p.gamut_knee = 0.15f;
   p.gamut_steepness = 0.50f;
   p.output_cs = DT_ST_CS_REC2020;
   p.color_look = 0;
