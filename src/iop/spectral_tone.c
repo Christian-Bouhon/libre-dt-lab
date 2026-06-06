@@ -109,7 +109,7 @@ typedef struct dt_iop_spectral_tone_params_t
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
   float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "spectral brilliance"
   float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "HL hue shift"
-  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.55 $DESCRIPTION: "HL desaturation"
+  float hl_desaturation;       // $MIN: 0 $MAX: 2 $DEFAULT: 0.50 $DESCRIPTION: "HL desaturation"
   float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.15 $DESCRIPTION: "gamut knee"
   float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "gamut steepness"
   dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "color space"
@@ -917,7 +917,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       
       // On utilise hl_desaturation pour pondérer cette protection
       // Si hl_desat est à 0 (gauche), on réduit l'agressivité de cette protection
-      const float weight = amount * (d->ctx.hl_desat * 0.2f);
+      const float weight = amount * (d->ctx.hl_desat * 0.25f);
 
       rgb_in[0] = rgb_in[0] * (1.0f - weight) + luma_in * weight;
       rgb_in[1] = rgb_in[1] * (1.0f - weight) + luma_in * weight;

@@ -295,7 +295,7 @@ __kernel void spectral_tone(
   {
     float amount = (luma_in - safety_threshold) / (hard_clip - safety_threshold);
     amount = fmin(fmax(amount, 0.0f), 1.0f);
-    const float weight = amount * (p.hl_desat * 0.2f);
+    const float weight = amount * (p.hl_desat * 0.25f);
     rgb_in = rgb_in * (1.0f - weight) + (float3)(luma_in) * weight;
   }
 
