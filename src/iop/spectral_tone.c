@@ -140,8 +140,6 @@ typedef struct
   float luma_coeff[3];
   float hl_desat;
   float hl_rotation;
-  float abney_cos;
-  float abney_sin;
   float white_chroma_x;
   float white_chroma_z;
   float gray_point;
@@ -173,8 +171,6 @@ typedef struct dt_st_cl_params_t
   float contrast_pivot;
   float hl_desat;
   float hl_rotation;
-  float abney_cos;
-  float abney_sin;
   float white_chroma_x;
   float white_chroma_z;
   float gray_point;
@@ -376,6 +372,7 @@ static inline double st_desat_weight(double y_norm, float hl_desat)
 {
   const double threshold = 0.45; // CB On commence a desaturer beaucoup plus tôt
   if(hl_desat <= 0.0f || y_norm <= threshold) return 0.0;
+  if(!isfinite(y_norm)) return 0.0;
   const double t = fmax(y_norm - threshold, 0.0) / y_norm;
   const double x = fmin(t * (double)hl_desat, 1.0);
   return x * x;
@@ -417,6 +414,7 @@ static inline void st_spectral_gamut(
   const double knee, const double steepness)
 {
   if(y_tm <= 0.0) return;
+  if(!isfinite(*x_tm) || !isfinite(*z_tm)) return;
 
   /* Convert current XYZ to CIE xy chromaticity */
   const double sum = *x_tm + y_tm + *z_tm;
@@ -460,6 +458,8 @@ static inline void st_spectral_gamut(
 
 /* Complete spectral tone mapping pipeline for one pixel.
  *
+ * Pre-pipeline: input gamut safety — sigmoid rolloff toward luma-gray
+ *   (applied in process() before calling dt_st_pipeline_eval)
  * Pipeline order:
  *   1. D50-adapted Rec.2020 RGB -> D50 XYZ (precise matrix)
  *   2. ACES 2.0 SSTS on luminance Y only (spectral tone scale)
@@ -468,9 +468,9 @@ static inline void st_spectral_gamut(
  *   5. Chromaticity ratio scaling: x = ratio * Y
  *   6. Spectral gamut: film-like chromaticity roll-off in CIE xy
  *   7. XYZ -> output RGB via output matrix
- *   8. Highlight desaturation (blend toward achromatic luma)
+ *   8. Highlight desaturation (blend toward white via sigmoid)
  *   9. Vibrance (saturation with high-sat protection)
- *  10. Gamut compression safety net
+ *  10. Output gamut clamp (blend toward white when channels go negative)
  *  11. Clamp to [0, inf)
  */
 void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
@@ -483,7 +483,7 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
   double y_abs = M_in[3] * r + M_in[4] * g + M_in[5] * b;
   double z_abs = M_in[6] * r + M_in[7] * g + M_in[8] * b;
 
-  if(y_abs <= 0.0)
+  if(!(y_abs > 1e-10) || !isfinite(y_abs))
   {
     rgb_out[0] = 0.0f;
     rgb_out[1] = 0.0f;
@@ -492,8 +492,8 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
   }
 
   /* Chromaticity ratios */
-  const double x_ratio = x_abs / y_abs;
-  const double z_ratio = z_abs / y_abs;
+  const double x_ratio = fmin(fmax(x_abs / y_abs, -100.0), 100.0);
+  const double z_ratio = fmin(fmax(z_abs / y_abs, -100.0), 100.0);
 
   /* Step 2-3: Tone-mapped Y (SSTS + BT.1886 + contrast) */
   double y_tm = dt_st_compute_y_tm(y_abs, ctx);
@@ -524,39 +524,43 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
   rgb[1] = M[3] * (float)x_tm + M[4] * (float)y_tm + M[5] * (float)z_tm;
   rgb[2] = M[6] * (float)x_tm + M[7] * (float)y_tm + M[8] * (float)z_tm;
 
-  /* Step 8: Highlight desaturation with Abney hue correction */
+  /* Step 8: Film-print highlight desaturation toward white */
   {
     const double y_exposed = y_abs * ctx->exposure_factor;
     const double w = st_desat_weight(y_exposed, ctx->hl_desat);
-    if(w > 0.0)
+    if(w > 0.0 && isfinite(w))
     {
-      const float *lc = ctx->luma_coeff;
-      const float y = lc[0] * rgb[0] + lc[1] * rgb[1] + lc[2] * rgb[2];
-      float u = rgb[0] - y;
-      float v = rgb[2] - y;
-
-      /* Abney hue rotation (constant angle, independent of luminance) */
+      /* Progressive Abney hue rotation — weight indépendant de hl_desat */
       if(ctx->hl_rotation != 0.0f)
       {
-        const float ca = ctx->abney_cos;
-        const float sa = ctx->abney_sin;
-        const float ur = u * ca - v * sa;
-        const float vr = u * sa + v * ca;
-        u = ur;
-        v = vr;
+        const float wr = fminf((float)st_desat_weight(y_exposed, 1.0f), 1.0f);
+        const float angle = ctx->hl_rotation * 0.15f * wr;
+        const float ca = cosf(angle);
+        const float sa = sinf(angle);
+        if(isfinite(ca) && isfinite(sa))
+        {
+          const float *lc = ctx->luma_coeff;
+          const float y = lc[0] * rgb[0] + lc[1] * rgb[1] + lc[2] * rgb[2];
+          float u = rgb[0] - y;
+          float v = rgb[2] - y;
+          const float ur = u * ca - v * sa;
+          const float vr = u * sa + v * ca;
+          rgb[0] = y + ur;
+          rgb[2] = y + vr;
+          if(lc[1] > 0.0f)
+            rgb[1] = y - (lc[0] / lc[1]) * ur - (lc[2] / lc[1]) * vr;
+        }
       }
 
-      /* Desaturate toward luma (luminance-dependent) */
-      u *= (float)(1.0 - w);
-      v *= (float)(1.0 - w);
-
-      /* YUV -> RGB (G reconstructed from Y, U, V) */
-      rgb[0] = y + u;
-      rgb[2] = y + v;
-      if(lc[1] > 0.0f)
-        rgb[1] = y - (lc[0] / lc[1]) * u - (lc[2] / lc[1]) * v;
-      else
-        rgb[1] = y;
+      /* Blend toward white with sigmoidal curve — film-like */
+      const float t = fminf((float)w, 1.0f);
+      const float ts = (t * t) / (t * t + (1.0f - t) * (1.0f - t) + 1e-6f);
+      if(isfinite(ts))
+      {
+        rgb[0] = rgb[0] * (1.0f - ts) + 1.0f * ts;
+        rgb[1] = rgb[1] * (1.0f - ts) + 1.0f * ts;
+        rgb[2] = rgb[2] * (1.0f - ts) + 1.0f * ts;
+      }
     }
   }
 
@@ -592,9 +596,9 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
   st_gamut_compress(rgb);
 
   /* Step 11: Clamp negative channels (safety) */
-  rgb_out[0] = fmaxf(rgb[0], 0.0f);
-  rgb_out[1] = fmaxf(rgb[1], 0.0f);
-  rgb_out[2] = fmaxf(rgb[2], 0.0f);
+  rgb_out[0] = isfinite(rgb[0]) ? fmaxf(rgb[0], 0.0f) : 0.0f;
+  rgb_out[1] = isfinite(rgb[1]) ? fmaxf(rgb[1], 0.0f) : 0.0f;
+  rgb_out[2] = isfinite(rgb[2]) ? fmaxf(rgb[2], 0.0f) : 0.0f;
 }
 
 /* Given input RGB in working space, compute the context */
@@ -689,11 +693,6 @@ static void st_compute_context(dt_iop_spectral_tone_params_t *p,
   /* Mid-tone gamma adjustment - Inversion pour que 'droite' éclaircisse (Gamma < 1.0) */
   ctx->gray_point = -fmaxf(fminf(p->gray_point, 1.0f), -1.0f);
   ctx->gray_gamma = exp2f(ctx->gray_point);
-
-  /* Precompute Abney rotation factors */
-  const float angle = ctx->hl_rotation * 0.3f;
-  ctx->abney_cos = cosf(angle);
-  ctx->abney_sin = sinf(angle);
 
   ctx->vibrance = fmaxf(p->vibrance, 0.0f);
 
@@ -897,33 +896,25 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   for(size_t k = 0; k < npixels; k++)
   {
     const size_t idx = k * ch;
-    float rgb_in[3] = { in[idx], in[idx + 1], in[idx + 2] };
+    float rgb_in[3] = { in[idx], in[idx + 1], in[idx + 2] }; // Input pixel
     float rgb_out[3];
 
-    /* --- Luma-clipping desaturation (Safety Net) --- */
-    /* On protège l'entrée de la reconstruction spectrale contre le clipping différentiel.
-       Si un canal approche de 1.0 (valeur nominale du blanc avant exposition), 
-       on force la neutralité pour éviter les dérives (ex: le magenta en studio). */
-    
-    const float luma_in = fmaxf(fmaxf(rgb_in[0], rgb_in[1]), rgb_in[2]);
-    const float safety_threshold = 0.8f; // CB On anticipe le clipping capteur plus tôt
-    const float hard_clip = 1.5f;        // Transition beaucoup plus longue et douce
-
-    if(luma_in > safety_threshold)
+    /* Pre-pipeline safety net: sigmoid rolloff toward luma-gray */
     {
-      // Calcul d'un facteur de mélange progressif (0.0 à 1.0)
-      float amount = (luma_in - safety_threshold) / (hard_clip - safety_threshold);
-      amount = fminf(fmaxf(amount, 0.0f), 1.0f);
-      
-      // On utilise hl_desaturation pour pondérer cette protection
-      // Si hl_desat est à 0 (gauche), on réduit l'agressivité de cette protection
-      const float weight = amount * (d->ctx.hl_desat * 0.25f);
-
-      rgb_in[0] = rgb_in[0] * (1.0f - weight) + luma_in * weight;
-      rgb_in[1] = rgb_in[1] * (1.0f - weight) + luma_in * weight;
-      rgb_in[2] = rgb_in[2] * (1.0f - weight) + luma_in * weight;
+      const float lum_max = fmaxf(fmaxf(rgb_in[0], rgb_in[1]), rgb_in[2]); // Max channel value
+      const float luma_pixel = d->ctx.luma_coeff[0] * rgb_in[0] + d->ctx.luma_coeff[1] * rgb_in[1] + d->ctx.luma_coeff[2] * rgb_in[2]; // Perceived brightness
+      const double w = st_desat_weight(lum_max * d->ctx.exposure_factor, d->ctx.hl_desat);
+      if(w > 0.0 && isfinite(w))
+      {
+        const float t = fminf((float)w, 1.0f);
+        const float ts = (t * t) / (t * t + (1.0f - t) * (1.0f - t) + 1e-6f);
+        if(isfinite(ts) && ts > 0.0f)
+        {
+          for(int c = 0; c < 3; c++)
+            rgb_in[c] = rgb_in[c] * (1.0f - ts) + luma_pixel * ts; // Blend towards luma_pixel
+        }
+      }
     }
-    /* ----------------------------------------------- */
 
     dt_st_pipeline_eval(rgb_in, rgb_out, &d->ctx);
 
@@ -965,8 +956,6 @@ static void st_fill_cl_params(const dt_iop_spectral_tone_data_t *d,
   clp->contrast_pivot  = ctx->contrast_pivot;
   clp->hl_desat        = ctx->hl_desat;
   clp->hl_rotation     = ctx->hl_rotation;
-  clp->abney_cos       = ctx->abney_cos;
-  clp->abney_sin       = ctx->abney_sin;
   clp->white_chroma_x  = ctx->white_chroma_x;
   clp->white_chroma_z  = ctx->white_chroma_z;
   clp->gray_point      = ctx->gray_point;
