@@ -458,8 +458,6 @@ static inline void st_spectral_gamut(
 
 /* Complete spectral tone mapping pipeline for one pixel.
  *
- * Pre-pipeline: input gamut safety — sigmoid rolloff toward luma-gray
- *   (applied in process() before calling dt_st_pipeline_eval)
  * Pipeline order:
  *   1. D50-adapted Rec.2020 RGB -> D50 XYZ (precise matrix)
  *   2. ACES 2.0 SSTS on luminance Y only (spectral tone scale)
@@ -468,9 +466,9 @@ static inline void st_spectral_gamut(
  *   5. Chromaticity ratio scaling: x = ratio * Y
  *   6. Spectral gamut: film-like chromaticity roll-off in CIE xy
  *   7. XYZ -> output RGB via output matrix
- *   8. Highlight desaturation (blend toward white via sigmoid)
+ *   8. Highlight desaturation (blend toward achromatic luma)
  *   9. Vibrance (saturation with high-sat protection)
- *  10. Output gamut clamp (blend toward white when channels go negative)
+ *  10. Gamut compression safety net
  *  11. Clamp to [0, inf)
  */
 void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
@@ -896,14 +894,13 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   for(size_t k = 0; k < npixels; k++)
   {
     const size_t idx = k * ch;
-    float rgb_in[3] = { in[idx], in[idx + 1], in[idx + 2] }; // Input pixel
+    float rgb_in[3] = { in[idx], in[idx + 1], in[idx + 2] };
     float rgb_out[3];
 
     /* Pre-pipeline safety net: sigmoid rolloff toward luma-gray */
     {
-      const float lum_max = fmaxf(fmaxf(rgb_in[0], rgb_in[1]), rgb_in[2]); // Max channel value
-      const float luma_pixel = d->ctx.luma_coeff[0] * rgb_in[0] + d->ctx.luma_coeff[1] * rgb_in[1] + d->ctx.luma_coeff[2] * rgb_in[2]; // Perceived brightness
-      const double w = st_desat_weight(lum_max * d->ctx.exposure_factor, d->ctx.hl_desat);
+      const float lum = fmaxf(fmaxf(rgb_in[0], rgb_in[1]), rgb_in[2]);
+      const double w = st_desat_weight(lum * d->ctx.exposure_factor, d->ctx.hl_desat);
       if(w > 0.0 && isfinite(w))
       {
         const float t = fminf((float)w, 1.0f);
@@ -911,7 +908,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
         if(isfinite(ts) && ts > 0.0f)
         {
           for(int c = 0; c < 3; c++)
-            rgb_in[c] = rgb_in[c] * (1.0f - ts) + luma_pixel * ts; // Blend towards luma_pixel
+            rgb_in[c] = rgb_in[c] * (1.0f - ts) + lum * ts;
         }
       }
     }

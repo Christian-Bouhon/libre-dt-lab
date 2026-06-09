@@ -210,7 +210,7 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
       if(p->hl_rotation != 0.0f)
       {
         const float wr = fmin(st_desat_weight(y_exposed, 1.0f), 1.0f);
-        const float angle = p->hl_rotation * 0.15f * wr;
+        const float angle = p->hl_rotation * 0.1f * wr;
         const float ca = cos(angle);
         const float sa = sin(angle);
         if(isfinite(ca) && isfinite(sa))
@@ -295,15 +295,14 @@ __kernel void spectral_tone(
 
   /* Pre-pipeline safety net: sigmoid rolloff toward luma-gray */
   {
-    const float lum_max = fmax(fmax(rgb_in.x, rgb_in.y), rgb_in.z);
-    const float luma_pixel = p.luma_coeff[0] * rgb_in.x + p.luma_coeff[1] * rgb_in.y + p.luma_coeff[2] * rgb_in.z;
-    const float w = st_desat_weight(lum_max * p.exposure_factor, p.hl_desat);
+    const float lum = fmax(fmax(rgb_in.x, rgb_in.y), rgb_in.z);
+    const float w = st_desat_weight(lum * p.exposure_factor, p.hl_desat);
     if(w > 0.0f && isfinite(w))
     {
       const float t = fmin(w, 1.0f);
       const float ts = (t * t) / (t * t + (1.0f - t) * (1.0f - t) + 1e-6f);
       if(isfinite(ts) && ts > 0.0f)
-        rgb_in = rgb_in * (1.0f - ts) + (float3)(luma_pixel, luma_pixel, luma_pixel) * ts;
+        rgb_in = rgb_in * (1.0f - ts) + (float3)(lum, lum, lum) * ts;
     }
   }
 
