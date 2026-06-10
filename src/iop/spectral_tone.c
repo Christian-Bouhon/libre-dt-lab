@@ -109,7 +109,7 @@ typedef struct dt_iop_spectral_tone_params_t
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
   float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "spectral brilliance"
   float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "HL hue shift"
-  float hl_desaturation;       // $MIN: 0 $MAX: 2 $DEFAULT: 0.50 $DESCRIPTION: "HL desaturation"
+  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "HL desaturation"
   float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.15 $DESCRIPTION: "gamut knee"
   float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "gamut steepness"
   dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "color space"
@@ -532,7 +532,7 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
       if(ctx->hl_rotation != 0.0f)
       {
         const float wr = fminf((float)st_desat_weight(y_exposed, 1.0f), 1.0f);
-        const float angle = ctx->hl_rotation * 0.15f * wr;
+        const float angle = ctx->hl_rotation * 0.15f * wr; //CB
         const float ca = cosf(angle);
         const float sa = sinf(angle);
         if(isfinite(ca) && isfinite(sa))
@@ -550,8 +550,31 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
         }
       }
 
+      /* Vibrance négative : désature plus les pixels saturés, activée par hl_desat et hl_hue_shift */
+      double w_final = w;
+      if(ctx->hl_desat > 0.0f || ctx->hl_rotation != 0.0f)
+      {
+        const float maxc = fmaxf(fmaxf(rgb[0], rgb[1]), rgb[2]);
+        const float minc = fminf(fminf(rgb[0], rgb[1]), rgb[2]);
+        const float sat = (maxc > 0.0f) ? (maxc - minc) / maxc : 0.0f;
+        const float ss = (sat * sat) / (sat * sat + (1.0f - sat) * (1.0f - sat) + 1e-6f);
+
+        if(ctx->hl_desat > 0.0f)
+        {
+          const float vib_neg = ctx->hl_desat * ss * 0.5f;
+          const double w_vib = st_desat_weight(y_exposed, 1.0f) * vib_neg;
+          w_final = fmin(w_final + w_vib, 1.0);
+        }
+        if(ctx->hl_rotation != 0.0f)
+        {
+          const float vib_neg = fabsf(ctx->hl_rotation) * ss * 1.0f; //CB
+          const double w_rot = st_desat_weight(y_exposed, 1.0f) * vib_neg;
+          w_final = fmax(w_final, w_rot);
+        }
+      }
+
       /* Blend toward white with sigmoidal curve — film-like */
-      const float t = fminf((float)w, 1.0f);
+      const float t = fminf((float)w_final, 1.0f);
       const float ts = (t * t) / (t * t + (1.0f - t) * (1.0f - t) + 1e-6f);
       if(isfinite(ts))
       {
@@ -848,7 +871,7 @@ void tiling_callback(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
                      dt_develop_tiling_t *tiling)
 {
   tiling->factor = 2.0f;
-  tiling->factor_cl = 1.0f;
+  tiling->factor_cl = 2.0f;
   tiling->maxbuf = 1.0f;
   tiling->maxbuf_cl = 1.0f;
   tiling->overhead = 0;

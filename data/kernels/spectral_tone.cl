@@ -210,7 +210,7 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
       if(p->hl_rotation != 0.0f)
       {
         const float wr = fmin(st_desat_weight(y_exposed, 1.0f), 1.0f);
-        const float angle = p->hl_rotation * 0.1f * wr;
+        const float angle = p->hl_rotation * 0.15f * wr; // CB
         const float ca = cos(angle);
         const float sa = sin(angle);
         if(isfinite(ca) && isfinite(sa))
@@ -228,8 +228,31 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
         }
       }
 
+      /* Vibrance négative : désature plus les pixels saturés, activée par hl_desat et hl_hue_shift */
+      float w_final = w;
+      if(p->hl_desat > 0.0f || p->hl_rotation != 0.0f)
+      {
+        const float maxc = fmax(fmax(rgb.x, rgb.y), rgb.z);
+        const float minc = fmin(fmin(rgb.x, rgb.y), rgb.z);
+        const float sat = (maxc > 0.0f) ? (maxc - minc) / maxc : 0.0f;
+        const float ss = (sat * sat) / (sat * sat + (1.0f - sat) * (1.0f - sat) + 1e-6f);
+
+        if(p->hl_desat > 0.0f)
+        {
+          const float vib_neg = p->hl_desat * ss * 0.5f;
+          const float w_vib = st_desat_weight(y_exposed, 1.0f) * vib_neg;
+          w_final = fmin(w_final + w_vib, 1.0f);
+        }
+        if(p->hl_rotation != 0.0f)
+        {
+          const float vib_neg = fabs(p->hl_rotation) * ss * 1.0f; //CB
+          const float w_rot = st_desat_weight(y_exposed, 1.0f) * vib_neg;
+          w_final = fmax(w_final, w_rot);
+        }
+      }
+
       /* Blend toward white with sigmoidal curve — film-like */
-      const float t = fmin(w, 1.0f);
+      const float t = fmin(w_final, 1.0f);
       const float ts = (t * t) / (t * t + (1.0f - t) * (1.0f - t) + 1e-6f);
       if(isfinite(ts))
         rgb = rgb * (1.0f - ts) + (float3)(1.0f, 1.0f, 1.0f) * ts;
@@ -289,7 +312,7 @@ __kernel void spectral_tone(
   float4 pixel = read_imagef(input, sampleri, pos);
 
   /* sanitize input range and drop NaNs (matches agx sanitisation) */
-  pixel = select(clamp(pixel, -1e6f, 1e6f), (float4)(0.0f), isnan(pixel));
+  pixel = (float4)(select(clamp(pixel.xyz, -1e6f, 1e6f), (float3)(0.0f), isnan(pixel.xyz)), pixel.w);
 
   float3 rgb_in = (float3)(pixel.x, pixel.y, pixel.z);
 
