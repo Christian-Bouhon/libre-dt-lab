@@ -107,9 +107,9 @@ typedef struct dt_iop_spectral_tone_params_t
   float contrast;              // $MIN: 0.25 $MAX: 4.25 $DEFAULT: 2.25 $DESCRIPTION: "contrast"
   float gray_point;            // $MIN: -1 $MAX: 1 $DEFAULT: 0 $DESCRIPTION: "mid-tones"
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
-  float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "spectral brilliance"
-  float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "HL hue shift"
-  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "HL desaturation"
+  float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "perceptual brightness"
+  float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "Abney rotation"
+  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "highlight roll-off"
   float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.15 $DESCRIPTION: "gamut knee"
   float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "gamut steepness"
   dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "color space"
@@ -1164,9 +1164,9 @@ void gui_init(dt_iop_module_t *self)
     g->spectral_brilliance = dt_bauhaus_slider_from_params(self, "spectral_brilliance");
   dt_bauhaus_slider_set_format(g->spectral_brilliance, "%");
   gtk_widget_set_tooltip_text(g->spectral_brilliance,
-    _("Tone curve character with auto-exposure compensation. Higher values increase \n"
-      "highlight headroom with a softer, film-like rolloff. Brightness is automatically \n"
-      "stabilised across the full range."));
+    _("Perceptual brightness: auto-exposure compensation with tone scale character. \n"
+      "Higher values increase highlight headroom with a softer, film-like rolloff. \n"
+      "Brightness is stabilised across the full range."));
 
   /* color_look est maintenant un enum dt_iop_st_look_t avec $DESCRIPTION sur chaque
    * valeur. dt_bauhaus_combobox_from_params lit l'introspection et peuple les 11
@@ -1194,15 +1194,17 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->hl_hue_shift, " %");
   dt_bauhaus_slider_set_digits(g->hl_hue_shift, 0);
   gtk_widget_set_tooltip_text(g->hl_hue_shift,
-    _("Abney hue shift in highlights. Positive rotates toward cool (blue), \n"
-      "negative toward warm (salmon). Independent of desaturation strength."));
+    _("Abney rotation in highlights, modulated by pixel saturation. \n"
+      "Positive rotates toward cool (blue), negative toward warm (salmon). \n"
+      "Vibrance-negative desaturation: saturated pixels desaturate further. \n"
+      "Independent of highlight roll-off."));
 
   g->hl_desaturation = dt_bauhaus_slider_from_params(self, "hl_desaturation");
   dt_bauhaus_slider_set_factor(g->hl_desaturation, 100.0f);
   dt_bauhaus_slider_set_format(g->hl_desaturation, " %");
   dt_bauhaus_slider_set_digits(g->hl_desaturation, 0);
   gtk_widget_set_tooltip_text(g->hl_desaturation,
-    _("Desaturates highlights toward achromatic luma to prevent out-of-gamut colors. \n"
+    _("Highlight roll-off combining luminance desaturation and vibrance-negative. \n"
       "0% = off, 15% = natural rolloff, 100% = maximum desaturation."));
 
   g->gamut_knee = dt_bauhaus_slider_from_params(self, "gamut_knee");
