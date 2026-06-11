@@ -328,7 +328,8 @@ int legacy_params(dt_iop_module_t *self,
     const dt_iop_basecurve_params_v7_t *o = (dt_iop_basecurve_params_v7_t *)old_params;
     dt_iop_basecurve_params_t *n = calloc(1, sizeof(dt_iop_basecurve_params_t));
     memcpy(n, o, sizeof(dt_iop_basecurve_params_v7_t));
-    // Consolidated migration from v7 to stable v8
+    // Consolidated migration from v7 to v9
+    // (v8 exists as a separate path below for the v8->10 transition)
     n->use_rolloff = 0.0f;      // highlight roll-off default dosage (0%)
     n->saturation_boost = 0.0f; // saturation boost default (neutral)
     *new_params = n;
@@ -1681,6 +1682,15 @@ static void apply_postprocess(float *rgb, dt_iop_basecurve_data_t *const d,
   else if(d->workflow_mode == 3)
   {
     float rgb_tmp[3] = { r, g, b };
+
+    // Note: Oklab expects linear sRGB (D65) input per specification, but we feed
+    // the working space RGB directly as a pragmatic approximation.  Converting
+    // workspace → sRGB would clip saturated Rec.2020 colours (negative sRGB
+    // values) and distort hues after the Oklab cube-root clamp.  The relative
+    // chroma/purity operations in Mode 3 are robust to the approximation, and
+    // neutral greys (R=G=B) are unaffected.  Björn Ottosson acknowledges this
+    // usage as acceptable for non-sRGB working spaces.
+
     float lab[3];
     rgb_to_oklab_cpu(rgb_tmp, lab);
 
@@ -1718,9 +1728,7 @@ static void apply_postprocess(float *rgb, dt_iop_basecurve_data_t *const d,
     float purity_comp = (purity > p_thresh) ? p_thresh + (purity - p_thresh) / (1.0f + 0.2f * (purity - p_thresh)) : purity;
 
     float V_orig = fmaxf(0.0f, powf(V_norm, d->contrast_brilliance_power));
-    V_orig *= (1.189f + d->highlight_gain) * (1.0f - 0.5f * purity); /*CB 0.3 = plus doux, risque rouge hors gamut
-                                                                          0.5 = rouge pile dans le gamut,
-                                                                          0.7 = rouge bien dans le gamut, mais couleurs un peu plus assombries */
+    V_orig *= (1.189f + d->highlight_gain) * (1.0f - 0.5f * purity);
     V_orig = fmaxf(0.0f, powf(V_orig, d->shadow_lift + 1.0f));
 
     float V_new = ACES_RRT_ODT_tonemap(V_orig);

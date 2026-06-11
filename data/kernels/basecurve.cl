@@ -487,7 +487,7 @@ const float contrast_brilliance_power,
       if(use_work_profile != 0 && profile_info != 0)
       {
         xyz.x = profile_info->matrix_in[0] * pixel.x + profile_info->matrix_in[1] * pixel.y + profile_info->matrix_in[2] * pixel.z;
-        xyz.y = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
+        xyz.y = profile_info->matrix_in[3] * pixel.x + profile_info->matrix_in[4] * pixel.y + profile_info->matrix_in[5] * pixel.z;
         xyz.z = profile_info->matrix_in[6] * pixel.x + profile_info->matrix_in[7] * pixel.y + profile_info->matrix_in[8] * pixel.z;
       }
       else
@@ -514,6 +514,14 @@ const float contrast_brilliance_power,
     else if(workflow_mode == 3)
     {
       // Mode 3: ACES RRTAndODTFit approximation Pure UCS (Oklab) - Pre-tonescale Brilliance
+      // Note: Oklab expects linear sRGB (D65) input per specification, but we feed
+      // the working space RGB directly as a pragmatic approximation.  Converting
+      // workspace → sRGB would clip saturated Rec.2020 colours (negative sRGB
+      // values) and distort hues after the Oklab cube-root clamp.  The relative
+      // chroma/purity operations in Mode 3 are robust to the approximation, and
+      // neutral greys (R=G=B) are unaffected.  Björn Ottosson acknowledges this
+      // usage as acceptable for non-sRGB working spaces.
+
       float3 lab = rgb_to_oklab(pixel.xyz);
 
       // 1. Balance Saturation UCS
@@ -602,7 +610,7 @@ const float contrast_brilliance_power,
       if(use_work_profile != 0 && profile_info != 0)
       {
         xyz.x = profile_info->matrix_in[0] * pixel.x + profile_info->matrix_in[1] * pixel.y + profile_info->matrix_in[2] * pixel.z;
-        xyz.y = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
+        xyz.y = profile_info->matrix_in[3] * pixel.x + profile_info->matrix_in[4] * pixel.y + profile_info->matrix_in[5] * pixel.z;
         xyz.z = profile_info->matrix_in[6] * pixel.x + profile_info->matrix_in[7] * pixel.y + profile_info->matrix_in[8] * pixel.z;
       }
       else
