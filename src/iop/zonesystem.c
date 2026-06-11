@@ -119,6 +119,7 @@ const char **description(dt_iop_module_t *self)
                                       _("non-linear, Lab"),
                                       _("non-linear, Lab, display-referred"));
 }
+
 /* get the zone index of pixel lightness from zonemap */
 static inline int _iop_zonesystem_zone_index_from_lightness(float lightness, float *zonemap, int size)
 {

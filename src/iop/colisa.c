@@ -71,11 +71,6 @@ typedef struct dt_iop_colisa_global_data_t
 } dt_iop_colisa_global_data_t;
 
 
-/* const char *deprecated_msg()
-{
-  return _("this module is deprecated. please use colorbalance RGB module instead.");
-} */
-
 const char *name()
 {
   return _("contrast brightness saturation");

@@ -356,13 +356,14 @@ void reload_defaults(dt_iop_module_t *self)
   if(scene_raw && self->multi_priority == 0)
   {
     const gboolean mono = dt_image_is_monochrome(&self->dev->image_storage);
-    // For basecurve workflow, exposure stays at 0.0 IL (basecurve handles the tone mapping)
+    // For basecurve and spectral tone workflows, exposure stays at 0.0 IL
+    // (basecurve/spectral tone handle the tone mapping)
     // For other scene-referred workflows (filmic, sigmoid, AgX), use 0.7 IL default
-    const char *workflow = dt_conf_get_string("plugins/darkroom/workflow");
-    const gboolean is_basecurve = workflow && 
+    const char *workflow = dt_conf_get_string_const("plugins/darkroom/workflow");
+    const gboolean is_basecurve_or_spectral_tone = workflow && 
       (strcmp(workflow, "scene-referred (spectral tone)") == 0 || 
        strcmp(workflow, "scene-referred (basecurve)") == 0);
-    d->exposure = mono ? 0.0f : (is_basecurve ? 0.0f : 0.7f);
+    d->exposure = mono ? 0.0f : (is_basecurve_or_spectral_tone ? 0.0f : 0.7f);
     d->black =    mono ? 0.0f : -0.000244140625f;
     d->compensate_exposure_bias = TRUE;
   }

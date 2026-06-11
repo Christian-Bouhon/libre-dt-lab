@@ -104,11 +104,6 @@ typedef struct dt_iop_levels_global_data_t
 } dt_iop_levels_global_data_t;
 
 
-/* const char *deprecated_msg()
-{
-  return _("this module is deprecated. please use the RGB levels module instead.");
-} */
-
 const char *name()
 {
   return _("levels");
