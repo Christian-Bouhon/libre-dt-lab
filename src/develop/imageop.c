@@ -1284,6 +1284,9 @@ void dt_iop_gui_set_enable_button(dt_iop_module_t *module)
     dt_iop_gui_set_enable_button_icon(GTK_WIDGET(module->off), module);
   }
 
+  if(module->detach_enable_toggle)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->detach_enable_toggle), module->enabled);
+
   _update_module_active_class(module);
 }
 
@@ -2253,6 +2256,7 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
   g_slist_free_full(module->widget_list, g_free);
   module->widget_list = NULL;
   DT_CONTROL_SIGNAL_DISCONNECT_ALL(module, module->so->op);
+  if(module->gui_cleanup) module->gui_cleanup(module);
   if(module->detached)
   {
     // destroy the detach window (this also destroys module->widget inside it)
@@ -2262,7 +2266,6 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
     module->detach_placeholder = NULL;
     module->detached = FALSE;
   }
-  if(module->gui_cleanup) module->gui_cleanup(module);
   gtk_widget_destroy(module->expander ? module->expander : module->widget);
   dt_iop_gui_cleanup_blending(module);
   dt_pthread_mutex_destroy(&module->gui_lock);
@@ -3362,9 +3365,16 @@ static void _gui_detach_enable_toggled(GtkToggleButton *toggle, dt_iop_module_t 
   if(darktable.gui->reset) return;
   module->enabled = gtk_toggle_button_get_active(toggle);
   if(module->off)
+  {
+    DT_ENTER_GUI_UPDATE();
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->off), module->enabled);
-  dt_dev_add_history_item(module->dev, module, TRUE);
-  dt_dev_pixelpipe_rebuild(module->dev);
+    DT_LEAVE_GUI_UPDATE();
+  }
+  if(!DT_IN_GUI_UPDATE())
+  {
+    dt_dev_add_history_item(module->dev, module, TRUE);
+    dt_dev_pixelpipe_rebuild(module->dev);
+  }
 }
 
 static void _gui_detach(dt_iop_module_t *module)
@@ -3431,6 +3441,7 @@ static void _gui_detach(dt_iop_module_t *module)
   g_signal_connect(G_OBJECT(enable_toggle), "toggled",
                    G_CALLBACK(_gui_detach_enable_toggled), module);
   gtk_widget_set_tooltip_text(enable_toggle, _("enable/disable module"));
+  module->detach_enable_toggle = enable_toggle;
 
   gtk_box_pack_start(GTK_BOX(hdr), hdr_label, TRUE, TRUE, 0);
   gtk_box_pack_end(GTK_BOX(hdr), enable_toggle, FALSE, FALSE, 0);
@@ -3497,6 +3508,7 @@ void dt_iop_gui_attach(dt_iop_module_t *module)
 
   // show expander in panel at saved position
   gtk_widget_show(module->expander);
+  gtk_box_reorder_child(GTK_BOX(panel), module->expander, position);
 
   module->detach_window = NULL;
   module->detach_placeholder = NULL;

@@ -270,6 +270,8 @@ typedef struct dt_iop_module_t
   GtkWidget *detach_placeholder;
   /** whether this module is currently detached to a separate window */
   gboolean detached;
+  /** enable/disable toggle button in the detached window header */
+  GtkWidget *detach_enable_toggle;
   /** reset parameters button */
   GtkWidget *reset_button;
   /** show preset menu button */
