@@ -69,6 +69,7 @@ Contrast is modeled through three complementary components:
 #include "control/control.h"
 #include "develop/blend.h"
 #include "develop/develop.h"
+#include "develop/tiling.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
