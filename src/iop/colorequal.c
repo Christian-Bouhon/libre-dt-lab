@@ -2603,7 +2603,11 @@ int mouse_moved(dt_iop_module_t *self,
   if(!g) return 0;
 
   // Disable cursor tracking when drawing a mask (brush/path/etc.)
-  if(self->dev->form_gui && self->dev->form_gui->creation) return 0;
+  if(self->dev->form_gui && self->dev->form_gui->creation)
+  {
+    g->cursor_valid = FALSE;
+    return 0;
+  }
 
   // Read hue from the preview buffer
   dt_iop_gui_enter_critical_section(self);
@@ -3078,12 +3082,22 @@ static gboolean _area_scrolled_callback(GtkWidget *widget,
 
     float vmin, vmax;
     float *val = _get_param_ptr(p, g->channel, g->selected, &vmin, &vmax);
-    *val = CLAMP(*val + move, vmin, vmax);
+    const float old_val = *val;
+    float new_val = *val + move;
+    if(g->channel == HUE)
+    {
+      if(new_val > 180.f) new_val -= 360.f;
+      else if(new_val < -180.f) new_val += 360.f;
+    }
+    else
+      new_val = CLAMP(new_val, vmin, vmax);
+    *val = new_val;
 
     GtkWidget *w = _get_slider(g, g->selected);
     if(w) dt_bauhaus_slider_set(w, *val);
 
-    dt_dev_add_history_item(self->dev, self, TRUE);
+    if(*val != old_val)
+      dt_dev_add_history_item(self->dev, self, TRUE);
     gtk_widget_queue_draw(GTK_WIDGET(g->area));
     return TRUE;
   }
@@ -3181,8 +3195,8 @@ static gboolean _area_motion_notify_callback(GtkWidget *widget,
     const float epsilon = DT_PIXEL_APPLY_DPI(10.0);
     const int oldsel = g->selected;
     const int oldon = g->on_node;
-    g->selected = (int)(((float)event->x - g->points[0][0])
-                        / (g->points[1][0] - g->points[0][0]) + 0.5f) % NODES;
+    g->selected = (((int)(((float)event->x - g->points[0][0])
+                        / (g->points[1][0] - g->points[0][0]) + 0.5f) % NODES) + NODES) % NODES;
     g->on_node = fabsf(g->points[g->selected][1] - (float)event->y) < epsilon;
     darktable.control->element = g->selected;
     if(oldsel != g->selected || oldon != g->on_node)
