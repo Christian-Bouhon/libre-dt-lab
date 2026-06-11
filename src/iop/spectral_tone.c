@@ -920,6 +920,11 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     float rgb_in[3] = { in[idx], in[idx + 1], in[idx + 2] };
     float rgb_out[3];
 
+    /* Sanitize input: clamp to [-1e6, 1e6] and zero any NaN/Inf,
+     * matching the CL kernel entry guard exactly. */
+    for(int c = 0; c < 3; c++)
+      rgb_in[c] = isfinite(rgb_in[c]) ? fminf(fmaxf(rgb_in[c], -1e6f), 1e6f) : 0.0f;
+
     /* Pre-pipeline safety net: sigmoid rolloff toward luma-gray */
     {
       const float lum = fmaxf(fmaxf(rgb_in[0], rgb_in[1]), rgb_in[2]);

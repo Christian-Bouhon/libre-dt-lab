@@ -1506,7 +1506,7 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
       else if(wf_spectral_tone)                                                                                   \
       {                                                                                                           \
         AM("spectral_tone/contrast");                                                                             \
-        AM("spectral_tone/mid-tone");                                                                             \
+        AM("spectral_tone/mid-tones");                                                                            \
         AM("spectral_tone/vibrance");                                                                             \
         AM("spectral_tone/spectral brilliance");                                                                  \
         AM("spectral_tone/color look");                                                                           \

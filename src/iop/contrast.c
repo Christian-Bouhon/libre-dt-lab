@@ -433,6 +433,8 @@ static inline void apply_local_contrast(const float *const restrict in,
 
     float ratio = L_final / fmaxf(lum_pixel, 1e-6f);
     ratio = fminf(ratio, 8.0f);
+
+    const float alpha = in[4 * k + 3];
     for_each_channel(c)
         out[4 * k + c] = in[4 * k + c] * ratio;
 
@@ -465,6 +467,8 @@ static inline void apply_local_contrast(const float *const restrict in,
           for(int c = 0; c < 3; c++) out[4 * k + c] = L_final + t * (out[4 * k + c] - L_final);
         }
     }
+
+    out[4 * k + 3] = alpha;
   }
 }
 
@@ -938,6 +942,19 @@ cleanup:
 }
 #endif // HAVE_OPENCL
 
+void tiling_callback(dt_iop_module_t *self,
+                     dt_dev_pixelpipe_iop_t *piece,
+                     const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
+                     dt_develop_tiling_t *tiling)
+{
+  tiling->factor = 2.0f;
+  tiling->factor_cl = 9.0f;
+  tiling->maxbuf = 1.0f;
+  tiling->maxbuf_cl = 1.0f;
+  tiling->overhead = 0;
+  tiling->overlap = 0;
+  tiling->align = 1;
+}
 
 void process(dt_iop_module_t *self,
              dt_dev_pixelpipe_iop_t *piece,
