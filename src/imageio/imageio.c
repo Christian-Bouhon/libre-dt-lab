@@ -802,7 +802,7 @@ error_im:
       "[dt_imageio_large_thumbnail] error: The thumbnail image is not in "
       "JPEG format, and DT was built without neither GraphicsMagick or "
       "ImageMagick. Please rebuild DT with GraphicsMagick or ImageMagick "
-      "support enabled.\n");
+      "support enabled.");
 #endif
   }
 
@@ -1135,7 +1135,7 @@ gboolean dt_imageio_export_with_flags(const dt_imgid_t imgid,
       else
         dt_print(DT_DEBUG_ALWAYS,
                  "[imageio] please check that you have imported this style into darktable"
-                 " and specified it in the command line without the .dtstyle extension\n");
+                 " and specified it in the command line without the .dtstyle extension");
       goto error;
     }
 
@@ -1263,7 +1263,7 @@ gboolean dt_imageio_export_with_flags(const dt_imgid_t imgid,
     for(GList *modules = dev.iop; modules; modules = g_list_next(modules))
     {
       colorout = (dt_iop_module_t *)modules->data;
-      if(colorout->get_p && strcmp(colorout->op, "colorout") == 0)
+      if(colorout->get_p && dt_iop_module_is(colorout, "colorout"))
       {
         const dt_colorspaces_color_profile_type_t *type =
           colorout->get_p(colorout->params, "type");

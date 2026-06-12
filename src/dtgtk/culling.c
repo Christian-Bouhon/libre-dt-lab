@@ -324,6 +324,28 @@ static void _set_table_zoom_ratio(dt_culling_t *table, dt_thumbnail_t *th)
   table->zoom_ratio = dt_thumbnail_get_zoom_ratio(th);
 }
 
+// Safety-net finaliser for deferred zoom gestures: fires once no further zoom
+// event has arrived for a short while. This guarantees the surface is reloaded
+// at the correct resolution even when the input device never emits a smooth
+// scroll "stop" event (or emits it without the ctrl modifier still held).
+static gboolean _zoom_finalize_timeout(gpointer user_data)
+{
+  dt_culling_t *table = (dt_culling_t *)user_data;
+  table->zoom_finalize_timeout_id = 0;
+  dt_culling_zoom_end(table);
+  return G_SOURCE_REMOVE;
+}
+
+// (Re)arm the deferred-zoom finaliser. Called after each deferred zoom event so
+// the timer keeps sliding forward while the gesture is ongoing and only fires
+// once the user actually stops.
+static void _schedule_zoom_finalize(dt_culling_t *table)
+{
+  if(table->zoom_finalize_timeout_id)
+    g_source_remove(table->zoom_finalize_timeout_id);
+  table->zoom_finalize_timeout_id = g_timeout_add(200, _zoom_finalize_timeout, table);
+}
+
 static gboolean _zoom_and_shift(dt_thumbnail_t *th,
                                 const int x_offset,
                                 const int y_offset,
@@ -409,15 +431,16 @@ static gboolean _zoom_to_center(dt_thumbnail_t *th,
   int iw = 0;
   int ih = 0;
   gtk_widget_get_size_request(th->w_image_box, &iw, &ih);
-  // Compute the bound from the new zoom directly. img_width * z_ratio assumes
-  // the surface is at the previous zoom, but during deferred pinch zoom the
-  // surface stays at the gesture-start zoom and z_ratio is only the per-step
-  // ratio — so img_width * z_ratio under-estimates the effective width and the
-  // image progressively drifts toward the top-left corner.
-  int img_w = 0, img_h = 0;
-  gtk_widget_get_size_request(th->w_image, &img_w, &img_h);
-  const float effective_w = (float)img_w * darktable.gui->ppd_thb * zd;
-  const float effective_h = (float)img_h * darktable.gui->ppd_thb * zd;
+  // Bound to the real rendered image extent rather than box*zoom: the latter
+  // assumes the image fills the box, but a photo whose aspect ratio differs from
+  // the box is letterboxed, so box*zoom over-estimates the extent in the
+  // letterboxed dimension and the image drifts toward that edge.
+  // img_width/img_height are at th->img_surf_zoom; scale to the new zoom zd. This
+  // references the surface zoom directly (not the per-step z_ratio), so it stays
+  // correct across a whole deferred gesture where the surface is never reloaded.
+  const float zr = (th->img_surf_zoom > 0.0f) ? zd / th->img_surf_zoom : 1.0f;
+  const float effective_w = (float)th->img_width * zr;
+  const float effective_h = (float)th->img_height * zr;
   th->zoomx = fmaxf((float)iw - effective_w,
                     fminf(0.0f, iw / 2.0 - (iw / 2.0 - th->zoomx) * z_ratio));
   th->zoomy = fmaxf((float)ih - effective_h,
@@ -518,6 +541,12 @@ static gboolean _thumbs_zoom_add(dt_culling_t *table,
     if(_zoom_to_x_root(th, x_culling, y_culling, zoom_delta, deferred))
       _set_table_zoom_ratio(table, th);
   }
+
+  // Deferred gestures only rescale the stale surface; arm the safety-net timer
+  // so the proper surface reload still happens shortly after scrolling stops
+  // even if no smooth-scroll "stop" event arrives to call dt_culling_zoom_end().
+  if(deferred)
+    _schedule_zoom_finalize(table);
 
   return TRUE;
 }
@@ -647,16 +676,20 @@ static gboolean _event_scroll(GtkWidget *widget,
   // accumulator path below, which would otherwise batch several events into
   // a single coarse 0.5-unit step.
   //
-  // Scroll stop event: trigger a proper surface reload now that the gesture is done.
-  if(e->direction == GDK_SCROLL_SMOOTH && e->is_stop
-     && dt_modifier_is(e->state, GDK_CONTROL_MASK))
+  // Scroll stop event: trigger a proper surface reload now that the gesture is
+  // done. We deliberately do NOT require ctrl to still be held here: the stop
+  // event often arrives after the user has released ctrl, and a deferred zoom
+  // must be finalised regardless. (If no zoom was pending this is a no-op, and
+  // the safety-net timer in _thumbs_zoom_add covers devices that never emit a
+  // stop event at all.)
+  if(e->direction == GDK_SCROLL_SMOOTH && e->is_stop)
   {
     dt_culling_zoom_end(table);
     return TRUE;
   }
 
   if(e->direction == GDK_SCROLL_SMOOTH && !e->is_stop
-     && dt_modifier_is(e->state, GDK_CONTROL_MASK))
+     && dt_modifiers_include(e->state, GDK_CONTROL_MASK))
   {
     gdouble dx = 0.0, dy = 0.0;
     if(dt_gui_get_scroll_deltas(e, &dx, &dy) && (dx != 0.0 || dy != 0.0))
@@ -685,7 +718,7 @@ static gboolean _event_scroll(GtkWidget *widget,
   // We check before the unit-delta path so fractional smooth scroll is used for panning
   // with full fidelity rather than being accumulated into integer steps.
   if(e->direction == GDK_SCROLL_SMOOTH && !e->is_stop
-     && !dt_modifier_is(e->state, GDK_CONTROL_MASK))
+     && !dt_modifiers_include(e->state, GDK_CONTROL_MASK))
   {
     // Check if any thumbnail is zoomed in; if so, pan instead of navigate.
     float fz = 1.0f;
@@ -734,7 +767,11 @@ static gboolean _event_scroll(GtkWidget *widget,
       dt_print(DT_DEBUG_INPUT,
                "[culling scroll] ctrl+scroll zoom_delta=%.2f x_culling=%.1f y_culling=%.1f",
                zoom_delta, x_culling, y_culling);
-      _thumbs_zoom_add(table, zoom_delta, x_culling, y_culling, e->state, TRUE);
+      // discrete wheel: a single click has no continuous gesture and emits no
+      // smooth is_stop event to finalise it, so reload the surface immediately
+      // (still cheap — the native mipmap surface cache is reused).  Leaving it
+      // deferred would freeze the image at a stale, scaled-up resolution.
+      _thumbs_zoom_add(table, zoom_delta, x_culling, y_culling, e->state, FALSE);
     }
     else
     {
@@ -925,8 +962,11 @@ static gboolean _event_motion_notify(GtkWidget *widget,
       int iw = 0;
       int ih = 0;
       gtk_widget_get_size_request(th->w_image, &iw, &ih);
-      const int mindx = (int)(iw * darktable.gui->ppd_thb * (1.0f - th->zoom));
-      const int mindy = (int)(ih * darktable.gui->ppd_thb * (1.0f - th->zoom));
+      // bound to the real rendered image extent (handles letterboxing), scaled to
+      // the current zoom in case the surface is still at the gesture-start zoom.
+      const float zr = (th->img_surf_zoom > 0.0f) ? th->zoom / th->img_surf_zoom : 1.0f;
+      const int mindx = (int)(iw * darktable.gui->ppd_thb - th->img_width * zr);
+      const int mindy = (int)(ih * darktable.gui->ppd_thb - th->img_height * zr);
       if(th->zoomx > 0)
         th->zoomx = 0;
       if(th->zoomx < mindx)
@@ -2243,6 +2283,12 @@ gboolean dt_culling_zoom_add(dt_culling_t *table,
 void dt_culling_zoom_end(dt_culling_t *table)
 {
   if(!table) return;
+  // We are finalising now, so cancel any pending safety-net timer.
+  if(table->zoom_finalize_timeout_id)
+  {
+    g_source_remove(table->zoom_finalize_timeout_id);
+    table->zoom_finalize_timeout_id = 0;
+  }
   for(GList *l = table->list; l; l = g_list_next(l))
   {
     dt_thumbnail_t *th = l->data;
@@ -2313,8 +2359,11 @@ gboolean dt_culling_pan_move(dt_culling_t *table,
     dt_thumbnail_t *th = l->data;
     int iw = 0, ih = 0;
     gtk_widget_get_size_request(th->w_image, &iw, &ih);
-    const int mindx = (int)(iw * darktable.gui->ppd_thb * (1.0f - th->zoom));
-    const int mindy = (int)(ih * darktable.gui->ppd_thb * (1.0f - th->zoom));
+    // bound to the real rendered image extent (handles letterboxing), scaled to
+    // the current zoom in case the surface is still at the gesture-start zoom.
+    const float zr = (th->img_surf_zoom > 0.0f) ? th->zoom / th->img_surf_zoom : 1.0f;
+    const int mindx = (int)(iw * darktable.gui->ppd_thb - th->img_width * zr);
+    const int mindy = (int)(ih * darktable.gui->ppd_thb - th->img_height * zr);
     if(th->zoomx > 0) th->zoomx = 0;
     if(th->zoomx < mindx) th->zoomx = mindx;
     if(th->zoomy > 0) th->zoomy = 0;

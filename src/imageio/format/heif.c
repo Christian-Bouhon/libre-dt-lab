@@ -137,7 +137,6 @@ int write_image(dt_imageio_module_data_t *data,
   const int bit_depth = d->bit_depth;
 
   struct heif_image* image = NULL;
-  struct heif_color_profile_nclx nclx_profile;
   struct heif_error err;
   uint8_t *icc_profile_data = NULL;
 
@@ -177,25 +176,28 @@ int write_image(dt_imageio_module_data_t *data,
     return 1; // failure
   }
 
-  heif_image_add_plane(image, heif_channel_interleaved, width, height, bit_depth);
+  err = heif_image_add_plane(image, heif_channel_interleaved, width, height, bit_depth);
+  if(err.code != heif_error_Ok)
+  {
+    dt_print(DT_DEBUG_ALWAYS,
+             "[heif export] Failed in heif_image_add_plane for %s",
+             filename);
+    heif_image_release(image);
+    return 1; // failure
+  }
 
   int rowbytes;
 
   // Get a pointer to the actual pixel data.
-  // The 'rowbytes' is returned as "bytes per line".
-  // Returns NULL if a non-existing channel was given.
+  // The function may return NULL in certain cases, but this is not related to
+  // memory allocation. If we give valid arguments, the function will not
+  // return NULL and therefore we do not check for it.
   uint8_t* pixels = heif_image_get_plane(image, heif_channel_interleaved, &rowbytes);
-
-  dt_print(DT_DEBUG_ALWAYS, "[heif export] rowbytes = %d", rowbytes);
 
   const float max_channel_f = (float)((1 << bit_depth) - 1);
   const float *const restrict in_data = (const float *)in_tmp;
   uint8_t *const restrict out = (uint8_t *)pixels;
 
-  dt_times_t start_time = { 0 }, end_time = { 0 };
-  dt_get_times(&start_time);
-
-  // this conversion loop is copied from avif exporter
   switch(bit_depth)
   {
     case 8:
@@ -228,85 +230,81 @@ int write_image(dt_imageio_module_data_t *data,
             out_pixel[2] = (uint16_t)roundf(CLAMP(in_pixel[2] * max_channel_f, 0, max_channel_f));
         }
       }
-
-  } // end switch
-
-  dt_get_times(&end_time);
-  const float tclock = end_time.clock - start_time.clock;
-  const float uclock = end_time.user - start_time.user;
-  dt_control_log("encoding tool %.4f (with uclock=%.4f)\n", tclock, uclock);
+  }
 
 
   // Determine the actual color profile used
   const dt_colorspaces_color_profile_t *cp = dt_colorspaces_get_output_profile(imgid, icc_type, icc_filename);
-  if(!cp)
-  {
-    dt_control_log("color profile is null");
-    return 1;
-  }
-  dt_control_log(
+  dt_print(DT_DEBUG_IMAGEIO,
            "[heif colorprofile profile: %s]",
            dt_colorspaces_get_name(cp->type, filename));
 
-  // !! matrix coefficient may be overriden later if save as RGB (not YUV)
+  struct heif_color_profile_nclx* nclx_profile = heif_nclx_color_profile_alloc();
+  if(!nclx_profile)
+  {
+    heif_image_release(image);
+    return 1; // failure
+  }
+
+  // !! Matrix coefficient may be overriden later if we save lossless (so as RGB, not YUV)
   gboolean need_to_embed_icc = FALSE;
   switch(cp->type)
   {
   case DT_COLORSPACE_SRGB:
-    nclx_profile.color_primaries = heif_color_primaries_ITU_R_BT_709_5; // 1
-    nclx_profile.transfer_characteristics = heif_transfer_characteristic_IEC_61966_2_1; // 13
-    nclx_profile.matrix_coefficients = heif_matrix_coefficients_ITU_R_BT_709_5; // 1
+    nclx_profile->color_primaries = heif_color_primaries_ITU_R_BT_709_5; // 1
+    nclx_profile->transfer_characteristics = heif_transfer_characteristic_IEC_61966_2_1; // 13
+    nclx_profile->matrix_coefficients = heif_matrix_coefficients_ITU_R_BT_709_5; // 1
     break;
   case DT_COLORSPACE_REC709:
-    nclx_profile.color_primaries = heif_color_primaries_ITU_R_BT_709_5; // 1
-    nclx_profile.transfer_characteristics = heif_transfer_characteristic_ITU_R_BT_709_5; // 1
-    nclx_profile.matrix_coefficients = heif_matrix_coefficients_ITU_R_BT_709_5; // 1
+    nclx_profile->color_primaries = heif_color_primaries_ITU_R_BT_709_5; // 1
+    nclx_profile->transfer_characteristics = heif_transfer_characteristic_ITU_R_BT_709_5; // 1
+    nclx_profile->matrix_coefficients = heif_matrix_coefficients_ITU_R_BT_709_5; // 1
     break;
   case DT_COLORSPACE_LIN_REC709:
-    nclx_profile.color_primaries = heif_color_primaries_ITU_R_BT_709_5; // 1
-    nclx_profile.transfer_characteristics = heif_transfer_characteristic_linear; // 8
-    nclx_profile.matrix_coefficients = heif_matrix_coefficients_ITU_R_BT_709_5; // 1
+    nclx_profile->color_primaries = heif_color_primaries_ITU_R_BT_709_5; // 1
+    nclx_profile->transfer_characteristics = heif_transfer_characteristic_linear; // 8
+    nclx_profile->matrix_coefficients = heif_matrix_coefficients_ITU_R_BT_709_5; // 1
     break;
   case DT_COLORSPACE_LIN_REC2020:
-    nclx_profile.color_primaries = heif_color_primaries_ITU_R_BT_2020_2_and_2100_0; // 9
-    nclx_profile.transfer_characteristics = heif_transfer_characteristic_linear; // 8
-    nclx_profile.matrix_coefficients = heif_matrix_coefficients_ITU_R_BT_2020_2_non_constant_luminance; // 9
+    nclx_profile->color_primaries = heif_color_primaries_ITU_R_BT_2020_2_and_2100_0; // 9
+    nclx_profile->transfer_characteristics = heif_transfer_characteristic_linear; // 8
+    nclx_profile->matrix_coefficients = heif_matrix_coefficients_ITU_R_BT_2020_2_non_constant_luminance; // 9
     break;
   case DT_COLORSPACE_PQ_REC2020:
-    nclx_profile.color_primaries = heif_color_primaries_ITU_R_BT_2020_2_and_2100_0; // 9
-    nclx_profile.transfer_characteristics = heif_transfer_characteristic_ITU_R_BT_2100_0_PQ; // 16
-    nclx_profile.matrix_coefficients = heif_matrix_coefficients_ITU_R_BT_2020_2_non_constant_luminance; // 9
+    nclx_profile->color_primaries = heif_color_primaries_ITU_R_BT_2020_2_and_2100_0; // 9
+    nclx_profile->transfer_characteristics = heif_transfer_characteristic_ITU_R_BT_2100_0_PQ; // 16
+    nclx_profile->matrix_coefficients = heif_matrix_coefficients_ITU_R_BT_2020_2_non_constant_luminance; // 9
     break;
   case DT_COLORSPACE_HLG_REC2020:
-    nclx_profile.color_primaries = heif_color_primaries_ITU_R_BT_2020_2_and_2100_0; // 9
-    nclx_profile.transfer_characteristics = heif_transfer_characteristic_ITU_R_BT_2100_0_HLG; // 18
-    nclx_profile.matrix_coefficients = heif_matrix_coefficients_ITU_R_BT_2020_2_non_constant_luminance; // 9
+    nclx_profile->color_primaries = heif_color_primaries_ITU_R_BT_2020_2_and_2100_0; // 9
+    nclx_profile->transfer_characteristics = heif_transfer_characteristic_ITU_R_BT_2100_0_HLG; // 18
+    nclx_profile->matrix_coefficients = heif_matrix_coefficients_ITU_R_BT_2020_2_non_constant_luminance; // 9
     break;
   case DT_COLORSPACE_PQ_P3:
-    nclx_profile.color_primaries = heif_color_primaries_SMPTE_EG_432_1; // 12
-    nclx_profile.transfer_characteristics = heif_transfer_characteristic_ITU_R_BT_2100_0_PQ; // 16
-    nclx_profile.matrix_coefficients = heif_matrix_coefficients_ITU_R_BT_2020_2_non_constant_luminance; // 9
+    nclx_profile->color_primaries = heif_color_primaries_SMPTE_EG_432_1; // 12
+    nclx_profile->transfer_characteristics = heif_transfer_characteristic_ITU_R_BT_2100_0_PQ; // 16
+    nclx_profile->matrix_coefficients = heif_matrix_coefficients_ITU_R_BT_2020_2_non_constant_luminance; // 9
     break;
   case DT_COLORSPACE_HLG_P3:
-    nclx_profile.color_primaries = heif_color_primaries_SMPTE_EG_432_1; // 12
-    nclx_profile.transfer_characteristics = heif_transfer_characteristic_ITU_R_BT_2100_0_HLG; // 18
-    nclx_profile.matrix_coefficients = heif_matrix_coefficients_ITU_R_BT_601_6; // 6
+    nclx_profile->color_primaries = heif_color_primaries_SMPTE_EG_432_1; // 12
+    nclx_profile->transfer_characteristics = heif_transfer_characteristic_ITU_R_BT_2100_0_HLG; // 18
+    nclx_profile->matrix_coefficients = heif_matrix_coefficients_ITU_R_BT_601_6; // 6
     break;
   case DT_COLORSPACE_DISPLAY_P3:
-   nclx_profile.color_primaries = heif_color_primaries_SMPTE_EG_432_1; // 12
-   nclx_profile.transfer_characteristics = heif_transfer_characteristic_IEC_61966_2_1; // 13
-   nclx_profile.matrix_coefficients = heif_matrix_coefficients_chromaticity_derived_non_constant_luminance; // 12
+    nclx_profile->color_primaries = heif_color_primaries_SMPTE_EG_432_1; // 12
+    nclx_profile->transfer_characteristics = heif_transfer_characteristic_IEC_61966_2_1; // 13
+    nclx_profile->matrix_coefficients = heif_matrix_coefficients_chromaticity_derived_non_constant_luminance; // 12
+    break;
   default:
     need_to_embed_icc = TRUE;
     break;
   }
 
   if(!need_to_embed_icc)
-    heif_image_set_nclx_color_profile(image, &nclx_profile);
+    heif_image_set_nclx_color_profile(image, nclx_profile);
 
   if(need_to_embed_icc)
   {
-    dt_control_log("we will embed icc");
     uint32_t icc_profile_len;
     cmsSaveProfileToMem(cp->profile, NULL, &icc_profile_len);
     if(icc_profile_len > 0)
@@ -316,18 +314,15 @@ int write_image(dt_imageio_module_data_t *data,
       {
         dt_print(DT_DEBUG_ALWAYS,
                  "[heif export] failed to allocate ICC profile");
-        // what we have to free?
+        heif_image_release(image);
+        heif_nclx_color_profile_free(nclx_profile);
         return 1; // failure
       }
       cmsSaveProfileToMem(cp->profile, icc_profile_data, &icc_profile_len);
       heif_image_set_raw_color_profile(image, "prof", icc_profile_data, icc_profile_len);
+      free(icc_profile_data);
     }
   }
-
-
-  // temp code to avoid variable not used error
-  if(need_to_embed_icc)
-    dt_control_log("icc profile will be embedded into heif file");
 
   struct heif_context* context = heif_context_alloc();
 
@@ -341,14 +336,13 @@ int write_image(dt_imageio_module_data_t *data,
              err.message, err.code);
     heif_context_free(context);
     heif_image_release(image);
+    heif_nclx_color_profile_free(nclx_profile);
     return 1; // failure
   }
 
   switch(subsample)
   {
     case DT_SUBSAMPLE_AUTO:
-      // these thresholds and their description in the
-      // subsampling widget tooltip must match each other
       if(d->quality > 90)
         subsample_string = "444";
       else if(d->quality > 80)
@@ -376,12 +370,10 @@ int write_image(dt_imageio_module_data_t *data,
     heif_encoder_release(encoder);
     heif_context_free(context);
     heif_image_release(image);
+    heif_nclx_color_profile_free(nclx_profile);
     return 1; // failure
   }
 
-
-  // not needed if we already set lossy quality
-  // heif_encoder_set_lossless(encoder, FALSE);
   if(d->compression_type == HEIF_LOSSLESS)
   {
     // When choosing lossless, the user's intention is obviously to preserve
@@ -391,9 +383,9 @@ int write_image(dt_imageio_module_data_t *data,
     // ensure RGB recording so that information is not lost during
     // the conversion to YCbCr.
     heif_encoder_set_lossless(encoder, TRUE);
-    nclx_profile.matrix_coefficients = heif_matrix_coefficients_RGB_GBR;
-    nclx_profile.version = 1;
-    heif_image_set_nclx_color_profile(image, &nclx_profile);
+    nclx_profile->matrix_coefficients = heif_matrix_coefficients_RGB_GBR;
+    nclx_profile->version = 1;
+    heif_image_set_nclx_color_profile(image, nclx_profile);
     heif_encoder_set_parameter_string(encoder, "chroma", "444");
   }
   else
@@ -405,6 +397,18 @@ int write_image(dt_imageio_module_data_t *data,
   heif_encoder_set_logging_level(encoder, 0);
 
   struct heif_encoding_options* options = heif_encoding_options_alloc();
+  if(!options)
+  {
+    dt_print(DT_DEBUG_ALWAYS,
+             "[heif export] Failed in heif_encoding_options_alloc for %s",
+             filename);
+    heif_encoder_release(encoder);
+    heif_context_free(context);
+    heif_image_release(image);
+    heif_nclx_color_profile_free(nclx_profile);
+    return 1; // failure
+  }
+
 #ifdef HAVE_LIBSHARPYUV
   options->color_conversion_options.preferred_chroma_downsampling_algorithm = heif_chroma_downsampling_sharp_yuv;
   options->color_conversion_options.only_use_preferred_chroma_algorithm = FALSE;
@@ -425,6 +429,8 @@ int write_image(dt_imageio_module_data_t *data,
     heif_encoder_release(encoder);
     heif_context_free(context);
     heif_image_release(image);
+    heif_encoding_options_free(options);
+    heif_nclx_color_profile_free(nclx_profile);
     return 1; // failure
   }
 
@@ -434,27 +440,39 @@ int write_image(dt_imageio_module_data_t *data,
     err = heif_context_add_exif_metadata(context, handle, exif, exif_len);
     if(err.code != heif_error_Ok)
     {
-     dt_print(DT_DEBUG_ALWAYS,
-              "[heif export] failed to save EXIF metadata: %s (%d)",
-              err.message, err.code);
-     return 1; // failure
+      dt_print(DT_DEBUG_ALWAYS,
+               "[heif export] failed to save EXIF metadata: %s (%d)",
+               err.message, err.code);
+      heif_image_handle_release(handle);
+      heif_context_free(context);
+      heif_image_release(image);
+      heif_encoder_release(encoder);
+      heif_encoding_options_free(options);
+      heif_nclx_color_profile_free(nclx_profile);
+      return 1; // failure
     }
   }
 
   if(exif && exif_len > 0)
   {
     char *xmp_string = dt_exif_xmp_read_string(imgid);
-    const size_t xmp_len = strlen(xmp_string);
-    if(xmp_string && (xmp_len > 0))
+    size_t xmp_len;
+    if(xmp_string && (xmp_len = strlen(xmp_string)) > 0)
     {
       err = heif_context_add_XMP_metadata(context, handle, xmp_string, xmp_len);
       g_free(xmp_string);
       if(err.code != heif_error_Ok)
       {
-         dt_print(DT_DEBUG_ALWAYS,
-                  "[heif export] failed to save XMP metadata: %s (%d)",
-                  err.message, err.code);
-         return 1; // failure
+        dt_print(DT_DEBUG_ALWAYS,
+                 "[heif export] failed to save XMP metadata: %s (%d)",
+                 err.message, err.code);
+        heif_image_handle_release(handle);
+        heif_context_free(context);
+        heif_image_release(image);
+        heif_encoder_release(encoder);
+        heif_encoding_options_free(options);
+        heif_nclx_color_profile_free(nclx_profile);
+        return 1; // failure
       }
     }
   }
@@ -470,12 +488,16 @@ int write_image(dt_imageio_module_data_t *data,
     heif_encoder_release(encoder);
     heif_context_free(context);
     heif_image_release(image);
+    heif_encoding_options_free(options);
+    heif_nclx_color_profile_free(nclx_profile);
     return 1; // failure
   }
 
   heif_context_free(context);
   heif_image_release(image);
   heif_encoder_release(encoder);
+  heif_encoding_options_free(options);
+  heif_nclx_color_profile_free(nclx_profile);
 
   return 0; // success
 }

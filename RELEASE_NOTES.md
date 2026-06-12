@@ -59,45 +59,55 @@ changes (where available).
   acceleration for the new AI features. The scripts detect the user's
   GPU vendor (NVIDIA, AMD or Intel) and install the matching GPU
   runtime. They can be run from a local checkout or fetched and run
-  online with a single command – see the AI section in the README for
-  details. macOS users and most Windows users do not need to run
-  anything; GPU acceleration is already bundled.
+  online with a single command – see the [GPU acceleration
+  page](https://docs.darktable.org/usermanual/development/en/special-topics/ai/gpu-acceleration/)
+  in the user manual for details. macOS users and most Windows users
+  do not need to run anything; GPU acceleration is already bundled.
 
 - Added AI object mask tool in the darkroom mask manager. Uses SAM2.1
-  and SegNext models for interactive object segmentation – click on an
+  or SegNext model for interactive object segmentation – click on an
   object to generate a precise mask. Supports both foreground and
   background prompt points with iterative refinement. The encoder runs
-  once per image (with optional GPU acceleration via CoreML, CUDA,
-  MIGraphX, DirectML, or OpenVINO), and the lightweight decoder
-  produces masks interactively.
+  once per image (GPU-accelerated via the AI backend when available),
+  and the lightweight decoder produces masks interactively. Each click
+  runs iterative refinement passes that tighten the mask, plus an
+  optional DenseCRF refinement pass for clean, edge-aware boundaries.
+  The generated mask can optionally be exported as a PNG for use
+  with the *external raster masks* module when finer edge detail is
+  needed than the vectorized mask provides.
 
 - Added neural restore module in the lighttable/darkroom sidebar
-  covering three AI-based tasks: raw denoise, image denoise, and
-  upscale. Supports NIND UNet, NAFNet, and RawNIND UtNet2 denoisers
-  and BSRGAN 2x/4x super-resolution models via the ONNX backend.
-  Features include an interactive before/after split preview with
-  area picker, a detail recovery slider (wavelet-based texture
-  restoration for denoise), batch processing with tiled inference,
-  and automatic library re-import with image grouping. Raw denoise
-  writes a DNG (CFA Bayer or linear) that re-enters the user's
-  existing edit; image denoise and upscale write a TIFF embedding
-  the output ICC profile.
-  GPU acceleration is supported through CUDA, ROCm/MIGraphX,
-  DirectML, OpenVINO, and CoreML execution providers. If GPU
-  inference fails (out of memory, unsupported op, EP crash),
-  darktable automatically retries on CPU.
+  covering three AI-based tasks: raw denoise, denoise, and
+  upscale. Default models: NIND UNet (denoise), RawNIND UtNet2 (raw
+  denoise), and RealPLKSR 2x/4x (super-resolution), all running on the
+  ONNX backend. Additional models such as NAFNet (denoise) and BSRGAN
+  (upscale) are available from the model repository and can be
+  installed manually. Features include an interactive before/after
+  split preview with area picker, a strength slider (DWT-based texture
+  recovery for RGB denoise; linear source/denoised blend for raw
+  denoise), batch processing with tiled inference, and automatic
+  library re-import with image grouping. Raw denoise writes a DNG (CFA
+  Bayer or LinearRaw); image denoise and upscale write a TIFF
+  embedding the output ICC profile. GPU acceleration is inherited from
+  the AI backend. If GPU inference fails (out of memory, unsupported
+  operator, execution provider crash), darktable automatically retries
+  on CPU.
 
 - Added `colorharmonizer` module that applies color harmony
   corrections in UCS color space, rotating hues toward a target
   harmony structure (complementary, split-complementary, triadic,
   tetradic, etc.). The saturation of target hues can be controlled,
-  and custom-defined harmonies with an arbitrary number of anchor nodes
-  at any angle are also supported. Options are provided to control the
-  intensity of the effect, protect neutral colors, and apply a Gaussian
-  filter to smooth harsh transitions. The module can be synced with the
-  vectorscope in RYB mode, with harmony and rotation angles controllable
-  directly from the vectorscope. Both CPU and OpenCL (GPU) implementations
-  are provided.
+  and custom-defined harmonies with an arbitrary number of anchor
+  nodes at any angle are also supported. Options are provided to
+  control the intensity of the effect, protect neutral colors, and
+  apply a Gaussian filter to smooth harsh transitions. The module can
+  be synced with the vectorscope in RYB mode, with harmony and
+  rotation angles controllable directly from the vectorscope. Both CPU
+  and OpenCL (GPU) implementations are provided.
+
+- Added support for HEIF export. User can choose lossless or lossy
+  compression, all practically supported color depths (8/10/12 bit),
+  all supported color subsampling options.
 
 ## UI/UX Improvements
 
@@ -161,12 +171,13 @@ changes (where available).
 
 - Added touchpad gestures to darkroom and lighttable culling layouts,
   including pinch zooming and two-finger panning.
-  Follow-up fixes refined input-source handling to keep panning
-  limited to touchpad smooth-scroll input.
   Smartphone-like simultaneous pinch zooming and two-finger panning
   are now possible on Linux and Windows.
   Zooming gestures are limited to 100%, additionally pressing CTRL
   enables zooming up to 1600%.
+  Caution: this disables the scroll gesture for zooming on MacOS
+  on trackpad and magic mouse. To restore the former behaviour
+  disable touchpad gestures in preferences dialog.
 
 - Enabled shortcuts for some existing buttons in duplicate manager,
   snapshots, and AgX modules.
@@ -200,8 +211,8 @@ changes (where available).
   workspace keeps its own library database instead of reusing the
   source library. The workspace dialog allows selecting a workspace as
   the default for startup; if one is chosen as default, the dialog is
-  not shown on the next launch until “allow for multiple workspaces” is
-  enabled again in preferences (storage).
+  not shown on the next launch until “allow for multiple workspaces”
+  is enabled again in preferences (storage).
 
 - Use native mouse cursors throughout the UI. Cursors such as the
   busy spinner, hand, crosshair and resize handles now match the
@@ -209,9 +220,25 @@ changes (where available).
   cursor previously appeared as an old-style wristwatch instead of
   the familiar spinning wheel.
 
+- Themes can now style expanded modules differently from collapsed
+  ones, via a new `dt_module_expanded` CSS class.
+
 ## Performance Improvements
 
 - Increased performance for OpenCL guided filter by internal tiling.
+
+- Increased performance of `blurs` module for both CPU and OpenCL code
+  paths for large radii, which made it possible to increase Gaussian
+  blur's maximum radius from 128px to 256px.
+
+- Increased performance of `overlay` (composite) module and added
+  OpenCL code path.
+
+- Avoid superfluous pixelpipe runs for faster darkroom processing
+  and when selecting history entries.
+
+- Improvements to mask distort efficiency via incremental caching and
+  reduced malloc/free cycles.
 
 ## Other Changes
 
@@ -225,6 +252,8 @@ changes (where available).
 
 - Removed `Neo` Intel and `pocl` OpenCL drivers from blacklist,
   the `AMD-APP` driver has been added as not supported by AMD for 10yrs.
+
+- RustiCL is the preferred OpenCL driver instead ROCm on AMD systems.
 
 - In the styles module, a new option has been added to hide the
   preview in the tooltip. Additionally, a module preference now allows
@@ -289,6 +318,19 @@ changes (where available).
   showing all logged messages with timestamps, automatically
   deduplicating consecutive identical entries.
 
+- The OpenCL preferences interface and the internal handling and
+  detection of OpenCL devices and drivers got an overhaul.  Users can
+  switch on "OpenCL fast mode" in preferences leading to slightly more
+  differences compared to CPU output for sligtly more performance.
+  The per-device conf settings got an update, see the docs for
+  reference.  Support of atomic OpenCL code and OpenCL 3.x is
+  autodetected.
+
+- Added two HTJ2K compression options to EXR export. Since they are
+  supported starting with libopenexr 3.4, these options will only be
+  present in darktable if it is linked against a library version 3.4
+  or later.
+
 ## Bug Fixes
 
 - Properly apply the iop-order when applying a style at export
@@ -329,6 +371,9 @@ changes (where available).
 - Fix for usage of incorrect color profiles on secondary monitors on
   Windows.
 
+- Various fixes for visibly wrong colors after chaning a profile in
+  colorin or colorout.
+
 - Fixed unexpected localization of user's defined preset name and
   properly localize the module name displayed in the preset dialog.
 
@@ -368,37 +413,150 @@ changes (where available).
 - Fixed darktable on startup failing to delete left over database
   lockfiles for non default workspaces.
 
-- Fixed a rare bug which appeared when scale-pixels module was moved above
-  the tone-mapper while applying a shift in "rotate and perspective" module.
+- Fixed a rare bug which appeared when scale-pixels module was moved
+  above the tone-mapper while applying a shift in "rotate and
+  perspective" module.
 
 - Fixed white and middle-grey patches being swapped for Datacolor
   SpyderCheckr 48 in the Color Calibration module.
+
+- Fixed tone curve masks affecting areas outside of a drawn mask.
+
+- Fixed subtle errors in Markesteijn and VNG demosaicers.
+
+- All RAW space modules including demosaic allow positioning of main
+  darkroom window with a precision of one pixel.
+
+- When all midi devices are disabled portmidi won't be initialized.
+
+- Fixed a bug that lead to ignored or stuck shortcuts
+
+- Various stability fixes for OpenCL and CPU pixelpipe processing.
+  Less differences between CPU and OpenCL processing.
+
+- Ensure that the counter used to disable GUI loop is handled
+  atomically. In some very rare cases the GUI could freeze due to
+  unbalanced setting of the counter.
+
+- Fixed collection range selection not working if the collection is in
+  descending sort order.
+
+- Fix use-after-free bug in tagging code which caused an instant crash
+
+- Fixed scroll direction in rotate and perspective module: scrolling
+  up/down now increases/decreases the selection circle size, matching
+  how resizing drawn masks works.
 
 ## Lua
 
 ### API Version
 
-- API version is now 9.6.0
+- API version is now 9.7.0
 
 ### New Features
 
+- The lua-scripts are now included in the darktable release, making
+  them available for all users.  If the lua-scripts are already
+  installed, they will be used instead of the included ones.  The
+  luarc file in the user configuration directory is no longer
+  required, but it can still be used for special requirements.
+
+  If the user does not want the scripts, then can be disabled in the
+  Lua options section of the preferences.
+
+- Lua now has a global variable, darktable_gui_safe, that gets set
+  when it is safe to install a lib.  This is needed because of a
+  startup race condition that indicates the view is lighttable before
+  it is initialized.
+
+- Image metadata fields added using the Metadata Editor module are
+  accessible as a dt_lua_image_t field with the same name as the title
+  assigned in Metadata Editor.  Trying to access a dt_lua_image_t
+  metadata field that does not exist is a fatal error.  The added
+  metadata field is populated when the image is imported or with the
+  image exif data is refreshed.
+
+- darktable.metadata.exists() has been added to the API to check if
+  the dt_lua_image_t metadata field exists before trying to access it.
+
 - Added Lua AI API (`darktable.ai`) for scripting AI model inference.
-  Provides tensor creation, model loading with GPU provider selection,
-  and two calling conventions for inference (pre-allocated and
-  auto-allocated outputs). Image I/O includes loading from file or
-  darktable library (full pipeline export), raw CFA sensor data
-  access, and DNG output with EXIF preservation. Enables Lua scripts
-  to implement custom AI workflows such as raw denoise or upscale.
+  Provides tensor creation and model loading with GPU provider
+  selection. Image I/O covers loading from a file or directly from
+  the darktable library (with the full edit pipeline applied), raw
+  CFA sensor data access, and DNG output with EXIF preservation.
+  Enables custom AI workflows beyond the built-in modules – e.g.
+  classification or experimental denoise/upscale models from
+  community repositories.
 
 ### Bug Fixes
 
-- N/A
+- force cache write after mipmap generation
 
-### Add action support for Lua
+### New Scripts
+
+- contrib/select_non_existing - adds a button to the selection module
+  to select images in the lighttable that dont have corresponding
+  files on disk
+
+- contrib/selected_image_visible - adds a shortcut and an action
+  button to make the currently selected image in lighttable visible.
+
+- contrib/toggle_group_view - add a shortcut and an action button to
+  toggle between a group selected in lighttable and a view containing
+  only the grouped images with the group expanded.
+
+- official/use_paired_jpg_as_mipmap - for images that don't have a
+  full size embedded JPG preview the JPG from a RAW+JPG pair can be
+  copied to the mipmap cache and used as the full resolution mipmap to
+  speed up cache generation.  This is useful for Canon EOS R series
+  cameras that don't embed full size previews.
+
+- official/select_duplicates - add a shortcut and a selection button
+  to select duplicate images
+
+- official/recent_bookmarks - add recently edited images to the system
+  recently used files for quick access
+
+- official/select_raw_non_raw - add selection buttons to select raw or
+  non-raw images from the lighttable
+
+- official/scheduler - a simple FIFO scheduler for cooperative
+  multitasking
+
+- official/group_persistence - add functional tags containing group
+  information to image groups so that they can be rebuilt if the
+  database is lost.
+
+- official/select_unaltered - add a selection button to select images
+  that have been imported but not opened in darkroom.
+
+- official/selection2collection - create a temporary collection from a
+  selection.  The collection is automatically forgotten when darktable
+  exits.  The user may change this in the Lua options preferences.
+
+- official/extract_burst_roll_images - add a selection button to
+  select Canon burst roll images and an action button to extract the
+  embedded images and group them with the burst roll image.  Requires
+  dnglab.
+
+- official/auto_straighten - automatically straighten an image loaded
+  into darkroom using them embedded pitch and roll data.  Requires
+  exiftool
+
+- examples/ai_denoise - an example script demonstrating how to use the
+  new Lua AI API to denoise a non-raw image
+
+- examples/ai_raw_denoise - an example script demonstrating how to use
+  the new Lua AI API to denoise a raw image.
 
 ### Other Lua changes
 
-- N/A
+- the Lua options in preferences have been reworked so that there are
+  global preferences and preferences for each script that registers
+  them
+
+- scripts_installer has been removed since the scripts are now bundled
+  with the darktable release.
 
 ## Notes
 

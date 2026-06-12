@@ -1,6 +1,6 @@
 /*
     This file is part of darktable,
-    Copyright (C) 2018-2025 darktable developers.
+    Copyright (C) 2018-2026 darktable developers.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -863,9 +863,9 @@ GList *dt_ioppr_get_iop_order_link(GList *iop_order_list,
 }
 
 // returns the first iop order entry that matches operation == op_name
-dt_iop_order_entry_t *dt_ioppr_get_iop_order_entry(GList *iop_order_list,
-                                                   const char *op_name,
-                                                   const int multi_priority)
+static dt_iop_order_entry_t *_ioppr_get_iop_order_entry(GList *iop_order_list,
+                                                        const char *op_name,
+                                                        const int multi_priority)
 {
   const GList * const restrict link =
     dt_ioppr_get_iop_order_link(iop_order_list, op_name, multi_priority);
@@ -883,7 +883,7 @@ int dt_ioppr_get_iop_order(GList *iop_order_list,
 {
   int iop_order = INT_MAX;
   const dt_iop_order_entry_t *const restrict order_entry =
-    dt_ioppr_get_iop_order_entry(iop_order_list, op_name, multi_priority);
+    _ioppr_get_iop_order_entry(iop_order_list, op_name, multi_priority);
 
   if(order_entry)
   {
@@ -1491,7 +1491,7 @@ static void _count_iop_module(GList *iop,
   for(const GList *modules = iop; modules; modules = g_list_next(modules))
   {
     const dt_iop_module_t *const restrict mod = modules->data;
-    if(dt_iop_module_is(mod->so, operation))
+    if(dt_iop_module_is(mod, operation))
     {
       (*count)++;
       if(*max_multi_priority < mod->multi_priority)
@@ -1544,7 +1544,7 @@ static int _get_multi_priority(dt_develop_t *dev,
   for(const GList *l = dev->iop; l; l = g_list_next(l))
   {
     const dt_iop_module_t *const restrict mod = l->data;
-    if((!only_disabled || !mod->enabled) && dt_iop_module_is(mod->so, operation))
+    if((!only_disabled || !mod->enabled) && dt_iop_module_is(mod, operation))
     {
       count++;
       if(count == n) return mod->multi_priority;
@@ -1901,7 +1901,7 @@ gboolean dt_ioppr_check_so_iop_order(GList *iop_list,
   {
     const dt_iop_module_so_t *const restrict mod = modules->data;
     const dt_iop_order_entry_t *const restrict entry =
-      dt_ioppr_get_iop_order_entry(iop_order_list, mod->op, 0); // mod->multi_priority);
+      _ioppr_get_iop_order_entry(iop_order_list, mod->op, 0); // mod->multi_priority);
     if(entry == NULL)
     {
       iop_order_missing = TRUE;
@@ -1997,8 +1997,8 @@ gboolean dt_ioppr_check_can_move_before_iop(GList *iop_list,
         {
           const dt_iop_order_rule_t *const restrict rule = rules->data;
 
-          if(dt_iop_module_is(module->so, rule->op_prev)
-             && dt_iop_module_is(mod->so, rule->op_next))
+          if(dt_iop_module_is(module, rule->op_prev)
+             && dt_iop_module_is(mod, rule->op_next))
           {
             rule_found = TRUE;
             break;
@@ -2084,8 +2084,8 @@ gboolean dt_ioppr_check_can_move_before_iop(GList *iop_list,
         {
           const dt_iop_order_rule_t *const restrict rule = rules->data;
 
-          if(dt_iop_module_is(mod->so, rule->op_prev)
-             && dt_iop_module_is(module->so, rule->op_next))
+          if(dt_iop_module_is(mod, rule->op_prev)
+             && dt_iop_module_is(module, rule->op_next))
           {
             rule_found = TRUE;
             break;
@@ -2377,7 +2377,7 @@ static void _ioppr_check_rules(GList *iop_list,
       const dt_iop_order_rule_t *const restrict rule = rules->data;
 
       // mod must be before rule->op_next
-      if(dt_iop_module_is(mod->so, rule->op_prev))
+      if(dt_iop_module_is(mod, rule->op_prev))
       {
         // check if there's a rule->op_next module before mod
         for(const GList *modules_prev = g_list_previous(modules);
@@ -2399,7 +2399,7 @@ static void _ioppr_check_rules(GList *iop_list,
         }
       }
       // mod must be after rule->op_prev
-      else if(dt_iop_module_is(mod->so, rule->op_next))
+      else if(dt_iop_module_is(mod, rule->op_next))
       {
         // check if there's a rule->op_prev module after mod
         for(const GList *modules_next = g_list_next(modules);
@@ -2478,7 +2478,7 @@ gboolean dt_ioppr_check_iop_order_ext(dt_develop_t *dev,
     {
       const dt_iop_module_t *const restrict mod = modules->data;
 
-      if(!dt_iop_module_is(mod->so, "gamma"))
+      if(!dt_iop_module_is_gamma(mod))
       {
         iop_order_ok = FALSE;
         dt_print(DT_DEBUG_ALWAYS,
