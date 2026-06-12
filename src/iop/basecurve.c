@@ -1231,7 +1231,7 @@ int process_cl_lut(dt_iop_module_t *self,
 
   const float mul = 1.0f;
 
-  dev_m = dt_opencl_copy_host_to_device(devid, d->table, 256, 256, sizeof(float));
+  dev_m = dt_opencl_copy_host_to_image(devid, d->table, 256, 256, sizeof(float));
   if(dev_m == NULL) goto error;
 
   err = dt_ioppr_build_iccprofile_params_cl(work_profile, devid, &profile_info_cl, &profile_lut_cl,
