@@ -1160,7 +1160,7 @@ void init_global(dt_iop_module_so_t *self)
   const int program = 45; // 3dcf.cl, from programs.conf
   dt_iop_3dcf_global_data_t *gd = malloc(sizeof(dt_iop_3dcf_global_data_t));
   self->data = gd;
-  gd->kernel_3dcf = dt_opencl_create_kernel(program, "3dcf");
+  gd->kernel_3dcf = dt_opencl_create_kernel(program, "_3dcf_kernel");
 }
 
 void cleanup_global(dt_iop_module_so_t *self)
