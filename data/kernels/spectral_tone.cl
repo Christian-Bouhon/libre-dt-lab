@@ -18,10 +18,11 @@
 
     ---------------------------------------------------------------------------
     OpenCL port of the ACES 2.0 SSTS spectral tone pipeline. The CPU reference
-    (src/iop/spectral_tone.c, dt_st_pipeline_eval) computes the per-pixel maths
-    in double precision; this kernel uses single precision throughout. The
-    visual difference is below 8-bit quantisation for tone mapping, and every
-    code path mirrors the CPU version 1:1 so the GPU and CPU previews match.
+    (src/iop/spectral_tone.c, dt_st_pipeline_eval) uses single precision for
+    per-pixel maths; this kernel uses the same precision throughout. Both pre-
+    compute the context (matrices, SSTS parameters) on the host — the kernel
+    receives them as floats. Every code path mirrors the CPU version 1:1 so the
+    GPU and CPU previews match.
 */
 
 #include "common.h"
@@ -40,6 +41,7 @@ typedef struct dt_st_cl_params_t
   float contrast;
   float contrast_pivot;
   float hl_desat;
+  float hl_desat_threshold;
   float hl_rotation;
   float white_chroma_x;
   float white_chroma_z;
@@ -48,6 +50,8 @@ typedef struct dt_st_cl_params_t
   float vibrance;
   float gamut_knee;
   float gamut_steepness;
+  float toe_power;
+  float shoulder_power;
   float ssts_s_2;
   float ssts_m_2;
   float ssts_g;
@@ -78,22 +82,32 @@ static inline float st_compute_y_tm(const float y_scene, const dt_st_cl_params_t
   y_tm = pow(fmax(y_tm, 0.0f), 1.0f / 2.4f);
 
   /* Post-SSTS contrast S-curve pivoted at contrast_pivot */
-  if(p->contrast != 1.0f)
+  if(p->contrast != 1.0f || p->toe_power != 1.0f || p->shoulder_power != 1.0f)
   {
-    const float c = p->contrast;
+    const float c  = p->contrast;
     const float pv = p->contrast_pivot;
+    const float ct = p->toe_power;
+    const float cs = p->shoulder_power;
     if(y_tm <= pv)
-      y_tm = pv * pow(fmax(y_tm / pv, 0.0f), c);
+    {
+      const float t = (pv > 0.0f) ? y_tm / pv : 0.0f;
+      const float exp_eff = c * (ct + (1.0f - ct) * t);
+      y_tm = pv * pow(fmax(y_tm / pv, 0.0f), exp_eff);
+    }
     else
-      y_tm = 1.0f - (1.0f - pv) * pow(fmax((1.0f - y_tm) / (1.0f - pv), 0.0f), c);
+    {
+      const float rp = 1.0f - pv;
+      const float t = (rp > 0.0f) ? (1.0f - y_tm) / rp : 0.0f;
+      const float exp_eff = c * (cs + (1.0f - cs) * t);
+      y_tm = 1.0f - rp * pow(fmax((1.0f - y_tm) / rp, 0.0f), exp_eff);
+    }
   }
   return y_tm;
 }
 
 /* Highlight desaturation weight */
-static inline float st_desat_weight(const float y_norm, const float hl_desat)
+static inline float st_desat_weight(const float y_norm, const float hl_desat, const float threshold)
 {
-  const float threshold = 0.45f; // CB Doit correspondre à la valeur dans spectral_tone.c
   if(hl_desat <= 0.0f || y_norm <= threshold) return 0.0f;
   if(!isfinite(y_norm)) return 0.0f;
   const float t = fmax(y_norm - threshold, 0.0f) / y_norm;
@@ -169,7 +183,7 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
   const float y_abs = p->input_matrix[3] * r + p->input_matrix[4] * g + p->input_matrix[5] * b;
   const float z_abs = p->input_matrix[6] * r + p->input_matrix[7] * g + p->input_matrix[8] * b;
 
-  if(!(y_abs > 1e-10f)) return (float3)(0.0f, 0.0f, 0.0f);
+  if(!(y_abs > 1e-10f) || !isfinite(y_abs)) return (float3)(0.0f, 0.0f, 0.0f);
 
   const float x_ratio = clamp(x_abs / y_abs, -100.0f, 100.0f);
   const float z_ratio = clamp(z_abs / y_abs, -100.0f, 100.0f);
@@ -203,13 +217,13 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
   /* Step 8: Film-print highlight desaturation toward white */
   {
     const float y_exposed = y_abs * p->exposure_factor;
-    const float w = st_desat_weight(y_exposed, p->hl_desat);
+    const float w = st_desat_weight(y_exposed, p->hl_desat, p->hl_desat_threshold);
     if(w > 0.0f && isfinite(w))
     {
-      /* Progressive Abney hue rotation — weight indépendant de hl_desat */
+      /* Progressive Abney hue rotation — weight independent of hl_desat */
       if(p->hl_rotation != 0.0f)
       {
-        const float wr = fmin(st_desat_weight(y_exposed, 1.0f), 1.0f);
+        const float wr = fmin(st_desat_weight(y_exposed, 1.0f, p->hl_desat_threshold), 1.0f);
         const float angle = p->hl_rotation * 0.15f * wr; // CB
         const float ca = cos(angle);
         const float sa = sin(angle);
@@ -240,13 +254,13 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
         if(p->hl_desat > 0.0f)
         {
           const float vib_neg = p->hl_desat * ss * 0.5f;
-          const float w_vib = st_desat_weight(y_exposed, 1.0f) * vib_neg;
+          const float w_vib = st_desat_weight(y_exposed, 1.0f, p->hl_desat_threshold) * vib_neg;
           w_final = fmin(w_final + w_vib, 1.0f);
         }
         if(p->hl_rotation != 0.0f)
         {
-          const float vib_neg = fabs(p->hl_rotation) * ss * 1.0f; //CB
-          const float w_rot = st_desat_weight(y_exposed, 1.0f) * vib_neg;
+          const float vib_neg = fabs(p->hl_rotation) * ss * 1.0f;
+          const float w_rot = st_desat_weight(y_exposed, 1.0f, p->hl_desat_threshold) * vib_neg;
           w_final = fmax(w_final, w_rot);
         }
       }
@@ -312,14 +326,14 @@ __kernel void spectral_tone(
   float4 pixel = read_imagef(input, sampleri, pos);
 
   /* sanitize input range and drop NaNs (matches agx sanitisation) */
-  pixel = (float4)(select(clamp(pixel.xyz, -1e6f, 1e6f), (float3)(0.0f), isnan(pixel.xyz)), pixel.w);
+  pixel = (float4)(select(clamp(pixel.xyz, -1e6f, 1e6f), (float3)(0.0f), !isfinite(pixel.xyz)), pixel.w);
 
   float3 rgb_in = (float3)(pixel.x, pixel.y, pixel.z);
 
   /* Pre-pipeline safety net: sigmoid rolloff toward luma-gray */
   {
     const float lum = fmax(fmax(rgb_in.x, rgb_in.y), rgb_in.z);
-    const float w = st_desat_weight(lum * p.exposure_factor, p.hl_desat);
+    const float w = st_desat_weight(lum * p.exposure_factor, p.hl_desat, p.hl_desat_threshold);
     if(w > 0.0f && isfinite(w))
     {
       const float t = fmin(w, 1.0f);

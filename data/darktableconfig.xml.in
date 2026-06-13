@@ -4285,6 +4285,13 @@
     <longdescription>height of agx graph in per cent</longdescription>
   </dtconfig>
   <dtconfig>
+    <name>plugins/darkroom/spectral_tone/graph_height</name>
+    <type min="50" max="500">int</type>
+    <default>200</default>
+    <shortdescription>height of spectral tone graph</shortdescription>
+    <longdescription>height of spectral tone graph in pixels</longdescription>
+  </dtconfig>
+  <dtconfig>
     <name>plugins/darkroom/agx/expand_curve_advanced</name>
     <type>bool</type>
     <default>false</default>
