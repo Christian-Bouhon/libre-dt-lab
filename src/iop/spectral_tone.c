@@ -77,7 +77,7 @@ DT_MODULE_INTROSPECTION(4, dt_iop_spectral_tone_params_t)
 
 typedef enum dt_iop_st_colorspace_t
 {
-  DT_ST_CS_REC709 = 0,    // $DESCRIPTION: "Rec. 709"
+  DT_ST_CS_REC709 = 0,    // $DESCRIPTION: "sRGB"
   DT_ST_CS_REC2020,       // $DESCRIPTION: "Rec. 2020"
   DT_ST_CS_DISPLAYP3,     // $DESCRIPTION: "Display P3"
   DT_ST_CS_PROPHOTO,      // $DESCRIPTION: "ProPhoto RGB"
@@ -156,6 +156,9 @@ typedef struct
   float gamut_steepness;
   float toe_power;
   float shoulder_power;
+  float gamut_fwd[9];
+  float gamut_inv[9];
+  int   gamut_enable;
   dt_st_ssts_params_t ssts;
 } dt_st_context_t;
 
@@ -190,6 +193,8 @@ typedef struct dt_st_cl_params_t
   float gamut_steepness;
   float toe_power;
   float shoulder_power;
+  float gamut_fwd[9];
+  float gamut_inv[9];
   float ssts_s_2;
   float ssts_m_2;
   float ssts_g;
@@ -198,6 +203,7 @@ typedef struct dt_st_cl_params_t
   float ssts_n;
   float look_opacity;
   int   look_idx;
+  int   gamut_enable;
 } dt_st_cl_params_t;
 
 typedef struct dt_iop_spectral_tone_global_data_t
@@ -261,7 +267,54 @@ const double dt_st_rec2020_to_xyz[9] = {
 const double dt_st_cat_d65_to_d50[9] = {
   1.047839954303051e+00,  2.289791610380174e-02, -5.018079725046408e-02,
   2.955368681442254e-02,  9.904924221623178e-01, -1.706631418019539e-02,
- -9.245918452778928e-03,  1.506326034916465e-02,  7.518388616796452e-01
+  -9.245918452778928e-03,  1.506326034916465e-02,  7.518388616796452e-01
+};
+
+/* Pre-computed combined matrices for output gamut protection:
+ *   gamut_fwd[cs]  : Rec.2020 D65 RGB -> Target D65 RGB
+ *   gamut_inv[cs]  : Target D65 RGB -> Rec.2020 D65 RGB
+ * Indexed by dt_iop_st_colorspace_t. Slot REC2020 is identity (unused).
+ * Round-trip verified: fwd @ inv = I to within ~3e-16. */
+static const float st_gamut_fwd[5][9] = {
+  /* DT_ST_CS_REC709 — sRGB (same primaries) */
+  { 1.6604910021084340e+00f, -5.8764113878854918e-01f, -7.2849863319884856e-02f,
+   -1.2455047452159060e-01f,  1.1328998971259596e+00f, -8.3494226043694768e-03f,
+   -1.8150763354905213e-02f, -1.0057889800800739e-01f,  1.1187296613629127e+00f },
+  /* DT_ST_CS_REC2020 (identity, skipped) */
+  { 1.0f, 0.0f, 0.0f,  0.0f, 1.0f, 0.0f,  0.0f, 0.0f, 1.0f },
+  /* DT_ST_CS_DISPLAYP3 */
+  { 1.3435782525843321e+00f, -2.8217967052613580e-01f, -6.1398582058196219e-02f,
+   -6.5297452789119470e-02f,  1.0757879158485739e+00f, -1.0490463059454964e-02f,
+    2.8217872617010515e-03f, -1.9598494524494175e-02f,  1.0167767072627931e+00f },
+  /* DT_ST_CS_PROPHOTO (via D50 adaptation) */
+  { 8.3510708914902376e-01f,  4.8796017329827877e-02f,  1.1593570461330915e-01f,
+    5.4024518630719040e-02f,  9.2897841074060328e-01f,  1.7056261398002901e-02f,
+   -2.3416915615907760e-03f,  3.6337073948144318e-02f,  9.6596433118070490e-01f },
+  /* DT_ST_CS_ADOBERGB */
+  { 1.1519783947159161e+00f, -9.7503055302408478e-02f, -5.4475339413507635e-02f,
+   -1.2455047452159049e-01f,  1.1328998971259596e+00f, -8.3494226043695028e-03f,
+   -2.2530382781055808e-02f, -4.9806507428388894e-02f,  1.0723368902094448e+00f },
+};
+
+static const float st_gamut_inv[5][9] = {
+  /* DT_ST_CS_REC709 — sRGB (same primaries) */
+  { 6.2740389593469914e-01f,  3.2928303837788381e-01f,  4.3313065687417218e-02f,
+    6.9097289358232006e-02f,  9.1954039507545904e-01f,  1.1362315566309176e-02f,
+    1.6391438875150231e-02f,  8.8013307877225763e-02f,  8.9559525324762390e-01f },
+  /* DT_ST_CS_REC2020 (identity, skipped) */
+  { 1.0f, 0.0f, 0.0f,  0.0f, 1.0f, 0.0f,  0.0f, 0.0f, 1.0f },
+  /* DT_ST_CS_DISPLAYP3 */
+  { 7.5383303436172178e-01f,  1.9859736905261646e-01f,  4.7569596585661844e-02f,
+    4.5743848965358248e-02f,  9.4177721981169393e-01f,  1.2478931222948127e-02f,
+   -1.2103403545183937e-03f,  1.7601717301089989e-02f,  9.8360862305342833e-01f },
+  /* DT_ST_CS_PROPHOTO (via D50 adaptation) */
+  { 1.2007680891347712e+00f, -5.7474733312325541e-02f, -1.4310216842779236e-01f,
+   -6.9932127259518431e-02f,  1.0805425606086707e+00f, -1.0686094282437804e-02f,
+    5.5415683670136931e-03f, -4.0786540201541162e-02f,  1.0352899874010184e+00f },
+  /* DT_ST_CS_ADOBERGB */
+  { 8.7733384166365691e-01f,  7.7493706515719976e-02f,  4.5172451820623120e-02f,
+    9.6622591466203681e-02f,  8.9152732024418091e-01f,  1.1850088289615686e-02f,
+    2.2921062702848320e-02f,  4.3036685010679435e-02f,  9.3404225228647197e-01f },
 };
 
 static const float *st_get_luma_coeff(dt_iop_st_colorspace_t cs)
@@ -423,6 +476,28 @@ static inline void st_gamut_compress(float rgb[3])
   rgb[0] = (1.0f - t) * rgb[0] + t * 1.0f;
   rgb[1] = (1.0f - t) * rgb[1] + t * 1.0f;
   rgb[2] = (1.0f - t) * rgb[2] + t * 1.0f;
+}
+
+/* Output gamut protection: convert from Rec.2020 D65 to the target color space,
+ * hard-clamp negative (out-of-gamut) channels to zero, then convert back.
+ * Called after st_gamut_compress() as an additional safety net when the user
+ * selects a colour space narrower than Rec. 2020. */
+static inline void st_output_gamut_protect(float rgb[3],
+                                            const float fwd[9],
+                                            const float inv[9])
+{
+  float t[3];
+  t[0] = fwd[0]*rgb[0] + fwd[1]*rgb[1] + fwd[2]*rgb[2];
+  t[1] = fwd[3]*rgb[0] + fwd[4]*rgb[1] + fwd[5]*rgb[2];
+  t[2] = fwd[6]*rgb[0] + fwd[7]*rgb[1] + fwd[8]*rgb[2];
+
+  t[0] = fmaxf(t[0], 0.0f);
+  t[1] = fmaxf(t[1], 0.0f);
+  t[2] = fmaxf(t[2], 0.0f);
+
+  rgb[0] = inv[0]*t[0] + inv[1]*t[1] + inv[2]*t[2];
+  rgb[1] = inv[3]*t[0] + inv[4]*t[1] + inv[5]*t[2];
+  rgb[2] = inv[6]*t[0] + inv[7]*t[1] + inv[8]*t[2];
 }
 
 static inline void st_spectral_gamut(
@@ -627,6 +702,10 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
 
   st_gamut_compress(rgb);
 
+  /* Output gamut protection: clamp to selected primary space */
+  if(ctx->gamut_enable)
+    st_output_gamut_protect(rgb, ctx->gamut_fwd, ctx->gamut_inv);
+
   rgb_out[0] = isfinite(rgb[0]) ? fmaxf(rgb[0], 0.0f) : 0.0f;
   rgb_out[1] = isfinite(rgb[1]) ? fmaxf(rgb[1], 0.0f) : 0.0f;
   rgb_out[2] = isfinite(rgb[2]) ? fmaxf(rgb[2], 0.0f) : 0.0f;
@@ -700,6 +779,17 @@ static void st_compute_context(dt_iop_spectral_tone_params_t *p,
   ctx->gamut_steepness = p->gamut_steepness;
   ctx->toe_power = fmaxf(p->toe_power, 0.0f);
   ctx->shoulder_power = fmaxf(p->shoulder_power, 0.0f);
+
+  /* Output gamut protection matrices from pre-computed lookup table */
+  {
+    const int cs = p->output_cs;
+    for(int i = 0; i < 9; i++)
+    {
+      ctx->gamut_fwd[i] = st_gamut_fwd[cs][i];
+      ctx->gamut_inv[i] = st_gamut_inv[cs][i];
+    }
+    ctx->gamut_enable = (cs != DT_ST_CS_REC2020);
+  }
 
   /* White point chromaticity ratios from input matrix */
   {
@@ -1017,6 +1107,10 @@ static void st_fill_cl_params(const dt_iop_spectral_tone_data_t *d,
   clp->gamut_steepness = ctx->gamut_steepness;
   clp->toe_power       = ctx->toe_power;
   clp->shoulder_power  = ctx->shoulder_power;
+
+  for(int i = 0; i < 9; i++) clp->gamut_fwd[i] = ctx->gamut_fwd[i];
+  for(int i = 0; i < 9; i++) clp->gamut_inv[i] = ctx->gamut_inv[i];
+  clp->gamut_enable    = ctx->gamut_enable;
 
   clp->ssts_s_2 = (float)ctx->ssts.s_2;
   clp->ssts_m_2 = (float)ctx->ssts.m_2;
@@ -1615,7 +1709,10 @@ void gui_init(dt_iop_module_t *self)
 
   g->color_space = dt_bauhaus_combobox_from_params(self, "output_cs");
   gtk_widget_set_tooltip_text(g->color_space,
-    _("Output color space used for luma coefficients in vibrance computation."));
+    _("Output color space for luma coefficients in vibrance computation. "
+      "Also protects against out-of-gamut colors by clipping to the "
+      "selected primaries. sRGB/Rec. 709 is the narrowest, Rec. 2020 "
+      "the widest (no clipping)."));
 
   self->widget = main_vbox;
 }

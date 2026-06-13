@@ -52,6 +52,8 @@ typedef struct dt_st_cl_params_t
   float gamut_steepness;
   float toe_power;
   float shoulder_power;
+  float gamut_fwd[9];
+  float gamut_inv[9];
   float ssts_s_2;
   float ssts_m_2;
   float ssts_g;
@@ -60,6 +62,7 @@ typedef struct dt_st_cl_params_t
   float ssts_n;
   float look_opacity;
   int   look_idx;            // 0 = no look, 1..10 = color_look_mat is active
+  int   gamut_enable;
 } dt_st_cl_params_t;
 
 /* ACES 2.0 SSTS forward — Michaelis-Menten segment + flare compensation */
@@ -128,6 +131,24 @@ static inline float3 st_gamut_compress(float3 rgb)
   t = fmin(t, 1.0f);
 
   return (1.0f - t) * rgb + t * (float3)(1.0f, 1.0f, 1.0f);
+}
+
+/* Output gamut protection: convert to target color space, clamp negatives, revert.
+ * Mirrors st_output_gamut_protect() in spectral_tone.c. */
+static inline float3 st_output_gamut_protect(float3 rgb, const float fwd[9], const float inv[9])
+{
+  float3 t;
+  t.x = fwd[0]*rgb.x + fwd[1]*rgb.y + fwd[2]*rgb.z;
+  t.y = fwd[3]*rgb.x + fwd[4]*rgb.y + fwd[5]*rgb.z;
+  t.z = fwd[6]*rgb.x + fwd[7]*rgb.y + fwd[8]*rgb.z;
+
+  t = fmax(t, (float3)(0.0f, 0.0f, 0.0f));
+
+  float3 r;
+  r.x = inv[0]*t.x + inv[1]*t.y + inv[2]*t.z;
+  r.y = inv[3]*t.x + inv[4]*t.y + inv[5]*t.z;
+  r.z = inv[6]*t.x + inv[7]*t.y + inv[8]*t.z;
+  return r;
 }
 
 /* Spectral gamut: film-like chromaticity roll-off in CIE xy, preserving Y */
@@ -303,6 +324,10 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
 
   /* Step 10: gamut compression */
   rgb = st_gamut_compress(rgb);
+
+  /* Output gamut protection: clamp to selected primary space */
+  if(p->gamut_enable)
+    rgb = st_output_gamut_protect(rgb, p->gamut_fwd, p->gamut_inv);
 
   /* Step 11: clamp negatives */
   rgb.x = isfinite(rgb.x) ? fmax(rgb.x, 0.0f) : 0.0f;
