@@ -18,7 +18,7 @@
 
     ---------------------------------------------------------------------------
     OpenCL port of the ACES 2.0 SSTS spectral tone pipeline. The CPU reference
-    (src/iop/spectral_tone.c, dt_st_pipeline_eval) uses single precision for
+    (src/iop/3dcf.c, dt_st_pipeline_eval) uses single precision for
     per-pixel maths; this kernel uses the same precision throughout. Both pre-
     compute the context (matrices, SSTS parameters) on the host — the kernel
     receives them as floats. Every code path mirrors the CPU version 1:1 so the
@@ -28,7 +28,7 @@
 #include "common.h"
 #include "colorspace.h"
 
-/* Must match dt_st_cl_params_t in src/iop/spectral_tone.c byte for byte.
+/* Must match dt_st_cl_params_t in src/iop/3dcf.c byte for byte.
  * Only 4-byte members (float / int) are used so the host and device layouts
  * are identical with no padding — the struct is passed by value via CLARG. */
 typedef struct dt_st_cl_params_t
@@ -134,7 +134,7 @@ static inline float3 st_gamut_compress(float3 rgb)
 }
 
 /* Output gamut protection: convert to target color space, clamp negatives, revert.
- * Mirrors st_output_gamut_protect() in spectral_tone.c. */
+ * Mirrors st_output_gamut_protect() in 3dcf.c. */
 static inline float3 st_output_gamut_protect(float3 rgb, const float fwd[9], const float inv[9])
 {
   float3 t;
@@ -336,7 +336,7 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
   return rgb;
 }
 
-__kernel void spectral_tone(
+__kernel void 3dcf(
     read_only image2d_t input,
     write_only image2d_t output,
     const int width,
@@ -370,7 +370,7 @@ __kernel void spectral_tone(
 
   float3 rgb_out = st_pipeline_eval(rgb_in, &p);
 
-  /* Color look matrix + opacity blend (mirrors process() in spectral_tone.c) */
+  /* Color look matrix + opacity blend (mirrors process() in 3dcf.c) */
   if(p.look_idx > 0)
   {
     const float r = rgb_out.x, g = rgb_out.y, b = rgb_out.z;

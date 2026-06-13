@@ -145,9 +145,9 @@ else(GMIC_FOUND)
 endif(GMIC_FOUND)
 add_iop(toneequal "toneequal.c" DEFAULT_VISIBLE)
 add_iop(filmicrgb "filmicrgb.c")
-add_iop(spectral_tone "spectral_tone.c")
+add_iop(3dcf "3dcf.c")
 # Single translation unit — spectral_tone_data.c and spectral_tone_pipeline.c
-# have been merged into spectral_tone.c for Windows/MinGW compatibility.
+# have been merged into 3dcf.c for Windows/MinGW compatibility.
 add_iop(negadoctor "negadoctor.c")
 add_iop(channelmixerrgb "channelmixerrgb.c" "../chart/common.c")
 add_iop(censorize "censorize.c")

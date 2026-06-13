@@ -3908,7 +3908,7 @@
         <option>scene-referred (sigmoid)</option>
         <option>scene-referred (filmic)</option>
         <option>scene-referred (AgX)</option>
-        <option>scene-referred (spectral tone)</option>
+        <option>scene-referred (3DCF)</option>
         <option>scene-referred (basecurve)</option>
         <option>display-referred (legacy)</option>
         <option>none</option>
@@ -3916,7 +3916,7 @@
     </type>
     <default>scene-referred (basecurve)</default>
     <shortdescription>auto-apply pixel workflow defaults</shortdescription>
-    <longdescription><![CDATA[selects which workflow will be used by default in the darkroom\n\n<b>scene-referred (sigmoid)</b> modern workflow, fewer tonemapper controls\n\n<b>scene-referred (filmic)</b> modern workflow, more tone mapping controls\n\n<b>scene-referred (AgX)</b> modern workflow, maximum tone mapping control\n\n<b>scene-referred (spectral tone)</b> advanced spectral tone mapping workflow\n\n<b>display-referred (legacy)</b> legacy workflow (not recommended)\n\n<b>none</b> do not use a predefined workflow]]></longdescription>
+    <longdescription><![CDATA[selects which workflow will be used by default in the darkroom\n\n<b>scene-referred (sigmoid)</b> modern workflow, fewer tonemapper controls\n\n<b>scene-referred (filmic)</b> modern workflow, more tone mapping controls\n\n<b>scene-referred (AgX)</b> modern workflow, maximum tone mapping control\n\n<b>scene-referred (3DCF)</b> advanced 3D colorimetric film tone mapping workflow\n\n<b>display-referred (legacy)</b> legacy workflow (not recommended)\n\n<b>none</b> do not use a predefined workflow]]></longdescription>
     <welcomescreen pagenum="1" questionnum="1"/>
   </dtconfig>
   <dtconfig prefs="processing" section="general">
@@ -4285,11 +4285,11 @@
     <longdescription>height of agx graph in per cent</longdescription>
   </dtconfig>
   <dtconfig>
-    <name>plugins/darkroom/spectral_tone/graph_height</name>
+    <name>plugins/darkroom/3dcf/graph_height</name>
     <type min="50" max="500">int</type>
     <default>200</default>
-    <shortdescription>height of spectral tone graph</shortdescription>
-    <longdescription>height of spectral tone graph in pixels</longdescription>
+    <shortdescription>height of 3DC Film graph</shortdescription>
+    <longdescription>height of 3DC Film graph in pixels</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/agx/expand_curve_advanced</name>

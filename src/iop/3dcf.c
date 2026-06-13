@@ -69,10 +69,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-DT_MODULE_INTROSPECTION(4, dt_iop_spectral_tone_params_t)
+DT_MODULE_INTROSPECTION(4, dt_iop_3dcf_params_t)
 
 /* Type definitions for the ACES 2.0 SSTS pipeline context.
- * spectral_tone_data.c and spectral_tone_pipeline.c have been merged
+ * spectral_tone_data.c and spectral_tone_pipeline.c have been merged into 3dcf.c
  * into this single translation unit for Windows/MinGW compatibility. */
 
 typedef enum dt_iop_st_colorspace_t
@@ -105,7 +105,7 @@ typedef enum dt_iop_st_look_t
   DT_ST_LOOK_BRIGHT,         // $DESCRIPTION: "bright atmosphere"
 } dt_iop_st_look_t;
 
-typedef struct dt_iop_spectral_tone_params_t
+typedef struct dt_iop_3dcf_params_t
 {
   float contrast;              // $MIN: 0.25 $MAX: 4.25 $DEFAULT: 2.25 $DESCRIPTION: "contrast"
   float gray_point;            // $MIN: -1 $MAX: 1 $DEFAULT: 0 $DESCRIPTION: "mid-tones"
@@ -122,7 +122,7 @@ typedef struct dt_iop_spectral_tone_params_t
   float contrast_pivot;        // $MIN: 0.01 $MAX: 0.99 $DEFAULT: 0.5 $DESCRIPTION: "contrast pivot"
   float toe_power;             // $MIN: 0.25 $MAX: 3.0 $DEFAULT: 1.0 $DESCRIPTION: "toe power"
   float shoulder_power;        // $MIN: 0.25 $MAX: 3.0 $DEFAULT: 1.0 $DESCRIPTION: "shoulder power"
-} dt_iop_spectral_tone_params_t;
+} dt_iop_3dcf_params_t;
 
 /* SSTS (ACES 2.0 Single-Stage Tone Scale) precomputed parameters */
 typedef struct
@@ -162,13 +162,13 @@ typedef struct
   dt_st_ssts_params_t ssts;
 } dt_st_context_t;
 
-typedef struct dt_iop_spectral_tone_data_t
+typedef struct dt_iop_3dcf_data_t
 {
-  dt_iop_spectral_tone_params_t params;
+  dt_iop_3dcf_params_t params;
   dt_st_context_t ctx;
-} dt_iop_spectral_tone_data_t;
+} dt_iop_3dcf_data_t;
 
-/* GPU-side context — MUST match dt_st_cl_params_t in spectral_tone.cl byte for
+/* GPU-side context — MUST match dt_st_cl_params_t in 3dcf.cl byte for
  * byte. Only 4-byte members (float / int) are used so host and device layouts
  * are identical (no padding); the struct is passed to the kernel by value. The
  * SSTS parameters are double in dt_st_context_t but narrowed to float here. */
@@ -206,12 +206,12 @@ typedef struct dt_st_cl_params_t
   int   gamut_enable;
 } dt_st_cl_params_t;
 
-typedef struct dt_iop_spectral_tone_global_data_t
+typedef struct dt_iop_3dcf_global_data_t
 {
-  int kernel_spectral_tone;
-} dt_iop_spectral_tone_global_data_t;
+  int kernel_3dcf;
+} dt_iop_3dcf_global_data_t;
 
-typedef struct dt_iop_spectral_tone_gui_data_t
+typedef struct dt_iop_3dcf_gui_data_t
 {
   GtkWidget *contrast;
   GtkWidget *contrast_pivot;
@@ -233,7 +233,7 @@ typedef struct dt_iop_spectral_tone_gui_data_t
   GtkAllocation allocation;
   PangoRectangle ink;
   GtkStyleContext *context;
-} dt_iop_spectral_tone_gui_data_t;
+} dt_iop_3dcf_gui_data_t;
 
 /* Conversion matrices */
 static const float st_luma_rec709[3]    = { 0.2126f,  0.7152f,  0.0722f };
@@ -712,7 +712,7 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
 }
 
 /* Given input RGB in working space, compute the context */
-static void st_compute_context(dt_iop_spectral_tone_params_t *p,
+static void st_compute_context(dt_iop_3dcf_params_t *p,
                                 dt_st_context_t *ctx)
 {
   /* Auto-exposure compensation: single slider controls both SSTS tone curve
@@ -835,31 +835,31 @@ int legacy_params(dt_iop_module_t *self,
 {
   if(old_version == 1 || old_version == 2)
   {
-    typedef struct dt_iop_spectral_tone_params_v2_t
+    typedef struct dt_iop_3dcf_params_v2_t
     {
       float contrast, gray_point, vibrance, spectral_brilliance;
       float hl_hue_shift, hl_desaturation, gamut_knee, gamut_steepness;
       int output_cs, color_look;
       float look_opacity;
-    } dt_iop_spectral_tone_params_v2_t;
+    } dt_iop_3dcf_params_v2_t;
 
-    typedef struct dt_iop_spectral_tone_params_v1_t
+    typedef struct dt_iop_3dcf_params_v1_t
     {
       float contrast, gray_point, vibrance, spectral_brilliance;
       float hl_hue_shift, hl_desaturation, gamut_knee, gamut_steepness;
       int output_cs;
-    } dt_iop_spectral_tone_params_v1_t;
+    } dt_iop_3dcf_params_v1_t;
 
     /* Must use malloc(): the framework frees the result with free()
      * (see dt_iop_legacy_params / imageop.c). Allocating with g_malloc0()
      * and letting free() release it mixes allocators → heap corruption on
      * Windows. calloc() matches the previous zero-init semantics. */
-    dt_iop_spectral_tone_params_t *n = calloc(1, sizeof(dt_iop_spectral_tone_params_t));
+    dt_iop_3dcf_params_t *n = calloc(1, sizeof(dt_iop_3dcf_params_t));
     if(!n) return 1;
 
     if(old_version == 1)
     {
-      const dt_iop_spectral_tone_params_v1_t *o = (const dt_iop_spectral_tone_params_v1_t*)old_params;
+      const dt_iop_3dcf_params_v1_t *o = (const dt_iop_3dcf_params_v1_t*)old_params;
       n->contrast = o->contrast;
       n->gray_point = o->gray_point;
       n->vibrance = o->vibrance;
@@ -874,7 +874,7 @@ int legacy_params(dt_iop_module_t *self,
     }
     else /* v2 */
     {
-      const dt_iop_spectral_tone_params_v2_t *o = (const dt_iop_spectral_tone_params_v2_t*)old_params;
+      const dt_iop_3dcf_params_v2_t *o = (const dt_iop_3dcf_params_v2_t*)old_params;
       n->contrast = o->contrast;
       n->gray_point = o->gray_point;
       n->vibrance = o->vibrance;
@@ -891,19 +891,19 @@ int legacy_params(dt_iop_module_t *self,
     n->contrast_pivot = 0.5f;
     n->hl_desat_threshold = 0.45f;
     *new_params = n;
-    *new_params_size = sizeof(dt_iop_spectral_tone_params_t);
+    *new_params_size = sizeof(dt_iop_3dcf_params_t);
     *new_version = 4;
     return 0;
   }
   if(old_version == 3)
   {
-    const dt_iop_spectral_tone_params_t *o = (const dt_iop_spectral_tone_params_t *)old_params;
-    dt_iop_spectral_tone_params_t *n = calloc(1, sizeof(dt_iop_spectral_tone_params_t));
+    const dt_iop_3dcf_params_t *o = (const dt_iop_3dcf_params_t *)old_params;
+    dt_iop_3dcf_params_t *n = calloc(1, sizeof(dt_iop_3dcf_params_t));
     if(!n) return 1;
     *n = *o;
     n->hl_desat_threshold = 0.45f;
     *new_params = n;
-    *new_params_size = sizeof(dt_iop_spectral_tone_params_t);
+    *new_params_size = sizeof(dt_iop_3dcf_params_t);
     *new_version = 4;
     return 0;
   }
@@ -912,7 +912,7 @@ int legacy_params(dt_iop_module_t *self,
 
 const char *name()
 {
-  return _("spectral tone");
+  return _("3D Colorimetric Film");
 }
 
 const char *aliases()
@@ -951,11 +951,11 @@ void cleanup(dt_iop_module_t *self)
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
                dt_dev_pixelpipe_iop_t *piece)
 {
-  piece->data = dt_alloc1_align_type(dt_iop_spectral_tone_data_t);
+  piece->data = dt_alloc1_align_type(dt_iop_3dcf_data_t);
   if(!piece->data) return;
-  dt_iop_spectral_tone_data_t *d = piece->data;
-  memset(d, 0, sizeof(dt_iop_spectral_tone_data_t));
-  memcpy(&d->params, self->default_params, sizeof(dt_iop_spectral_tone_params_t));
+  dt_iop_3dcf_data_t *d = piece->data;
+  memset(d, 0, sizeof(dt_iop_3dcf_data_t));
+  memcpy(&d->params, self->default_params, sizeof(dt_iop_3dcf_params_t));
   
   /* Initialise le contexte avec les params par défaut MAINTENANT, 
      pas plus tard au commit. Évite les race conditions sous Windows. */
@@ -975,11 +975,11 @@ void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
 void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1,
                    dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_spectral_tone_params_t *p = (dt_iop_spectral_tone_params_t *)p1;
-  dt_iop_spectral_tone_data_t *d = piece->data;
+  dt_iop_3dcf_params_t *p = (dt_iop_3dcf_params_t *)p1;
+  dt_iop_3dcf_data_t *d = piece->data;
 
   st_compute_context(p, &d->ctx);
-  memcpy(&d->params, p, sizeof(dt_iop_spectral_tone_params_t));
+  memcpy(&d->params, p, sizeof(dt_iop_3dcf_params_t));
 }
 
 void tiling_callback(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
@@ -999,7 +999,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
              const void *const ivoid, void *const ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  dt_iop_spectral_tone_data_t *d = piece->data;
+  dt_iop_3dcf_data_t *d = piece->data;
   const int width = roi_in->width;
   const int height = roi_in->height;
   const int ch = piece->colors;
@@ -1083,7 +1083,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
 #ifdef HAVE_OPENCL
 /* Pack the precomputed CPU context (+ active color look) into the GPU struct.
  * Mirrors exactly what process() reads from d->ctx and d->params. */
-static void st_fill_cl_params(const dt_iop_spectral_tone_data_t *d,
+static void st_fill_cl_params(const dt_iop_3dcf_data_t *d,
                               dt_st_cl_params_t *clp)
 {
   const dt_st_context_t *ctx = &d->ctx;
@@ -1134,8 +1134,8 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
                cl_mem dev_in, cl_mem dev_out,
                const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  const dt_iop_spectral_tone_global_data_t *gd = self->global_data;
-  const dt_iop_spectral_tone_data_t *d = piece->data;
+  const dt_iop_3dcf_global_data_t *gd = self->global_data;
+  const dt_iop_3dcf_data_t *d = piece->data;
 
   const int devid = piece->pipe->devid;
   const int width = roi_in->width;
@@ -1151,24 +1151,24 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   st_fill_cl_params(d, &clp);
 
   return dt_opencl_enqueue_kernel_2d_args(
-    devid, gd->kernel_spectral_tone, width, height,
+    devid, gd->kernel_3dcf, width, height,
     CLARG(dev_in), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(clp));
 }
 
 void init_global(dt_iop_module_so_t *self)
 {
-  const int program = 42; // spectral_tone.cl, from programs.conf
-  dt_iop_spectral_tone_global_data_t *gd = malloc(sizeof(dt_iop_spectral_tone_global_data_t));
+  const int program = 42; // 3dcf.cl, from programs.conf
+  dt_iop_3dcf_global_data_t *gd = malloc(sizeof(dt_iop_3dcf_global_data_t));
   self->data = gd;
-  gd->kernel_spectral_tone = dt_opencl_create_kernel(program, "spectral_tone");
+  gd->kernel_3dcf = dt_opencl_create_kernel(program, "3dcf");
 }
 
 void cleanup_global(dt_iop_module_so_t *self)
 {
-  dt_iop_spectral_tone_global_data_t *gd = self->data;
+  dt_iop_3dcf_global_data_t *gd = self->data;
   if(gd)
   {
-    dt_opencl_free_kernel(gd->kernel_spectral_tone);
+    dt_opencl_free_kernel(gd->kernel_3dcf);
     free(self->data);
     self->data = NULL;
   }
@@ -1180,9 +1180,9 @@ void init_presets(dt_iop_module_so_t *self)
   self->pref_based_presets = TRUE;
 
   const char *workflow = dt_conf_get_string_const("plugins/darkroom/workflow");
-  const gboolean auto_apply_st = workflow && strcmp(workflow, "scene-referred (spectral tone)") == 0;
+  const gboolean auto_apply_st = workflow && strcmp(workflow, "scene-referred (3DCF)") == 0;
 
-  dt_iop_spectral_tone_params_t p;
+  dt_iop_3dcf_params_t p;
   memset(&p, 0, sizeof(p));
   p.contrast = 2.25f;
   p.spectral_brilliance = 5.0f;
@@ -1214,7 +1214,7 @@ void init_presets(dt_iop_module_so_t *self)
                                     self->op, self->version(), TRUE);
   }
 
-  dt_gui_presets_add_generic(_("default spectral tone"), self->op,
+  dt_gui_presets_add_generic(_("default 3D Colorimetric Film"), self->op,
                               self->version(),
                               &p, sizeof(p),
                               TRUE, DEVELOP_BLEND_CS_RGB_SCENE);
@@ -1230,8 +1230,8 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker,
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_iop_spectral_tone_gui_data_t *g = self->gui_data;
-  dt_iop_spectral_tone_params_t *p = self->params;
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  dt_iop_3dcf_params_t *p = self->params;
 
   dt_bauhaus_slider_set(g->contrast, p->contrast);
   dt_bauhaus_slider_set(g->contrast_pivot, p->contrast_pivot);
@@ -1258,8 +1258,8 @@ void gui_update(dt_iop_module_t *self)
 static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf,
                             const dt_iop_module_t *self)
 {
-  dt_iop_spectral_tone_gui_data_t *g = self->gui_data;
-  dt_iop_spectral_tone_params_t *p = self->params;
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  dt_iop_3dcf_params_t *p = self->params;
 
   /* precompute context from current params */
   dt_st_context_t ctx;
@@ -1560,7 +1560,7 @@ cleanup:
 
 void gui_init(dt_iop_module_t *self)
 {
-  dt_iop_spectral_tone_gui_data_t *g = IOP_GUI_ALLOC(spectral_tone);
+  dt_iop_3dcf_gui_data_t *g = IOP_GUI_ALLOC(3dcf);
   self->gui_data = g;
 
   GtkWidget *main_vbox = dt_gui_vbox();
@@ -1568,13 +1568,13 @@ void gui_init(dt_iop_module_t *self)
 
   /* === Graph (always visible at top) === */
   g->graph = GTK_DRAWING_AREA(dt_ui_resize_wrap(NULL, DT_PIXEL_APPLY_DPI(200),
-      "plugins/darkroom/spectral_tone/graph_height"));
+      "plugins/darkroom/3dcf/graph_height"));
   g_object_set_data(G_OBJECT(g->graph), "iop-instance", self);
   dt_action_define_iop(self, NULL, N_("graph"), GTK_WIDGET(g->graph), NULL);
   gtk_widget_set_can_focus(GTK_WIDGET(g->graph), TRUE);
   g_signal_connect(G_OBJECT(g->graph), "draw", G_CALLBACK(_draw_curve), self);
   gtk_widget_set_tooltip_text(GTK_WIDGET(g->graph),
-    _("spectral tone curve: scene luminance (X) vs display output (Y)"));
+    _("3DC Film curve: scene luminance (X) vs display output (Y)"));
   gtk_box_pack_start(GTK_BOX(main_vbox), GTK_WIDGET(g->graph), TRUE, TRUE, 0);
 
   /* === TONE section === */
@@ -1654,7 +1654,7 @@ void gui_init(dt_iop_module_t *self)
 
   /* === Advanced section === */
   dt_gui_new_collapsible_section(&g->advanced_section,
-                                 "plugins/darkroom/spectral_tone/expand_advanced",
+                                 "plugins/darkroom/3dcf/expand_advanced",
                                  _("advanced"),
                                  GTK_BOX(main_vbox),
                                  DT_ACTION(self));
@@ -1729,8 +1729,8 @@ void gui_init(dt_iop_module_t *self)
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_spectral_tone_gui_data_t *g = self->gui_data;
-  dt_iop_spectral_tone_params_t *p = self->params;
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  dt_iop_3dcf_params_t *p = self->params;
 
   if(!w || w == g->color_look)
   {
