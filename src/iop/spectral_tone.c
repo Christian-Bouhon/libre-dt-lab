@@ -1141,6 +1141,8 @@ void gui_update(dt_iop_module_t *self)
 
   dt_bauhaus_slider_set(g->contrast, p->contrast);
   dt_bauhaus_slider_set(g->contrast_pivot, p->contrast_pivot);
+  dt_bauhaus_slider_set(g->shoulder_power, p->shoulder_power);
+  dt_bauhaus_slider_set(g->toe_power, p->toe_power);
   dt_bauhaus_slider_set(g->spectral_brilliance, p->spectral_brilliance);
   dt_bauhaus_slider_set(g->mid_tone, p->gray_point);
   dt_bauhaus_slider_set(g->vibrance, p->vibrance);
@@ -1297,32 +1299,58 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf,
   }
   cairo_restore(cr);
 
-  /* main tone-mapping curve (200 samples, uniform in EV) */
-  const float line_width = DT_PIXEL_APPLY_DPI(2.0);
-  cairo_set_line_width(cr, line_width);
-  set_color(cr, darktable.bauhaus->graph_fg);
-
+  /* three superimposed curves (200 samples, uniform in EV) */
   const int steps = 200;
 
-  cairo_move_to(cr, 0, 0);
-  for(int k = 1; k <= steps; k++)
-  {
-    const float ev = ev_min + ev_range * (float)k / steps;
-    const float y_scene = 0.18f * powf(2.0f, ev);
-    float y_tm = dt_st_compute_y_tm(y_scene, &ctx);
-    if(ctx.gray_point != 0.0f)
-    {
-      float y_lvl = fminf(fmaxf(y_tm, 0.0f), 1.0f);
-      y_lvl = powf(y_lvl, ctx.gray_gamma);
-      y_tm = y_lvl;
-    }
-    const float x_norm = (ev - ev_min) / ev_range;
-    const float y_norm = fminf(fmaxf(y_tm, 0.0f), 1.0f);
-    cairo_line_to(cr, x_norm * graph_width, y_norm * graph_height);
-  }
-  cairo_stroke(cr);
+  /* helper: draw one curve from sampled Y values */
+  #define DRAW_CURVE(lw, r, g, b, alpha, eval_fn) \
+    do { \
+      cairo_set_source_rgba(cr, (r), (g), (b), (alpha)); \
+      cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(lw)); \
+      cairo_move_to(cr, 0, 0); \
+      for(int k = 1; k <= steps; k++) \
+      { \
+        const float ev = ev_min + ev_range * (float)k / steps; \
+        const float y_scene = 0.18f * powf(2.0f, ev); \
+        const float x_norm = (ev - ev_min) / ev_range; \
+        const float y_norm = fminf(fmaxf((eval_fn), 0.0f), 1.0f); \
+        cairo_line_to(cr, x_norm * graph_width, y_norm * graph_height); \
+      } \
+      cairo_stroke(cr); \
+    } while(0)
 
-  /* helper: compute tone-mapped Y with gray_gamma */
+  /* 1. SSTS only (faint) — spectral brilliance changes the base roll-off */
+  DRAW_CURVE(1.0f,
+    darktable.bauhaus->graph_fg.red,
+    darktable.bauhaus->graph_fg.green,
+    darktable.bauhaus->graph_fg.blue, 0.25f,
+    ({
+      float _y = dt_st_ssts_fwd(&ctx.ssts, y_scene * ctx.exposure_factor) / (float)ctx.ssts.n;
+      powf(fmaxf(_y, 0.0f), 1.0f / 2.4f);
+    }));
+
+  /* 2. SSTS + contrast S-curve (medium) */
+  DRAW_CURVE(1.5f,
+    darktable.bauhaus->graph_fg.red,
+    darktable.bauhaus->graph_fg.green,
+    darktable.bauhaus->graph_fg.blue, 0.55f,
+    dt_st_compute_y_tm(y_scene, &ctx));
+
+  /* 3. Full curve including mid-tones gamma (solid) */
+  DRAW_CURVE(2.0f,
+    darktable.bauhaus->graph_fg_active.red,
+    darktable.bauhaus->graph_fg_active.green,
+    darktable.bauhaus->graph_fg_active.blue, 1.0f,
+    ({
+      float _y = dt_st_compute_y_tm(y_scene, &ctx);
+      if(ctx.gray_point != 0.0f)
+        _y = powf(fminf(fmaxf(_y, 0.0f), 1.0f), ctx.gray_gamma);
+      _y;
+    }));
+
+  #undef DRAW_CURVE
+
+  /* helper: compute tone-mapped Y with gray_gamma (full curve) */
   #define TONE_MAP(ys) ({ \
     float _y = dt_st_compute_y_tm((ys), &ctx); \
     if(ctx.gray_point != 0.0f) _y = powf(fminf(fmaxf(_y, 0.0f), 1.0f), ctx.gray_gamma); \
@@ -1455,7 +1483,16 @@ void gui_init(dt_iop_module_t *self)
     _("spectral tone curve: scene luminance (X) vs display output (Y)"));
   gtk_box_pack_start(GTK_BOX(main_vbox), GTK_WIDGET(g->graph), TRUE, TRUE, 0);
 
-  /* === Main controls === */
+  /* === TONE section === */
+  dt_gui_box_add(GTK_BOX(main_vbox), dt_ui_section_label_new(C_("section", "tone")));
+
+  g->spectral_brilliance = dt_bauhaus_slider_from_params(self, "spectral_brilliance");
+  dt_bauhaus_slider_set_format(g->spectral_brilliance, "%");
+  gtk_widget_set_tooltip_text(g->spectral_brilliance,
+    _("Perceptual brightness: auto-exposure compensation with tone scale character. \n"
+      "Higher values increase highlight headroom with a softer, film-like rolloff. \n"
+      "Brightness is stabilised across the full range."));
+
   g->contrast = dt_bauhaus_slider_from_params(self, "contrast");
   dt_bauhaus_slider_set_factor(g->contrast, 50.0f);
   dt_bauhaus_slider_set_offset(g->contrast, -112.5f);
@@ -1474,15 +1511,6 @@ void gui_init(dt_iop_module_t *self)
     _("Pivot point for the contrast S-curve. Higher values (right) shift the fulcrum towards \n"
       "shadows, brightening the image. Lower values (left) shift it towards highlights, darkening it."));
 
-  g->toe_power = dt_bauhaus_slider_from_params(self, "toe_power");
-  dt_bauhaus_slider_set_factor(g->toe_power, 100.0f);
-  dt_bauhaus_slider_set_offset(g->toe_power, -100.0f);
-  dt_bauhaus_slider_set_format(g->toe_power, " %");
-  dt_bauhaus_slider_set_digits(g->toe_power, 1);
-  gtk_widget_set_tooltip_text(g->toe_power,
-    _("Toe (shadow) contrast multiplier relative to master contrast. \n"
-      "100% = identical to master, 0% = no contrast in shadows, 200% = double contrast."));
-
   g->shoulder_power = dt_bauhaus_slider_from_params(self, "shoulder_power");
   dt_bauhaus_slider_set_factor(g->shoulder_power, 100.0f);
   dt_bauhaus_slider_set_offset(g->shoulder_power, -100.0f);
@@ -1491,6 +1519,15 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->shoulder_power,
     _("Shoulder (highlight) contrast multiplier relative to master contrast. \n"
       "100% = identical to master, 0% = no contrast in highlights, 200% = double contrast."));
+
+  g->toe_power = dt_bauhaus_slider_from_params(self, "toe_power");
+  dt_bauhaus_slider_set_factor(g->toe_power, 100.0f);
+  dt_bauhaus_slider_set_offset(g->toe_power, -100.0f);
+  dt_bauhaus_slider_set_format(g->toe_power, " %");
+  dt_bauhaus_slider_set_digits(g->toe_power, 1);
+  gtk_widget_set_tooltip_text(g->toe_power,
+    _("Toe (shadow) contrast multiplier relative to master contrast. \n"
+      "100% = identical to master, 0% = no contrast in shadows, 200% = double contrast."));
 
   g->mid_tone = dt_bauhaus_slider_from_params(self, "gray_point");
   dt_bauhaus_slider_set_factor(g->mid_tone, 100.0f);
@@ -1501,6 +1538,9 @@ void gui_init(dt_iop_module_t *self)
       "Moving to the right (+100%) brightens mid-tones, \n"
       "moving to the left (-100%) darkens them."));
 
+  /* === COLOR section === */
+  dt_gui_box_add(GTK_BOX(main_vbox), dt_ui_section_label_new(C_("section", "color")));
+
   g->vibrance = dt_bauhaus_slider_from_params(self, "vibrance");
   dt_bauhaus_slider_set_factor(g->vibrance, 100.0f);
   dt_bauhaus_slider_set_offset(g->vibrance, -100.0f);
@@ -1509,14 +1549,6 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->vibrance,
     _("Smart saturation boost. Protects already-saturated colors while enhancing pastels."));
 
-  g->spectral_brilliance = dt_bauhaus_slider_from_params(self, "spectral_brilliance");
-  dt_bauhaus_slider_set_format(g->spectral_brilliance, "%");
-  gtk_widget_set_tooltip_text(g->spectral_brilliance,
-    _("Perceptual brightness: auto-exposure compensation with tone scale character. \n"
-      "Higher values increase highlight headroom with a softer, film-like rolloff. \n"
-      "Brightness is stabilised across the full range."));
-
-  /* color look */
   g->color_look = dt_bauhaus_combobox_from_params(self, "color_look");
   gtk_widget_set_tooltip_text(g->color_look, _("Apply a color style to the image."));
 
@@ -1535,15 +1567,8 @@ void gui_init(dt_iop_module_t *self)
 
   self->widget = GTK_WIDGET(g->advanced_section.container);
 
-  g->hl_hue_shift = dt_bauhaus_slider_from_params(self, "hl_hue_shift");
-  dt_bauhaus_slider_set_factor(g->hl_hue_shift, 100.0f);
-  dt_bauhaus_slider_set_format(g->hl_hue_shift, " %");
-  dt_bauhaus_slider_set_digits(g->hl_hue_shift, 0);
-  gtk_widget_set_tooltip_text(g->hl_hue_shift,
-    _("Abney rotation in highlights, modulated by pixel saturation. \n"
-      "Positive rotates toward cool (blue), negative toward warm (salmon). \n"
-      "Vibrance-negative desaturation: saturated pixels desaturate further. \n"
-      "Independent of highlight roll-off."));
+  /* highlights sub-group */
+  dt_gui_box_add(GTK_BOX(self->widget), dt_ui_section_label_new(C_("section", "highlights")));
 
   g->hl_desaturation = dt_bauhaus_slider_from_params(self, "hl_desaturation");
   dt_bauhaus_slider_set_factor(g->hl_desaturation, 100.0f);
@@ -1560,6 +1585,19 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->hl_desat_threshold,
     _("Luminance threshold at which highlight desaturation begins. \n"
       "Lower values desaturate earlier (more protection), higher values preserve saturation longer."));
+
+  g->hl_hue_shift = dt_bauhaus_slider_from_params(self, "hl_hue_shift");
+  dt_bauhaus_slider_set_factor(g->hl_hue_shift, 100.0f);
+  dt_bauhaus_slider_set_format(g->hl_hue_shift, " %");
+  dt_bauhaus_slider_set_digits(g->hl_hue_shift, 0);
+  gtk_widget_set_tooltip_text(g->hl_hue_shift,
+    _("Abney rotation in highlights, modulated by pixel saturation. \n"
+      "Positive rotates toward cool (blue), negative toward warm (salmon). \n"
+      "Vibrance-negative desaturation: saturated pixels desaturate further. \n"
+      "Independent of highlight roll-off."));
+
+  /* gamut sub-group */
+  dt_gui_box_add(GTK_BOX(self->widget), dt_ui_section_label_new(C_("section", "gamut")));
 
   g->gamut_knee = dt_bauhaus_slider_from_params(self, "gamut_knee");
   dt_bauhaus_slider_set_factor(g->gamut_knee, 100.0f);
