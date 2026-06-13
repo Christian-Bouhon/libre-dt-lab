@@ -55,13 +55,10 @@
 #include "common/colorspaces.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/imagebuf.h"
-#include "common/math.h"
 #include "common/matrices.h"
 #include "develop/imageop.h"
 #include "develop/tiling.h"
 #include "develop/imageop_gui.h"
-#include "gui/accelerators.h"
-#include "gui/draw.h"
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
 #include <gtk/gtk.h>
@@ -69,15 +66,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-DT_MODULE_INTROSPECTION(4, dt_iop_3dcf_params_t)
+DT_MODULE_INTROSPECTION(3, dt_iop_spectral_tone_params_t)
 
 /* Type definitions for the ACES 2.0 SSTS pipeline context.
- * spectral_tone_data.c and spectral_tone_pipeline.c have been merged into 3dcf.c
+ * spectral_tone_data.c and spectral_tone_pipeline.c have been merged
  * into this single translation unit for Windows/MinGW compatibility. */
 
 typedef enum dt_iop_st_colorspace_t
 {
-  DT_ST_CS_REC709 = 0,    // $DESCRIPTION: "sRGB"
+  DT_ST_CS_REC709 = 0,    // $DESCRIPTION: "Rec. 709"
   DT_ST_CS_REC2020,       // $DESCRIPTION: "Rec. 2020"
   DT_ST_CS_DISPLAYP3,     // $DESCRIPTION: "Display P3"
   DT_ST_CS_PROPHOTO,      // $DESCRIPTION: "ProPhoto RGB"
@@ -105,7 +102,7 @@ typedef enum dt_iop_st_look_t
   DT_ST_LOOK_BRIGHT,         // $DESCRIPTION: "bright atmosphere"
 } dt_iop_st_look_t;
 
-typedef struct dt_iop_3dcf_params_t
+typedef struct dt_iop_spectral_tone_params_t
 {
   float contrast;              // $MIN: 0.25 $MAX: 4.25 $DEFAULT: 2.25 $DESCRIPTION: "contrast"
   float gray_point;            // $MIN: -1 $MAX: 1 $DEFAULT: 0 $DESCRIPTION: "mid-tones"
@@ -113,16 +110,13 @@ typedef struct dt_iop_3dcf_params_t
   float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "perceptual brightness"
   float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "Abney rotation"
   float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "highlight roll-off"
-  float hl_desat_threshold;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.45 $DESCRIPTION: "desaturation threshold"
   float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.15 $DESCRIPTION: "gamut knee"
   float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "gamut steepness"
   dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "color space"
   dt_iop_st_look_t color_look;       // $DEFAULT: DT_ST_LOOK_NEUTRAL $DESCRIPTION: "color look"
   float look_opacity;          // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "look opacity"
   float contrast_pivot;        // $MIN: 0.01 $MAX: 0.99 $DEFAULT: 0.5 $DESCRIPTION: "contrast pivot"
-  float toe_power;             // $MIN: 0.25 $MAX: 3.0 $DEFAULT: 1.0 $DESCRIPTION: "toe power"
-  float shoulder_power;        // $MIN: 0.25 $MAX: 3.0 $DEFAULT: 1.0 $DESCRIPTION: "shoulder power"
-} dt_iop_3dcf_params_t;
+} dt_iop_spectral_tone_params_t;
 
 /* SSTS (ACES 2.0 Single-Stage Tone Scale) precomputed parameters */
 typedef struct
@@ -145,7 +139,6 @@ typedef struct
   float output_matrix[9];
   float luma_coeff[3];
   float hl_desat;
-  float hl_desat_threshold;
   float hl_rotation;
   float white_chroma_x;
   float white_chroma_z;
@@ -154,21 +147,16 @@ typedef struct
   float vibrance;
   float gamut_knee;
   float gamut_steepness;
-  float toe_power;
-  float shoulder_power;
-  float gamut_fwd[9];
-  float gamut_inv[9];
-  int   gamut_enable;
   dt_st_ssts_params_t ssts;
 } dt_st_context_t;
 
-typedef struct dt_iop_3dcf_data_t
+typedef struct dt_iop_spectral_tone_data_t
 {
-  dt_iop_3dcf_params_t params;
+  dt_iop_spectral_tone_params_t params;
   dt_st_context_t ctx;
-} dt_iop_3dcf_data_t;
+} dt_iop_spectral_tone_data_t;
 
-/* GPU-side context — MUST match dt_st_cl_params_t in 3dcf.cl byte for
+/* GPU-side context — MUST match dt_st_cl_params_t in spectral_tone.cl byte for
  * byte. Only 4-byte members (float / int) are used so host and device layouts
  * are identical (no padding); the struct is passed to the kernel by value. The
  * SSTS parameters are double in dt_st_context_t but narrowed to float here. */
@@ -182,7 +170,6 @@ typedef struct dt_st_cl_params_t
   float contrast;
   float contrast_pivot;
   float hl_desat;
-  float hl_desat_threshold;
   float hl_rotation;
   float white_chroma_x;
   float white_chroma_z;
@@ -191,10 +178,6 @@ typedef struct dt_st_cl_params_t
   float vibrance;
   float gamut_knee;
   float gamut_steepness;
-  float toe_power;
-  float shoulder_power;
-  float gamut_fwd[9];
-  float gamut_inv[9];
   float ssts_s_2;
   float ssts_m_2;
   float ssts_g;
@@ -203,25 +186,21 @@ typedef struct dt_st_cl_params_t
   float ssts_n;
   float look_opacity;
   int   look_idx;
-  int   gamut_enable;
 } dt_st_cl_params_t;
 
-typedef struct dt_iop_3dcf_global_data_t
+typedef struct dt_iop_spectral_tone_global_data_t
 {
-  int kernel_3dcf;
-} dt_iop_3dcf_global_data_t;
+  int kernel_spectral_tone;
+} dt_iop_spectral_tone_global_data_t;
 
-typedef struct dt_iop_3dcf_gui_data_t
+typedef struct dt_iop_spectral_tone_gui_data_t
 {
   GtkWidget *contrast;
   GtkWidget *contrast_pivot;
-  GtkWidget *toe_power;
-  GtkWidget *shoulder_power;
   GtkWidget *spectral_brilliance;
   GtkWidget *mid_tone;
   GtkWidget *vibrance;
   GtkWidget *hl_desaturation;
-  GtkWidget *hl_desat_threshold;
   GtkWidget *hl_hue_shift;
   GtkWidget *gamut_knee;
   GtkWidget *gamut_steepness;
@@ -229,11 +208,7 @@ typedef struct dt_iop_3dcf_gui_data_t
   GtkWidget *color_space;
   GtkWidget *color_look;
   GtkWidget *look_opacity;
-  GtkDrawingArea *graph;
-  GtkAllocation allocation;
-  PangoRectangle ink;
-  GtkStyleContext *context;
-} dt_iop_3dcf_gui_data_t;
+} dt_iop_spectral_tone_gui_data_t;
 
 /* Conversion matrices */
 static const float st_luma_rec709[3]    = { 0.2126f,  0.7152f,  0.0722f };
@@ -267,54 +242,7 @@ const double dt_st_rec2020_to_xyz[9] = {
 const double dt_st_cat_d65_to_d50[9] = {
   1.047839954303051e+00,  2.289791610380174e-02, -5.018079725046408e-02,
   2.955368681442254e-02,  9.904924221623178e-01, -1.706631418019539e-02,
-  -9.245918452778928e-03,  1.506326034916465e-02,  7.518388616796452e-01
-};
-
-/* Pre-computed combined matrices for output gamut protection:
- *   gamut_fwd[cs]  : Rec.2020 D65 RGB -> Target D65 RGB
- *   gamut_inv[cs]  : Target D65 RGB -> Rec.2020 D65 RGB
- * Indexed by dt_iop_st_colorspace_t. Slot REC2020 is identity (unused).
- * Round-trip verified: fwd @ inv = I to within ~3e-16. */
-static const float st_gamut_fwd[5][9] = {
-  /* DT_ST_CS_REC709 — sRGB (same primaries) */
-  { 1.6604910021084340e+00f, -5.8764113878854918e-01f, -7.2849863319884856e-02f,
-   -1.2455047452159060e-01f,  1.1328998971259596e+00f, -8.3494226043694768e-03f,
-   -1.8150763354905213e-02f, -1.0057889800800739e-01f,  1.1187296613629127e+00f },
-  /* DT_ST_CS_REC2020 (identity, skipped) */
-  { 1.0f, 0.0f, 0.0f,  0.0f, 1.0f, 0.0f,  0.0f, 0.0f, 1.0f },
-  /* DT_ST_CS_DISPLAYP3 */
-  { 1.3435782525843321e+00f, -2.8217967052613580e-01f, -6.1398582058196219e-02f,
-   -6.5297452789119470e-02f,  1.0757879158485739e+00f, -1.0490463059454964e-02f,
-    2.8217872617010515e-03f, -1.9598494524494175e-02f,  1.0167767072627931e+00f },
-  /* DT_ST_CS_PROPHOTO (via D50 adaptation) */
-  { 8.3510708914902376e-01f,  4.8796017329827877e-02f,  1.1593570461330915e-01f,
-    5.4024518630719040e-02f,  9.2897841074060328e-01f,  1.7056261398002901e-02f,
-   -2.3416915615907760e-03f,  3.6337073948144318e-02f,  9.6596433118070490e-01f },
-  /* DT_ST_CS_ADOBERGB */
-  { 1.1519783947159161e+00f, -9.7503055302408478e-02f, -5.4475339413507635e-02f,
-   -1.2455047452159049e-01f,  1.1328998971259596e+00f, -8.3494226043695028e-03f,
-   -2.2530382781055808e-02f, -4.9806507428388894e-02f,  1.0723368902094448e+00f },
-};
-
-static const float st_gamut_inv[5][9] = {
-  /* DT_ST_CS_REC709 — sRGB (same primaries) */
-  { 6.2740389593469914e-01f,  3.2928303837788381e-01f,  4.3313065687417218e-02f,
-    6.9097289358232006e-02f,  9.1954039507545904e-01f,  1.1362315566309176e-02f,
-    1.6391438875150231e-02f,  8.8013307877225763e-02f,  8.9559525324762390e-01f },
-  /* DT_ST_CS_REC2020 (identity, skipped) */
-  { 1.0f, 0.0f, 0.0f,  0.0f, 1.0f, 0.0f,  0.0f, 0.0f, 1.0f },
-  /* DT_ST_CS_DISPLAYP3 */
-  { 7.5383303436172178e-01f,  1.9859736905261646e-01f,  4.7569596585661844e-02f,
-    4.5743848965358248e-02f,  9.4177721981169393e-01f,  1.2478931222948127e-02f,
-   -1.2103403545183937e-03f,  1.7601717301089989e-02f,  9.8360862305342833e-01f },
-  /* DT_ST_CS_PROPHOTO (via D50 adaptation) */
-  { 1.2007680891347712e+00f, -5.7474733312325541e-02f, -1.4310216842779236e-01f,
-   -6.9932127259518431e-02f,  1.0805425606086707e+00f, -1.0686094282437804e-02f,
-    5.5415683670136931e-03f, -4.0786540201541162e-02f,  1.0352899874010184e+00f },
-  /* DT_ST_CS_ADOBERGB */
-  { 8.7733384166365691e-01f,  7.7493706515719976e-02f,  4.5172451820623120e-02f,
-    9.6622591466203681e-02f,  8.9152732024418091e-01f,  1.1850088289615686e-02f,
-    2.2921062702848320e-02f,  4.3036685010679435e-02f,  9.3404225228647197e-01f },
+ -9.245918452778928e-03,  1.506326034916465e-02,  7.518388616796452e-01
 };
 
 static const float *st_get_luma_coeff(dt_iop_st_colorspace_t cs)
@@ -391,49 +319,43 @@ void dt_st_ssts_init(dt_st_ssts_params_t *p, double peak_luminance)
   p->n   = n;
 }
 
-float dt_st_ssts_fwd(const dt_st_ssts_params_t *p, float x)
+double dt_st_ssts_fwd(const dt_st_ssts_params_t *p, double x)
 {
-  if(x <= 0.0f) return 0.0f;
+  if(x <= 0.0) return 0.0;
 
-  const float s_2 = (float)p->s_2;
-  const float m_2 = (float)p->m_2;
-  const float g   = (float)p->g;
-  const float t_1 = (float)p->t_1;
-  const float n_r = (float)p->n_r;
+  /* Michaelis-Menten segment */
+  const double f = p->m_2 * pow(x / (x + p->s_2), p->g);
 
-  const float f = m_2 * powf(x / (x + s_2), g);
-  const float h = (f * f) / (f + t_1);
-  return h * n_r;
+  /* Flare compensation */
+  const double h = (f * f) / (f + p->t_1);
+
+  /* Display luminance (cd/m^2) */
+  return h * p->n_r;
 }
 
-float dt_st_compute_y_tm(float y_scene, const dt_st_context_t *ctx)
+/* Compute tone-mapped Y from scene-linear Y (SSTS + BT.1886 + contrast) */
+double dt_st_compute_y_tm(double y_scene, const dt_st_context_t *ctx)
 {
-  if(ctx->ssts.n <= 0.0) return 0.0f;
+  /* Guard: ssts.n is set by dt_st_ssts_init() to peak_luminance (>=100).
+   * A value of 0 means the context was never initialised — return black
+   * rather than raising a FPE (0.0/0.0) which crashes on Windows. */
+  if(ctx->ssts.n <= 0.0) return 0.0;
 
-  float y_tm = dt_st_ssts_fwd(&ctx->ssts, y_scene * ctx->exposure_factor)
-             / (float)ctx->ssts.n;
+  double y_disp = dt_st_ssts_fwd(&ctx->ssts, y_scene * ctx->exposure_factor);
+  double y_tm = y_disp / ctx->ssts.n;
 
-  y_tm = powf(fmaxf(y_tm, 0.0f), 1.0f / 2.4f);
+  /* BT.1886 OETF */
+  y_tm = pow(fmax(y_tm, 0.0), 1.0 / 2.4);
 
-  if(ctx->contrast != 1.0f || ctx->toe_power != 1.0f || ctx->shoulder_power != 1.0f)
+  /* Post-SSTS contrast S-curve pivoted at mid-gray (0.5) */
+  if(ctx->contrast != 1.0f)
   {
-    const float c  = ctx->contrast;
-    const float p  = ctx->contrast_pivot;
-    const float ct = ctx->toe_power;
-    const float cs = ctx->shoulder_power;
+    const double c = (double)ctx->contrast;
+    const double p = (double)ctx->contrast_pivot;
     if(y_tm <= p)
-    {
-      const float t = (p > 0.0f) ? y_tm / p : 0.0f;
-      const float exp_eff = c * (ct + (1.0f - ct) * t);
-      y_tm = p * powf(fmaxf(y_tm / p, 0.0f), exp_eff);
-    }
+      y_tm = p * pow(fmax(y_tm / p, 0.0), c);
     else
-    {
-      const float rp = 1.0f - p;
-      const float t = (rp > 0.0f) ? (1.0f - y_tm) / rp : 0.0f;
-      const float exp_eff = c * (cs + (1.0f - cs) * t);
-      y_tm = 1.0f - rp * powf(fmaxf((1.0f - y_tm) / rp, 0.0f), exp_eff);
-    }
+      y_tm = 1.0 - (1.0 - p) * pow(fmax((1.0 - y_tm) / (1.0 - p), 0.0), c);
   }
 
   return y_tm;
@@ -446,12 +368,13 @@ float dt_st_compute_y_tm(float y_scene, const dt_st_context_t *ctx)
  * hl_desat controls the strength: 0 = off, 1 = full desat well above threshold,
  * > 1 = faster desaturation.
  */
-static inline float st_desat_weight(float y_norm, float hl_desat, float threshold)
+static inline double st_desat_weight(double y_norm, float hl_desat)
 {
-  if(hl_desat <= 0.0f || y_norm <= threshold) return 0.0f;
-  if(!isfinite(y_norm)) return 0.0f;
-  const float t = fmaxf(y_norm - threshold, 0.0f) / y_norm;
-  const float x = fminf(t * hl_desat, 1.0f);
+  const double threshold = 0.45; // CB On commence a desaturer beaucoup plus tôt
+  if(hl_desat <= 0.0f || y_norm <= threshold) return 0.0;
+  if(!isfinite(y_norm)) return 0.0;
+  const double t = fmax(y_norm - threshold, 0.0) / y_norm;
+  const double x = fmin(t * (double)hl_desat, 1.0);
   return x * x;
 }
 
@@ -478,66 +401,55 @@ static inline void st_gamut_compress(float rgb[3])
   rgb[2] = (1.0f - t) * rgb[2] + t * 1.0f;
 }
 
-/* Output gamut protection: convert from Rec.2020 D65 to the target color space,
- * hard-clamp negative (out-of-gamut) channels to zero, then convert back.
- * Called after st_gamut_compress() as an additional safety net when the user
- * selects a colour space narrower than Rec. 2020. */
-static inline void st_output_gamut_protect(float rgb[3],
-                                            const float fwd[9],
-                                            const float inv[9])
-{
-  float t[3];
-  t[0] = fwd[0]*rgb[0] + fwd[1]*rgb[1] + fwd[2]*rgb[2];
-  t[1] = fwd[3]*rgb[0] + fwd[4]*rgb[1] + fwd[5]*rgb[2];
-  t[2] = fwd[6]*rgb[0] + fwd[7]*rgb[1] + fwd[8]*rgb[2];
-
-  t[0] = fmaxf(t[0], 0.0f);
-  t[1] = fmaxf(t[1], 0.0f);
-  t[2] = fmaxf(t[2], 0.0f);
-
-  rgb[0] = inv[0]*t[0] + inv[1]*t[1] + inv[2]*t[2];
-  rgb[1] = inv[3]*t[0] + inv[4]*t[1] + inv[5]*t[2];
-  rgb[2] = inv[6]*t[0] + inv[7]*t[1] + inv[8]*t[2];
-}
-
+/* Spectral gamut: film-like chromaticity roll-off in CIE xyY space
+ *
+ * Emulates film dye absorption: colors far from the D50 white point in CIE
+ * chromaticity (x,y) desaturate naturally because dyes have limited density.
+ * Applied in xyY space (perceptually uniform), compressing the distance from
+ * white with a smooth asymptotic knee, then mapped back to XYZ preserving Y.
+ */
 static inline void st_spectral_gamut(
-  float *x_tm, float *z_tm, float y_tm,
-  const float white_x_ratio, const float white_z_ratio,
-  const float knee, const float steepness)
+  double *x_tm, double *z_tm, double y_tm,
+  const double white_x_ratio, const double white_z_ratio,
+  const double knee, const double steepness)
 {
-  if(y_tm <= 0.0f) return;
+  if(y_tm <= 0.0) return;
   if(!isfinite(*x_tm) || !isfinite(*z_tm)) return;
 
-  const float sum = *x_tm + y_tm + *z_tm;
-  if(sum <= 0.0f) return;
-  const float cie_x = *x_tm / sum;
-  const float cie_z = *z_tm / sum;
+  /* Convert current XYZ to CIE xy chromaticity */
+  const double sum = *x_tm + y_tm + *z_tm;
+  if(sum <= 0.0) return;
+  const double cie_x = *x_tm / sum;
+  const double cie_z = *z_tm / sum;
 
-  const float wy = 1.0f;
-  const float wx = white_x_ratio;
-  const float wz = white_z_ratio;
-  const float wsum = wx + wy + wz;
-  const float white_cie_x = wx / wsum;
-  const float white_cie_z = wz / wsum;
+  /* D50 white point in CIE xy (from white ratios: X/Y, Z/Y) */
+  const double wy = 1.0;
+  const double wx = white_x_ratio;
+  const double wz = white_z_ratio;
+  const double wsum = wx + wy + wz;
+  const double white_cie_x = wx / wsum;
+  const double white_cie_z = wz / wsum;
 
-  const float dx = cie_x - white_cie_x;
-  const float dz = cie_z - white_cie_z;
-  const float chroma_sq = dx * dx + dz * dz;
+  /* Distance from white in uniform CIE xy space */
+  const double dx = cie_x - white_cie_x;
+  const double dz = cie_z - white_cie_z;
+  const double chroma_sq = dx * dx + dz * dz;
 
   if(chroma_sq > knee * knee)
   {
-    const float chroma = sqrtf(chroma_sq);
-    const float excess = chroma - knee;
-    const float compression = excess / (excess + steepness);
-    const float scale = (chroma - compression * excess) / chroma;
+    const double chroma = sqrt(chroma_sq);
+    const double excess = chroma - knee;
+    const double compression = excess / (excess + steepness);
+    const double scale = (chroma - compression * excess) / chroma;
 
-    const float x_new = white_cie_x + scale * dx;
-    const float z_new = white_cie_z + scale * dz;
-    const float y_new = 1.0f - x_new - z_new;
+    /* New chromaticity in CIE xy, then back to XYZ preserving Y */
+    const double x_new = white_cie_x + scale * dx;
+    const double z_new = white_cie_z + scale * dz;
+    const double y_new = 1.0 - x_new - z_new;
 
-    if(y_new > 0.0f)
+    if(y_new > 0.0)
     {
-      const float S_new = y_tm / y_new;
+      const double S_new = y_tm / y_new;
       *x_tm = x_new * S_new;
       *z_tm = z_new * S_new;
     }
@@ -563,13 +475,13 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
                           const dt_st_context_t *ctx)
 {
   /* Step 1: Accurate XYZ from D50-adapted Rec.2020 input */
-  const float r = rgb_in[0], g = rgb_in[1], b = rgb_in[2];
+  const double r = (double)rgb_in[0], g = (double)rgb_in[1], b = (double)rgb_in[2];
   const float *M_in = ctx->input_matrix;
-  float x_abs = M_in[0] * r + M_in[1] * g + M_in[2] * b;
-  float y_abs = M_in[3] * r + M_in[4] * g + M_in[5] * b;
-  float z_abs = M_in[6] * r + M_in[7] * g + M_in[8] * b;
+  double x_abs = M_in[0] * r + M_in[1] * g + M_in[2] * b;
+  double y_abs = M_in[3] * r + M_in[4] * g + M_in[5] * b;
+  double z_abs = M_in[6] * r + M_in[7] * g + M_in[8] * b;
 
-  if(!(y_abs > 1e-10f) || !isfinite(y_abs))
+  if(!(y_abs > 1e-10) || !isfinite(y_abs))
   {
     rgb_out[0] = 0.0f;
     rgb_out[1] = 0.0f;
@@ -578,49 +490,49 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
   }
 
   /* Chromaticity ratios */
-  const float x_ratio = fminf(fmaxf(x_abs / y_abs, -100.0f), 100.0f);
-  const float z_ratio = fminf(fmaxf(z_abs / y_abs, -100.0f), 100.0f);
+  const double x_ratio = fmin(fmax(x_abs / y_abs, -100.0), 100.0);
+  const double z_ratio = fmin(fmax(z_abs / y_abs, -100.0), 100.0);
 
   /* Step 2-3: Tone-mapped Y (SSTS + BT.1886 + contrast) */
-  float y_tm = dt_st_compute_y_tm(y_abs, ctx);
+  double y_tm = dt_st_compute_y_tm(y_abs, ctx);
 
   /* Step 4: Mid-tone adjustment — gamma pivot */
   if(ctx->gray_point != 0.0f)
   {
-    float y_lvl = fminf(fmaxf(y_tm, 0.0f), 1.0f);
+    float y_lvl = fminf(fmaxf((float)y_tm, 0.0f), 1.0f);
     y_lvl = powf(y_lvl, ctx->gray_gamma);
-    y_tm = y_lvl;
+    y_tm = (double)y_lvl;
   }
 
   /* Step 5: Scale chromaticity with tone-mapped luminance */
-  float x_tm = x_ratio * y_tm;
-  float z_tm = z_ratio * y_tm;
+  double x_tm = x_ratio * y_tm;
+  double z_tm = z_ratio * y_tm;
 
   /* Step 6: Spectral gamut — film-like chromaticity roll-off in CIE xy */
   st_spectral_gamut(&x_tm, &z_tm, y_tm,
-                    ctx->white_chroma_x,
-                    ctx->white_chroma_z,
-                    ctx->gamut_knee,
-                    ctx->gamut_steepness);
+                    (double)ctx->white_chroma_x,
+                    (double)ctx->white_chroma_z,
+                    (double)ctx->gamut_knee,
+                    (double)ctx->gamut_steepness);
 
   /* Step 7: XYZ -> Output RGB via precomputed matrix */
   const float *M = ctx->output_matrix;
   float rgb[3];
-  rgb[0] = M[0] * x_tm + M[1] * y_tm + M[2] * z_tm;
-  rgb[1] = M[3] * x_tm + M[4] * y_tm + M[5] * z_tm;
-  rgb[2] = M[6] * x_tm + M[7] * y_tm + M[8] * z_tm;
+  rgb[0] = M[0] * (float)x_tm + M[1] * (float)y_tm + M[2] * (float)z_tm;
+  rgb[1] = M[3] * (float)x_tm + M[4] * (float)y_tm + M[5] * (float)z_tm;
+  rgb[2] = M[6] * (float)x_tm + M[7] * (float)y_tm + M[8] * (float)z_tm;
 
   /* Step 8: Film-print highlight desaturation toward white */
   {
-    const float y_exposed = y_abs * ctx->exposure_factor;
-    const float w = st_desat_weight(y_exposed, ctx->hl_desat, ctx->hl_desat_threshold);
-    if(w > 0.0f && isfinite(w))
+    const double y_exposed = y_abs * ctx->exposure_factor;
+    const double w = st_desat_weight(y_exposed, ctx->hl_desat);
+    if(w > 0.0 && isfinite(w))
     {
-      /* Progressive Abney hue rotation — independent of hl_desat */
+      /* Progressive Abney hue rotation — weight indépendant de hl_desat */
       if(ctx->hl_rotation != 0.0f)
       {
-        const float wr = fminf(st_desat_weight(y_exposed, 1.0f, ctx->hl_desat_threshold), 1.0f);
-        const float angle = ctx->hl_rotation * 0.15f * wr;
+        const float wr = fminf((float)st_desat_weight(y_exposed, 1.0f), 1.0f);
+        const float angle = ctx->hl_rotation * 0.15f * wr; //CB
         const float ca = cosf(angle);
         const float sa = sinf(angle);
         if(isfinite(ca) && isfinite(sa))
@@ -638,8 +550,8 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
         }
       }
 
-      /* Negative vibrance: desaturate saturated pixels more, driven by hl_desat and hl_hue_shift */
-      float w_final = w;
+      /* Vibrance négative : désature plus les pixels saturés, activée par hl_desat et hl_hue_shift */
+      double w_final = w;
       if(ctx->hl_desat > 0.0f || ctx->hl_rotation != 0.0f)
       {
         const float maxc = fmaxf(fmaxf(rgb[0], rgb[1]), rgb[2]);
@@ -650,19 +562,19 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
         if(ctx->hl_desat > 0.0f)
         {
           const float vib_neg = ctx->hl_desat * ss * 0.5f;
-          const float w_vib = st_desat_weight(y_exposed, 1.0f, ctx->hl_desat_threshold) * vib_neg;
-          w_final = fminf(w_final + w_vib, 1.0f);
+          const double w_vib = st_desat_weight(y_exposed, 1.0f) * vib_neg;
+          w_final = fmin(w_final + w_vib, 1.0);
         }
         if(ctx->hl_rotation != 0.0f)
         {
-          const float vib_neg = fabsf(ctx->hl_rotation) * ss * 1.0f;
-          const float w_rot = st_desat_weight(y_exposed, 1.0f, ctx->hl_desat_threshold) * vib_neg;
-          w_final = fmaxf(w_final, w_rot);
+          const float vib_neg = fabsf(ctx->hl_rotation) * ss * 1.0f; //CB
+          const double w_rot = st_desat_weight(y_exposed, 1.0f) * vib_neg;
+          w_final = fmax(w_final, w_rot);
         }
       }
 
       /* Blend toward white with sigmoidal curve — film-like */
-      const float t = fminf(w_final, 1.0f);
+      const float t = fminf((float)w_final, 1.0f);
       const float ts = (t * t) / (t * t + (1.0f - t) * (1.0f - t) + 1e-6f);
       if(isfinite(ts))
       {
@@ -673,6 +585,7 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
     }
   }
 
+  /* Step 9: Vibrance — saturation with high-sat protection */
   if(ctx->vibrance != 1.0f)
   {
     const float vib = fmaxf(ctx->vibrance, 0.0f);
@@ -700,19 +613,17 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
     }
   }
 
+  /* Step 10: Gamut compression */
   st_gamut_compress(rgb);
 
-  /* Output gamut protection: clamp to selected primary space */
-  if(ctx->gamut_enable)
-    st_output_gamut_protect(rgb, ctx->gamut_fwd, ctx->gamut_inv);
-
+  /* Step 11: Clamp negative channels (safety) */
   rgb_out[0] = isfinite(rgb[0]) ? fmaxf(rgb[0], 0.0f) : 0.0f;
   rgb_out[1] = isfinite(rgb[1]) ? fmaxf(rgb[1], 0.0f) : 0.0f;
   rgb_out[2] = isfinite(rgb[2]) ? fmaxf(rgb[2], 0.0f) : 0.0f;
 }
 
 /* Given input RGB in working space, compute the context */
-static void st_compute_context(dt_iop_3dcf_params_t *p,
+static void st_compute_context(dt_iop_spectral_tone_params_t *p,
                                 dt_st_context_t *ctx)
 {
   /* Auto-exposure compensation: single slider controls both SSTS tone curve
@@ -773,23 +684,9 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
   ctx->contrast_pivot = 1.0f - fmaxf(fminf(p->contrast_pivot, 0.99f), 0.01f);
 
   ctx->hl_desat = fmaxf(p->hl_desaturation, 0.0f);
-  ctx->hl_desat_threshold = fmaxf(p->hl_desat_threshold, 0.0f);
   ctx->hl_rotation = p->hl_hue_shift;
   ctx->gamut_knee = p->gamut_knee;
   ctx->gamut_steepness = p->gamut_steepness;
-  ctx->toe_power = fmaxf(p->toe_power, 0.0f);
-  ctx->shoulder_power = fmaxf(p->shoulder_power, 0.0f);
-
-  /* Output gamut protection matrices from pre-computed lookup table */
-  {
-    const int cs = p->output_cs;
-    for(int i = 0; i < 9; i++)
-    {
-      ctx->gamut_fwd[i] = st_gamut_fwd[cs][i];
-      ctx->gamut_inv[i] = st_gamut_inv[cs][i];
-    }
-    ctx->gamut_enable = (cs != DT_ST_CS_REC2020);
-  }
 
   /* White point chromaticity ratios from input matrix */
   {
@@ -835,31 +732,31 @@ int legacy_params(dt_iop_module_t *self,
 {
   if(old_version == 1 || old_version == 2)
   {
-    typedef struct dt_iop_3dcf_params_v2_t
+    typedef struct dt_iop_spectral_tone_params_v2_t
     {
       float contrast, gray_point, vibrance, spectral_brilliance;
       float hl_hue_shift, hl_desaturation, gamut_knee, gamut_steepness;
       int output_cs, color_look;
       float look_opacity;
-    } dt_iop_3dcf_params_v2_t;
+    } dt_iop_spectral_tone_params_v2_t;
 
-    typedef struct dt_iop_3dcf_params_v1_t
+    typedef struct dt_iop_spectral_tone_params_v1_t
     {
       float contrast, gray_point, vibrance, spectral_brilliance;
       float hl_hue_shift, hl_desaturation, gamut_knee, gamut_steepness;
       int output_cs;
-    } dt_iop_3dcf_params_v1_t;
+    } dt_iop_spectral_tone_params_v1_t;
 
     /* Must use malloc(): the framework frees the result with free()
      * (see dt_iop_legacy_params / imageop.c). Allocating with g_malloc0()
      * and letting free() release it mixes allocators → heap corruption on
      * Windows. calloc() matches the previous zero-init semantics. */
-    dt_iop_3dcf_params_t *n = calloc(1, sizeof(dt_iop_3dcf_params_t));
+    dt_iop_spectral_tone_params_t *n = calloc(1, sizeof(dt_iop_spectral_tone_params_t));
     if(!n) return 1;
 
     if(old_version == 1)
     {
-      const dt_iop_3dcf_params_v1_t *o = (const dt_iop_3dcf_params_v1_t*)old_params;
+      const dt_iop_spectral_tone_params_v1_t *o = (const dt_iop_spectral_tone_params_v1_t*)old_params;
       n->contrast = o->contrast;
       n->gray_point = o->gray_point;
       n->vibrance = o->vibrance;
@@ -874,7 +771,7 @@ int legacy_params(dt_iop_module_t *self,
     }
     else /* v2 */
     {
-      const dt_iop_3dcf_params_v2_t *o = (const dt_iop_3dcf_params_v2_t*)old_params;
+      const dt_iop_spectral_tone_params_v2_t *o = (const dt_iop_spectral_tone_params_v2_t*)old_params;
       n->contrast = o->contrast;
       n->gray_point = o->gray_point;
       n->vibrance = o->vibrance;
@@ -889,22 +786,9 @@ int legacy_params(dt_iop_module_t *self,
     }
 
     n->contrast_pivot = 0.5f;
-    n->hl_desat_threshold = 0.45f;
     *new_params = n;
-    *new_params_size = sizeof(dt_iop_3dcf_params_t);
-    *new_version = 4;
-    return 0;
-  }
-  if(old_version == 3)
-  {
-    const dt_iop_3dcf_params_t *o = (const dt_iop_3dcf_params_t *)old_params;
-    dt_iop_3dcf_params_t *n = calloc(1, sizeof(dt_iop_3dcf_params_t));
-    if(!n) return 1;
-    *n = *o;
-    n->hl_desat_threshold = 0.45f;
-    *new_params = n;
-    *new_params_size = sizeof(dt_iop_3dcf_params_t);
-    *new_version = 4;
+    *new_params_size = sizeof(dt_iop_spectral_tone_params_t);
+    *new_version = 3;
     return 0;
   }
   return 1;
@@ -912,7 +796,7 @@ int legacy_params(dt_iop_module_t *self,
 
 const char *name()
 {
-  return _("3D Colorimetric Film");
+  return _("spectral tone");
 }
 
 const char *aliases()
@@ -951,11 +835,11 @@ void cleanup(dt_iop_module_t *self)
 void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
                dt_dev_pixelpipe_iop_t *piece)
 {
-  piece->data = dt_alloc1_align_type(dt_iop_3dcf_data_t);
+  piece->data = dt_alloc1_align_type(dt_iop_spectral_tone_data_t);
   if(!piece->data) return;
-  dt_iop_3dcf_data_t *d = piece->data;
-  memset(d, 0, sizeof(dt_iop_3dcf_data_t));
-  memcpy(&d->params, self->default_params, sizeof(dt_iop_3dcf_params_t));
+  dt_iop_spectral_tone_data_t *d = piece->data;
+  memset(d, 0, sizeof(dt_iop_spectral_tone_data_t));
+  memcpy(&d->params, self->default_params, sizeof(dt_iop_spectral_tone_params_t));
   
   /* Initialise le contexte avec les params par défaut MAINTENANT, 
      pas plus tard au commit. Évite les race conditions sous Windows. */
@@ -975,11 +859,11 @@ void cleanup_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
 void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1,
                    dt_dev_pixelpipe_t *pipe, dt_dev_pixelpipe_iop_t *piece)
 {
-  dt_iop_3dcf_params_t *p = (dt_iop_3dcf_params_t *)p1;
-  dt_iop_3dcf_data_t *d = piece->data;
+  dt_iop_spectral_tone_params_t *p = (dt_iop_spectral_tone_params_t *)p1;
+  dt_iop_spectral_tone_data_t *d = piece->data;
 
   st_compute_context(p, &d->ctx);
-  memcpy(&d->params, p, sizeof(dt_iop_3dcf_params_t));
+  memcpy(&d->params, p, sizeof(dt_iop_spectral_tone_params_t));
 }
 
 void tiling_callback(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
@@ -999,7 +883,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
              const void *const ivoid, void *const ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  dt_iop_3dcf_data_t *d = piece->data;
+  dt_iop_spectral_tone_data_t *d = piece->data;
   const int width = roi_in->width;
   const int height = roi_in->height;
   const int ch = piece->colors;
@@ -1036,18 +920,13 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     float rgb_in[3] = { in[idx], in[idx + 1], in[idx + 2] };
     float rgb_out[3];
 
-    /* Sanitize input: clamp to [-1e6, 1e6] and zero any NaN/Inf,
-     * matching the CL kernel entry guard exactly. */
-    for(int c = 0; c < 3; c++)
-      rgb_in[c] = isfinite(rgb_in[c]) ? fminf(fmaxf(rgb_in[c], -1e6f), 1e6f) : 0.0f;
-
     /* Pre-pipeline safety net: sigmoid rolloff toward luma-gray */
     {
       const float lum = fmaxf(fmaxf(rgb_in[0], rgb_in[1]), rgb_in[2]);
-      const float w = st_desat_weight(lum * d->ctx.exposure_factor, d->ctx.hl_desat, d->ctx.hl_desat_threshold);
-      if(w > 0.0f && isfinite(w))
+      const double w = st_desat_weight(lum * d->ctx.exposure_factor, d->ctx.hl_desat);
+      if(w > 0.0 && isfinite(w))
       {
-        const float t = fminf(w, 1.0f);
+        const float t = fminf((float)w, 1.0f);
         const float ts = (t * t) / (t * t + (1.0f - t) * (1.0f - t) + 1e-6f);
         if(isfinite(ts) && ts > 0.0f)
         {
@@ -1083,7 +962,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
 #ifdef HAVE_OPENCL
 /* Pack the precomputed CPU context (+ active color look) into the GPU struct.
  * Mirrors exactly what process() reads from d->ctx and d->params. */
-static void st_fill_cl_params(const dt_iop_3dcf_data_t *d,
+static void st_fill_cl_params(const dt_iop_spectral_tone_data_t *d,
                               dt_st_cl_params_t *clp)
 {
   const dt_st_context_t *ctx = &d->ctx;
@@ -1096,7 +975,6 @@ static void st_fill_cl_params(const dt_iop_3dcf_data_t *d,
   clp->contrast        = ctx->contrast;
   clp->contrast_pivot  = ctx->contrast_pivot;
   clp->hl_desat        = ctx->hl_desat;
-  clp->hl_desat_threshold = ctx->hl_desat_threshold;
   clp->hl_rotation     = ctx->hl_rotation;
   clp->white_chroma_x  = ctx->white_chroma_x;
   clp->white_chroma_z  = ctx->white_chroma_z;
@@ -1105,12 +983,6 @@ static void st_fill_cl_params(const dt_iop_3dcf_data_t *d,
   clp->vibrance        = ctx->vibrance;
   clp->gamut_knee      = ctx->gamut_knee;
   clp->gamut_steepness = ctx->gamut_steepness;
-  clp->toe_power       = ctx->toe_power;
-  clp->shoulder_power  = ctx->shoulder_power;
-
-  for(int i = 0; i < 9; i++) clp->gamut_fwd[i] = ctx->gamut_fwd[i];
-  for(int i = 0; i < 9; i++) clp->gamut_inv[i] = ctx->gamut_inv[i];
-  clp->gamut_enable    = ctx->gamut_enable;
 
   clp->ssts_s_2 = (float)ctx->ssts.s_2;
   clp->ssts_m_2 = (float)ctx->ssts.m_2;
@@ -1134,8 +1006,8 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
                cl_mem dev_in, cl_mem dev_out,
                const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
 {
-  const dt_iop_3dcf_global_data_t *gd = self->global_data;
-  const dt_iop_3dcf_data_t *d = piece->data;
+  const dt_iop_spectral_tone_global_data_t *gd = self->global_data;
+  const dt_iop_spectral_tone_data_t *d = piece->data;
 
   const int devid = piece->pipe->devid;
   const int width = roi_in->width;
@@ -1151,24 +1023,24 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   st_fill_cl_params(d, &clp);
 
   return dt_opencl_enqueue_kernel_2d_args(
-    devid, gd->kernel_3dcf, width, height,
+    devid, gd->kernel_spectral_tone, width, height,
     CLARG(dev_in), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(clp));
 }
 
 void init_global(dt_iop_module_so_t *self)
 {
-  const int program = 45; // 3dcf.cl, from programs.conf
-  dt_iop_3dcf_global_data_t *gd = malloc(sizeof(dt_iop_3dcf_global_data_t));
+  const int program = 42; // spectral_tone.cl, from programs.conf
+  dt_iop_spectral_tone_global_data_t *gd = malloc(sizeof(dt_iop_spectral_tone_global_data_t));
   self->data = gd;
-  gd->kernel_3dcf = dt_opencl_create_kernel(program, "3dcf");
+  gd->kernel_spectral_tone = dt_opencl_create_kernel(program, "spectral_tone");
 }
 
 void cleanup_global(dt_iop_module_so_t *self)
 {
-  dt_iop_3dcf_global_data_t *gd = self->data;
+  dt_iop_spectral_tone_global_data_t *gd = self->data;
   if(gd)
   {
-    dt_opencl_free_kernel(gd->kernel_3dcf);
+    dt_opencl_free_kernel(gd->kernel_spectral_tone);
     free(self->data);
     self->data = NULL;
   }
@@ -1180,16 +1052,15 @@ void init_presets(dt_iop_module_so_t *self)
   self->pref_based_presets = TRUE;
 
   const char *workflow = dt_conf_get_string_const("plugins/darkroom/workflow");
-  const gboolean auto_apply_st = workflow && strcmp(workflow, "scene-referred (3DCF)") == 0;
+  const gboolean auto_apply_st = workflow && strcmp(workflow, "scene-referred (spectral tone)") == 0;
 
-  dt_iop_3dcf_params_t p;
+  dt_iop_spectral_tone_params_t p;
   memset(&p, 0, sizeof(p));
   p.contrast = 2.25f;
   p.spectral_brilliance = 5.0f;
   p.gray_point = 0.0f;
   p.vibrance = 1.0f;
   p.hl_desaturation = 0.50f;
-  p.hl_desat_threshold = 0.45f;
   p.hl_hue_shift = 0.0f;
   p.gamut_knee = 0.15f;
   p.gamut_steepness = 0.50f;
@@ -1197,8 +1068,6 @@ void init_presets(dt_iop_module_so_t *self)
   p.color_look = 0;
   p.look_opacity = 1.0f;
   p.contrast_pivot = 0.5f;
-  p.toe_power = 1.0f;
-  p.shoulder_power = 1.0f;
 
   if(auto_apply_st)
   {
@@ -1214,7 +1083,7 @@ void init_presets(dt_iop_module_so_t *self)
                                     self->op, self->version(), TRUE);
   }
 
-  dt_gui_presets_add_generic(_("default 3D Colorimetric Film"), self->op,
+  dt_gui_presets_add_generic(_("default spectral tone"), self->op,
                               self->version(),
                               &p, sizeof(p),
                               TRUE, DEVELOP_BLEND_CS_RGB_SCENE);
@@ -1230,18 +1099,15 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker,
 
 void gui_update(dt_iop_module_t *self)
 {
-  dt_iop_3dcf_gui_data_t *g = self->gui_data;
-  dt_iop_3dcf_params_t *p = self->params;
+  dt_iop_spectral_tone_gui_data_t *g = self->gui_data;
+  dt_iop_spectral_tone_params_t *p = self->params;
 
   dt_bauhaus_slider_set(g->contrast, p->contrast);
   dt_bauhaus_slider_set(g->contrast_pivot, p->contrast_pivot);
-  dt_bauhaus_slider_set(g->shoulder_power, p->shoulder_power);
-  dt_bauhaus_slider_set(g->toe_power, p->toe_power);
   dt_bauhaus_slider_set(g->spectral_brilliance, p->spectral_brilliance);
   dt_bauhaus_slider_set(g->mid_tone, p->gray_point);
   dt_bauhaus_slider_set(g->vibrance, p->vibrance);
   dt_bauhaus_slider_set(g->hl_desaturation, p->hl_desaturation);
-  dt_bauhaus_slider_set(g->hl_desat_threshold, p->hl_desat_threshold);
   dt_bauhaus_slider_set(g->hl_hue_shift, p->hl_hue_shift);
   dt_bauhaus_slider_set(g->gamut_knee, p->gamut_knee);
   dt_bauhaus_slider_set(g->gamut_steepness, p->gamut_steepness);
@@ -1252,340 +1118,13 @@ void gui_update(dt_iop_module_t *self)
   gui_changed(self, NULL, NULL);
 }
 
-/* ========================================================================
- * Curve drawing callback — calibrated on AGX pattern
- * ======================================================================== */
-static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf,
-                            const dt_iop_module_t *self)
-{
-  dt_iop_3dcf_gui_data_t *g = self->gui_data;
-  dt_iop_3dcf_params_t *p = self->params;
-
-  /* precompute context from current params */
-  dt_st_context_t ctx;
-  st_compute_context(p, &ctx);
-
-  gtk_widget_get_allocation(widget, &g->allocation);
-  g->allocation.height -= DT_RESIZE_HANDLE_SIZE;
-
-  cairo_surface_t *cst = dt_cairo_image_surface_create(
-    CAIRO_FORMAT_ARGB32, g->allocation.width, g->allocation.height);
-  PangoFontDescription *desc = pango_font_description_copy_static(
-    darktable.bauhaus->pango_font_desc);
-  cairo_t *cr = cairo_create(cst);
-  PangoLayout *layout = pango_cairo_create_layout(cr);
-  pango_layout_set_font_description(layout, desc);
-  pango_cairo_context_set_resolution(
-    pango_layout_get_context(layout), darktable.gui->dpi);
-  g->context = gtk_widget_get_style_context(widget);
-
-  const gint font_size = pango_font_description_get_size(desc);
-  pango_font_description_set_size(desc, 0.95 * font_size);
-  pango_layout_set_font_description(layout, desc);
-
-  char text[32];
-  g_strlcpy(text, "X", sizeof(text));
-  pango_layout_set_text(layout, text, -1);
-  pango_layout_get_pixel_extents(layout, &g->ink, NULL);
-  const float line_height = g->ink.height;
-
-  const int inset = DT_PIXEL_APPLY_DPI(4);
-  const float margin_left   = 3.0f * line_height + 2.0f * inset;
-  const float margin_bottom = 2.0f * line_height + 2.0f * inset;
-  const float margin_top    = inset + 0.5f * line_height;
-  const float margin_right  = inset;
-
-  const float graph_width  = g->allocation.width  - margin_right - margin_left;
-  const float graph_height = g->allocation.height - margin_bottom - margin_top;
-
-  if(graph_width < 1.0f || graph_height < 1.0f)
-    goto cleanup;
-
-  gtk_render_background(g->context, cr, 0, 0,
-    g->allocation.width, g->allocation.height);
-
-  cairo_translate(cr, margin_left, margin_top + graph_height);
-  cairo_scale(cr, 1.0, -1.0);
-
-  cairo_rectangle(cr, 0.0, 0.0, graph_width, graph_height);
-  set_color(cr, darktable.bauhaus->graph_bg);
-  cairo_fill_preserve(cr);
-  set_color(cr, darktable.bauhaus->graph_border);
-  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(0.5));
-  cairo_stroke(cr);
-
-  /* horizontal guides + Y labels */
-  cairo_save(cr);
-  cairo_set_source_rgba(cr,
-    darktable.bauhaus->graph_fg.red,
-    darktable.bauhaus->graph_fg.green,
-    darktable.bauhaus->graph_fg.blue, 0.4);
-  const double dashes[] = { 4.0 / darktable.gui->ppd, 4.0 / darktable.gui->ppd };
-  cairo_set_dash(cr, dashes, 2, 0);
-  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(0.5));
-
-  for(int i = 0; i <= 4; i++)
-  {
-    const float y_pct = i / 4.0f;
-    const float y_graph = y_pct * graph_height;
-    cairo_move_to(cr, 0, y_graph);
-    cairo_line_to(cr, graph_width, y_graph);
-    cairo_stroke(cr);
-
-    cairo_save(cr);
-    cairo_identity_matrix(cr);
-    set_color(cr, darktable.bauhaus->graph_fg);
-    snprintf(text, sizeof(text), "%.0f%%", 100.0f * y_pct);
-    pango_layout_set_text(layout, text, -1);
-    pango_layout_get_pixel_extents(layout, &g->ink, NULL);
-    const float lx = margin_left - g->ink.width - inset / 2.0f;
-    float ly = margin_top + graph_height - y_graph
-               - g->ink.height / 2.0f - g->ink.y;
-    ly = CLAMPF(ly,
-      margin_top - g->ink.height / 2.0f - g->ink.y,
-      margin_top + graph_height - g->ink.height / 2.0f - g->ink.y);
-    cairo_move_to(cr, lx, ly);
-    pango_cairo_show_layout(cr, layout);
-    cairo_restore(cr);
-  }
-  cairo_restore(cr);
-
-  /* EV scale */
-  const float ev_min = -6.0f;
-  const float ev_max =  4.0f;
-  const float ev_range = ev_max - ev_min;
-
-  /* vertical EV guide lines + X labels */
-  cairo_save(cr);
-  cairo_set_source_rgba(cr,
-    darktable.bauhaus->graph_fg.red,
-    darktable.bauhaus->graph_fg.green,
-    darktable.bauhaus->graph_fg.blue, 0.4);
-  cairo_set_dash(cr, dashes, 2, 0);
-  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(0.5));
-
-  for(int ev = (int)ceilf(ev_min); ev <= (int)floorf(ev_max); ev++)
-  {
-    const float x_norm = (ev - ev_min) / ev_range;
-    const float x_graph = x_norm * graph_width;
-    cairo_move_to(cr, x_graph, 0);
-    cairo_line_to(cr, x_graph, graph_height);
-    cairo_stroke(cr);
-
-    /* label every 2 EV */
-    if(ev % 2 == 0)
-    {
-      cairo_save(cr);
-      cairo_identity_matrix(cr);
-      set_color(cr, darktable.bauhaus->graph_fg);
-      snprintf(text, sizeof(text), "%+d", ev);
-      pango_layout_set_text(layout, text, -1);
-      pango_layout_get_pixel_extents(layout, &g->ink, NULL);
-      float lx = margin_left + x_graph - g->ink.width / 2.0f - g->ink.x;
-      lx = CLAMPF(lx,
-        margin_left - g->ink.width / 2.0f - g->ink.x,
-        margin_left + graph_width - g->ink.width / 2.0f - g->ink.x);
-      const float ly = margin_top + graph_height + inset / 2.0f;
-      cairo_move_to(cr, lx, ly);
-      pango_cairo_show_layout(cr, layout);
-      cairo_restore(cr);
-    }
-  }
-  cairo_restore(cr);
-
-  /* three superimposed curves (200 samples, uniform in EV) */
-  const int steps = 200;
-
-  /* helper: draw one curve from sampled Y values */
-  #define DRAW_CURVE(lw, r, g, b, alpha, eval_fn) \
-    do { \
-      cairo_set_source_rgba(cr, (r), (g), (b), (alpha)); \
-      cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(lw)); \
-      cairo_move_to(cr, 0, 0); \
-      for(int k = 1; k <= steps; k++) \
-      { \
-        const float ev = ev_min + ev_range * (float)k / steps; \
-        const float y_scene = 0.18f * powf(2.0f, ev); \
-        const float x_norm = (ev - ev_min) / ev_range; \
-        const float y_norm = fminf(fmaxf((eval_fn), 0.0f), 1.0f); \
-        cairo_line_to(cr, x_norm * graph_width, y_norm * graph_height); \
-      } \
-      cairo_stroke(cr); \
-    } while(0)
-
-  /* 1. SSTS only (faint) — spectral brilliance changes the base roll-off */
-  DRAW_CURVE(1.0f,
-    darktable.bauhaus->graph_fg.red,
-    darktable.bauhaus->graph_fg.green,
-    darktable.bauhaus->graph_fg.blue, 0.25f,
-    ({
-      float _y = dt_st_ssts_fwd(&ctx.ssts, y_scene * ctx.exposure_factor) / (float)ctx.ssts.n;
-      powf(fmaxf(_y, 0.0f), 1.0f / 2.4f);
-    }));
-
-  /* 2. SSTS + contrast S-curve (medium) */
-  DRAW_CURVE(1.5f,
-    darktable.bauhaus->graph_fg.red,
-    darktable.bauhaus->graph_fg.green,
-    darktable.bauhaus->graph_fg.blue, 0.55f,
-    dt_st_compute_y_tm(y_scene, &ctx));
-
-  /* 3. Full curve including mid-tones gamma (solid) */
-  DRAW_CURVE(2.0f,
-    darktable.bauhaus->graph_fg_active.red,
-    darktable.bauhaus->graph_fg_active.green,
-    darktable.bauhaus->graph_fg_active.blue, 1.0f,
-    ({
-      float _y = dt_st_compute_y_tm(y_scene, &ctx);
-      if(ctx.gray_point != 0.0f)
-        _y = powf(fminf(fmaxf(_y, 0.0f), 1.0f), ctx.gray_gamma);
-      _y;
-    }));
-
-  #undef DRAW_CURVE
-
-  /* helper: compute tone-mapped Y with gray_gamma (full curve) */
-  #define TONE_MAP(ys) ({ \
-    float _y = dt_st_compute_y_tm((ys), &ctx); \
-    if(ctx.gray_point != 0.0f) _y = powf(fminf(fmaxf(_y, 0.0f), 1.0f), ctx.gray_gamma); \
-    fminf(fmaxf(_y, 0.0f), 1.0f); \
-  })
-
-  /* ========== markers and reference lines ========== */
-
-  /* 18% gray (EV 0) — primary marker */
-  {
-    const float y_gray = TONE_MAP(0.18f);
-    const float y_graph = y_gray * graph_height;
-    const float x_graph = (0.0f - ev_min) / ev_range * graph_width;
-
-    cairo_save(cr);
-    cairo_set_source_rgba(cr,
-      darktable.bauhaus->graph_border.red,
-      darktable.bauhaus->graph_border.green,
-      darktable.bauhaus->graph_border.blue, 0.4);
-    cairo_set_dash(cr, dashes, 2, 0);
-    cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(0.5));
-    cairo_move_to(cr, 0, y_graph);
-    cairo_line_to(cr, graph_width, y_graph);
-    cairo_stroke(cr);
-    cairo_restore(cr);
-
-    cairo_save(cr);
-    set_color(cr, darktable.bauhaus->graph_fg_active);
-    cairo_arc(cr, x_graph, y_graph, DT_PIXEL_APPLY_DPI(4), 0, 2.0 * M_PI);
-    cairo_fill(cr);
-    cairo_restore(cr);
-  }
-
-  /* shadow marker at EV -3 */
-  {
-    const float y_scene = 0.18f * powf(2.0f, -3.0f);
-    const float y_val = TONE_MAP(y_scene);
-    const float x_graph = (-3.0f - ev_min) / ev_range * graph_width;
-    const float y_graph = y_val * graph_height;
-
-    cairo_save(cr);
-    cairo_set_source_rgba(cr,
-      darktable.bauhaus->graph_fg.red,
-      darktable.bauhaus->graph_fg.green,
-      darktable.bauhaus->graph_fg.blue, 0.6);
-    cairo_arc(cr, x_graph, y_graph, DT_PIXEL_APPLY_DPI(2.5), 0, 2.0 * M_PI);
-    cairo_fill(cr);
-    cairo_restore(cr);
-  }
-
-  /* highlight marker at EV +2 */
-  {
-    const float y_scene = 0.18f * powf(2.0f, 2.0f);
-    const float y_val = TONE_MAP(y_scene);
-    const float x_graph = (2.0f - ev_min) / ev_range * graph_width;
-    const float y_graph = y_val * graph_height;
-
-    cairo_save(cr);
-    cairo_set_source_rgba(cr,
-      darktable.bauhaus->graph_fg.red,
-      darktable.bauhaus->graph_fg.green,
-      darktable.bauhaus->graph_fg.blue, 0.6);
-    cairo_arc(cr, x_graph, y_graph, DT_PIXEL_APPLY_DPI(2.5), 0, 2.0 * M_PI);
-    cairo_fill(cr);
-    cairo_restore(cr);
-  }
-
-  /* pivot indicator — horizontal line at contrast_pivot output level */
-  {
-    const float pivot_y = ctx.contrast_pivot;
-    const float y_graph = pivot_y * graph_height;
-
-    cairo_save(cr);
-    cairo_set_source_rgba(cr, 0.6f, 0.6f, 0.2f, 0.5f);
-    cairo_set_dash(cr, dashes, 2, 0);
-    cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.0));
-    cairo_move_to(cr, 0, y_graph);
-    cairo_line_to(cr, graph_width, y_graph);
-    cairo_stroke(cr);
-
-    cairo_restore(cr);
-
-    /* label "pivot" on the right margin */
-    cairo_save(cr);
-    cairo_identity_matrix(cr);
-    cairo_set_source_rgba(cr, 0.6f, 0.6f, 0.2f, 0.7f);
-    snprintf(text, sizeof(text), "pivot");
-    pango_layout_set_text(layout, text, -1);
-    pango_layout_get_pixel_extents(layout, &g->ink, NULL);
-    const float lx_p = margin_left + graph_width + inset / 2.0f;
-    float ly_p = margin_top + graph_height - y_graph
-                 - g->ink.height / 2.0f - g->ink.y;
-    ly_p = CLAMPF(ly_p,
-      margin_top - g->ink.height / 2.0f - g->ink.y,
-      margin_top + graph_height - g->ink.height / 2.0f - g->ink.y);
-    cairo_move_to(cr, lx_p, ly_p);
-    pango_cairo_show_layout(cr, layout);
-    cairo_restore(cr);
-  }
-
-  #undef TONE_MAP
-
-cleanup:
-  cairo_destroy(cr);
-  cairo_set_source_surface(crf, cst, 0, 0);
-  cairo_paint(crf);
-  cairo_surface_destroy(cst);
-  g_object_unref(layout);
-  pango_font_description_free(desc);
-
-  return FALSE;
-}
-
 void gui_init(dt_iop_module_t *self)
 {
-  dt_iop_3dcf_gui_data_t *g = IOP_GUI_ALLOC(3dcf);
+  dt_iop_spectral_tone_gui_data_t *g = IOP_GUI_ALLOC(spectral_tone);
   self->gui_data = g;
 
   GtkWidget *main_vbox = dt_gui_vbox();
   self->widget = main_vbox;
-
-  /* === Graph (always visible at top) === */
-  g->graph = GTK_DRAWING_AREA(dt_ui_resize_wrap(NULL, DT_PIXEL_APPLY_DPI(200),
-      "plugins/darkroom/3dcf/graph_height"));
-  g_object_set_data(G_OBJECT(g->graph), "iop-instance", self);
-  dt_action_define_iop(self, NULL, N_("graph"), GTK_WIDGET(g->graph), NULL);
-  gtk_widget_set_can_focus(GTK_WIDGET(g->graph), TRUE);
-  g_signal_connect(G_OBJECT(g->graph), "draw", G_CALLBACK(_draw_curve), self);
-  gtk_widget_set_tooltip_text(GTK_WIDGET(g->graph),
-    _("3DC Film curve: scene luminance (X) vs display output (Y)"));
-  gtk_box_pack_start(GTK_BOX(main_vbox), GTK_WIDGET(g->graph), TRUE, TRUE, 0);
-
-  /* === TONE section === */
-  dt_gui_box_add(GTK_BOX(main_vbox), dt_ui_section_label_new(C_("section", "tone")));
-
-  g->spectral_brilliance = dt_bauhaus_slider_from_params(self, "spectral_brilliance");
-  dt_bauhaus_slider_set_format(g->spectral_brilliance, "%");
-  gtk_widget_set_tooltip_text(g->spectral_brilliance,
-    _("Perceptual brightness: auto-exposure compensation with tone scale character. \n"
-      "Higher values increase highlight headroom with a softer, film-like rolloff. \n"
-      "Brightness is stabilised across the full range."));
 
   g->contrast = dt_bauhaus_slider_from_params(self, "contrast");
   dt_bauhaus_slider_set_factor(g->contrast, 50.0f);
@@ -1605,24 +1144,6 @@ void gui_init(dt_iop_module_t *self)
     _("Pivot point for the contrast S-curve. Higher values (right) shift the fulcrum towards \n"
       "shadows, brightening the image. Lower values (left) shift it towards highlights, darkening it."));
 
-  g->shoulder_power = dt_bauhaus_slider_from_params(self, "shoulder_power");
-  dt_bauhaus_slider_set_factor(g->shoulder_power, 100.0f);
-  dt_bauhaus_slider_set_offset(g->shoulder_power, -100.0f);
-  dt_bauhaus_slider_set_format(g->shoulder_power, " %");
-  dt_bauhaus_slider_set_digits(g->shoulder_power, 1);
-  gtk_widget_set_tooltip_text(g->shoulder_power,
-    _("Shoulder (highlight) contrast multiplier relative to master contrast. \n"
-      "100% = identical to master, 0% = no contrast in highlights, 200% = double contrast."));
-
-  g->toe_power = dt_bauhaus_slider_from_params(self, "toe_power");
-  dt_bauhaus_slider_set_factor(g->toe_power, 100.0f);
-  dt_bauhaus_slider_set_offset(g->toe_power, -100.0f);
-  dt_bauhaus_slider_set_format(g->toe_power, " %");
-  dt_bauhaus_slider_set_digits(g->toe_power, 1);
-  gtk_widget_set_tooltip_text(g->toe_power,
-    _("Toe (shadow) contrast multiplier relative to master contrast. \n"
-      "100% = identical to master, 0% = no contrast in shadows, 200% = double contrast."));
-
   g->mid_tone = dt_bauhaus_slider_from_params(self, "gray_point");
   dt_bauhaus_slider_set_factor(g->mid_tone, 100.0f);
   dt_bauhaus_slider_set_format(g->mid_tone, " %");
@@ -1632,9 +1153,6 @@ void gui_init(dt_iop_module_t *self)
       "Moving to the right (+100%) brightens mid-tones, \n"
       "moving to the left (-100%) darkens them."));
 
-  /* === COLOR section === */
-  dt_gui_box_add(GTK_BOX(main_vbox), dt_ui_section_label_new(C_("section", "color")));
-
   g->vibrance = dt_bauhaus_slider_from_params(self, "vibrance");
   dt_bauhaus_slider_set_factor(g->vibrance, 100.0f);
   dt_bauhaus_slider_set_offset(g->vibrance, -100.0f);
@@ -1642,7 +1160,17 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_digits(g->vibrance, 0);
   gtk_widget_set_tooltip_text(g->vibrance,
     _("Smart saturation boost. Protects already-saturated colors while enhancing pastels."));
+  
+    g->spectral_brilliance = dt_bauhaus_slider_from_params(self, "spectral_brilliance");
+  dt_bauhaus_slider_set_format(g->spectral_brilliance, "%");
+  gtk_widget_set_tooltip_text(g->spectral_brilliance,
+    _("Perceptual brightness: auto-exposure compensation with tone scale character. \n"
+      "Higher values increase highlight headroom with a softer, film-like rolloff. \n"
+      "Brightness is stabilised across the full range."));
 
+  /* color_look est maintenant un enum dt_iop_st_look_t avec $DESCRIPTION sur chaque
+   * valeur. dt_bauhaus_combobox_from_params lit l'introspection et peuple les 11
+   * entrées automatiquement — aucun combobox_add manuel nécessaire. */
   g->color_look = dt_bauhaus_combobox_from_params(self, "color_look");
   gtk_widget_set_tooltip_text(g->color_look, _("Apply a color style to the image."));
 
@@ -1652,33 +1180,14 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_factor(g->look_opacity, 100.0);
   gtk_widget_set_tooltip_text(g->look_opacity, _("Adjust the strength of the selected color style."));
 
-  /* === Advanced section === */
+  // Advanced section
   dt_gui_new_collapsible_section(&g->advanced_section,
-                                 "plugins/darkroom/3dcf/expand_advanced",
+                                 "plugins/darkroom/spectral_tone/expand_advanced",
                                  _("advanced"),
                                  GTK_BOX(main_vbox),
                                  DT_ACTION(self));
 
   self->widget = GTK_WIDGET(g->advanced_section.container);
-
-  /* highlights sub-group */
-  dt_gui_box_add(GTK_BOX(self->widget), dt_ui_section_label_new(C_("section", "highlights")));
-
-  g->hl_desaturation = dt_bauhaus_slider_from_params(self, "hl_desaturation");
-  dt_bauhaus_slider_set_factor(g->hl_desaturation, 100.0f);
-  dt_bauhaus_slider_set_format(g->hl_desaturation, " %");
-  dt_bauhaus_slider_set_digits(g->hl_desaturation, 0);
-  gtk_widget_set_tooltip_text(g->hl_desaturation,
-    _("Highlight roll-off combining luminance desaturation and vibrance-negative. \n"
-      "0% = off, 15% = natural rolloff, 100% = maximum desaturation."));
-
-  g->hl_desat_threshold = dt_bauhaus_slider_from_params(self, "hl_desat_threshold");
-  dt_bauhaus_slider_set_factor(g->hl_desat_threshold, 100.0f);
-  dt_bauhaus_slider_set_format(g->hl_desat_threshold, " %");
-  dt_bauhaus_slider_set_digits(g->hl_desat_threshold, 0);
-  gtk_widget_set_tooltip_text(g->hl_desat_threshold,
-    _("Luminance threshold at which highlight desaturation begins. \n"
-      "Lower values desaturate earlier (more protection), higher values preserve saturation longer."));
 
   g->hl_hue_shift = dt_bauhaus_slider_from_params(self, "hl_hue_shift");
   dt_bauhaus_slider_set_factor(g->hl_hue_shift, 100.0f);
@@ -1690,8 +1199,13 @@ void gui_init(dt_iop_module_t *self)
       "Vibrance-negative desaturation: saturated pixels desaturate further. \n"
       "Independent of highlight roll-off."));
 
-  /* gamut sub-group */
-  dt_gui_box_add(GTK_BOX(self->widget), dt_ui_section_label_new(C_("section", "gamut")));
+  g->hl_desaturation = dt_bauhaus_slider_from_params(self, "hl_desaturation");
+  dt_bauhaus_slider_set_factor(g->hl_desaturation, 100.0f);
+  dt_bauhaus_slider_set_format(g->hl_desaturation, " %");
+  dt_bauhaus_slider_set_digits(g->hl_desaturation, 0);
+  gtk_widget_set_tooltip_text(g->hl_desaturation,
+    _("Highlight roll-off combining luminance desaturation and vibrance-negative. \n"
+      "0% = off, 15% = natural rolloff, 100% = maximum desaturation."));
 
   g->gamut_knee = dt_bauhaus_slider_from_params(self, "gamut_knee");
   dt_bauhaus_slider_set_factor(g->gamut_knee, 100.0f);
@@ -1709,10 +1223,7 @@ void gui_init(dt_iop_module_t *self)
 
   g->color_space = dt_bauhaus_combobox_from_params(self, "output_cs");
   gtk_widget_set_tooltip_text(g->color_space,
-    _("Output color space for luma coefficients in vibrance computation. "
-      "Also protects against out-of-gamut colors by clipping to the "
-      "selected primaries. sRGB/Rec. 709 is the narrowest, Rec. 2020 "
-      "the widest (no clipping)."));
+    _("Output color space used for luma coefficients in vibrance computation."));
 
   self->widget = main_vbox;
 }
@@ -1729,16 +1240,13 @@ void gui_init(dt_iop_module_t *self)
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
-  dt_iop_3dcf_gui_data_t *g = self->gui_data;
-  dt_iop_3dcf_params_t *p = self->params;
+  dt_iop_spectral_tone_gui_data_t *g = self->gui_data;
+  dt_iop_spectral_tone_params_t *p = self->params;
 
   if(!w || w == g->color_look)
   {
     gtk_widget_set_visible(g->look_opacity, p->color_look > DT_ST_LOOK_NEUTRAL);
   }
-
-  /* redraw curve graph on any parameter change */
-  gtk_widget_queue_draw(GTK_WIDGET(g->graph));
 }
 
 // clang-format off
