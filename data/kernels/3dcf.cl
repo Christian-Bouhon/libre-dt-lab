@@ -344,7 +344,7 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
   return rgb;
 }
 
-__kernel void _3dcf_kernel(
+__kernel void kernel_3dcf(
     read_only image2d_t input,
     write_only image2d_t output,
     const int width,

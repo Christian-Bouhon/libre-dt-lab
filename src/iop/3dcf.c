@@ -69,7 +69,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-DT_MODULE_INTROSPECTION(4, dt_iop_3dcf_params_t)
+DT_MODULE_INTROSPECTION(4, dt_iop_3dcf_params_t) /* bump to 5 when params change */
 
 /* Type definitions for the ACES 2.0 SSTS pipeline context.
  * spectral_tone_data.c and spectral_tone_pipeline.c have been merged into 3dcf.c
@@ -833,80 +833,8 @@ int legacy_params(dt_iop_module_t *self,
                   void **new_params, int32_t *new_params_size,
                   int *new_version)
 {
-  if(old_version == 1 || old_version == 2)
-  {
-    typedef struct dt_iop_3dcf_params_v2_t
-    {
-      float contrast, gray_point, vibrance, spectral_brilliance;
-      float hl_hue_shift, hl_desaturation, gamut_knee, gamut_steepness;
-      int output_cs, color_look;
-      float look_opacity;
-    } dt_iop_3dcf_params_v2_t;
-
-    typedef struct dt_iop_3dcf_params_v1_t
-    {
-      float contrast, gray_point, vibrance, spectral_brilliance;
-      float hl_hue_shift, hl_desaturation, gamut_knee, gamut_steepness;
-      int output_cs;
-    } dt_iop_3dcf_params_v1_t;
-
-    /* Must use malloc(): the framework frees the result with free()
-     * (see dt_iop_legacy_params / imageop.c). Allocating with g_malloc0()
-     * and letting free() release it mixes allocators → heap corruption on
-     * Windows. calloc() matches the previous zero-init semantics. */
-    dt_iop_3dcf_params_t *n = calloc(1, sizeof(dt_iop_3dcf_params_t));
-    if(!n) return 1;
-
-    if(old_version == 1)
-    {
-      const dt_iop_3dcf_params_v1_t *o = (const dt_iop_3dcf_params_v1_t*)old_params;
-      n->contrast = o->contrast;
-      n->gray_point = o->gray_point;
-      n->vibrance = o->vibrance;
-      n->spectral_brilliance = o->spectral_brilliance;
-      n->hl_hue_shift = o->hl_hue_shift;
-      n->hl_desaturation = o->hl_desaturation;
-      n->gamut_knee = o->gamut_knee;
-      n->gamut_steepness = o->gamut_steepness;
-      n->output_cs = (dt_iop_st_colorspace_t)o->output_cs;
-      n->color_look = DT_ST_LOOK_NEUTRAL;
-      n->look_opacity = 1.0f;
-    }
-    else /* v2 */
-    {
-      const dt_iop_3dcf_params_v2_t *o = (const dt_iop_3dcf_params_v2_t*)old_params;
-      n->contrast = o->contrast;
-      n->gray_point = o->gray_point;
-      n->vibrance = o->vibrance;
-      n->spectral_brilliance = o->spectral_brilliance;
-      n->hl_hue_shift = o->hl_hue_shift;
-      n->hl_desaturation = o->hl_desaturation;
-      n->gamut_knee = o->gamut_knee;
-      n->gamut_steepness = o->gamut_steepness;
-      n->output_cs = (dt_iop_st_colorspace_t)o->output_cs;
-      n->color_look = (dt_iop_st_look_t)o->color_look;
-      n->look_opacity = o->look_opacity;
-    }
-
-    n->contrast_pivot = 0.5f;
-    n->hl_desat_threshold = 0.45f;
-    *new_params = n;
-    *new_params_size = sizeof(dt_iop_3dcf_params_t);
-    *new_version = 4;
-    return 0;
-  }
-  if(old_version == 3)
-  {
-    const dt_iop_3dcf_params_t *o = (const dt_iop_3dcf_params_t *)old_params;
-    dt_iop_3dcf_params_t *n = calloc(1, sizeof(dt_iop_3dcf_params_t));
-    if(!n) return 1;
-    *n = *o;
-    n->hl_desat_threshold = 0.45f;
-    *new_params = n;
-    *new_params_size = sizeof(dt_iop_3dcf_params_t);
-    *new_version = 4;
-    return 0;
-  }
+  // 3dcf was first released at v4 — no legacy migration needed.
+  // If the struct ever changes, bump DT_MODULE_INTROSPECTION above.
   return 1;
 }
 
@@ -1160,7 +1088,7 @@ void init_global(dt_iop_module_so_t *self)
   const int program = 45; // 3dcf.cl, from programs.conf
   dt_iop_3dcf_global_data_t *gd = malloc(sizeof(dt_iop_3dcf_global_data_t));
   self->data = gd;
-  gd->kernel_3dcf = dt_opencl_create_kernel(program, "_3dcf_kernel");
+  gd->kernel_3dcf = dt_opencl_create_kernel(program, "kernel_3dcf");
 }
 
 void cleanup_global(dt_iop_module_so_t *self)
