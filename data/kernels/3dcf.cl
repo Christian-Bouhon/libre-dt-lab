@@ -327,7 +327,15 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
 
   /* Output gamut protection: clamp to selected primary space */
   if(p->gamut_enable)
-    rgb = st_output_gamut_protect(rgb, p->gamut_fwd, p->gamut_inv);
+  {
+    const float fwd[] = { p->gamut_fwd[0], p->gamut_fwd[1], p->gamut_fwd[2],
+                          p->gamut_fwd[3], p->gamut_fwd[4], p->gamut_fwd[5],
+                          p->gamut_fwd[6], p->gamut_fwd[7], p->gamut_fwd[8] };
+    const float inv[] = { p->gamut_inv[0], p->gamut_inv[1], p->gamut_inv[2],
+                          p->gamut_inv[3], p->gamut_inv[4], p->gamut_inv[5],
+                          p->gamut_inv[6], p->gamut_inv[7], p->gamut_inv[8] };
+    rgb = st_output_gamut_protect(rgb, fwd, inv);
+  }
 
   /* Step 11: clamp negatives */
   rgb.x = isfinite(rgb.x) ? fmax(rgb.x, 0.0f) : 0.0f;
