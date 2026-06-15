@@ -112,9 +112,9 @@ typedef struct dt_iop_3dcf_params_t
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
   float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "perceptual brightness"
   float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "Abney rotation"
-  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "highlight roll-off"
+  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.55 $DESCRIPTION: "highlight roll-off"
   float hl_desat_threshold;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.45 $DESCRIPTION: "desaturation threshold"
-  float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.15 $DESCRIPTION: "gamut knee"
+  float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.03 $DESCRIPTION: "gamut knee"
   float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "gamut steepness"
   dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "color space"
   dt_iop_st_look_t color_look;       // $DEFAULT: DT_ST_LOOK_NEUTRAL $DESCRIPTION: "color look"
@@ -616,11 +616,16 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
     const float w = st_desat_weight(y_exposed, ctx->hl_desat, ctx->hl_desat_threshold);
     if(w > 0.0f && isfinite(w))
     {
+      const float maxc_pre = fmaxf(fmaxf(rgb[0], rgb[1]), rgb[2]);
+      const float minc_pre = fminf(fminf(rgb[0], rgb[1]), rgb[2]);
+      const float sat_pre = (maxc_pre > 0.0f) ? (maxc_pre - minc_pre) / maxc_pre : 0.0f;
+      const float ss_pre = (sat_pre * sat_pre) / (sat_pre * sat_pre + (1.0f - sat_pre) * (1.0f - sat_pre) + 1e-6f);
+
       /* Progressive Abney hue rotation — independent of hl_desat */
       if(ctx->hl_rotation != 0.0f)
       {
         const float wr = fminf(st_desat_weight(y_exposed, 1.0f, ctx->hl_desat_threshold), 1.0f);
-        const float angle = ctx->hl_rotation * 0.15f * wr;
+        const float angle = ctx->hl_rotation * 0.25f * wr; //CB
         const float ca = cosf(angle);
         const float sa = sinf(angle);
         if(isfinite(ca) && isfinite(sa))
@@ -642,20 +647,15 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
       float w_final = w;
       if(ctx->hl_desat > 0.0f || ctx->hl_rotation != 0.0f)
       {
-        const float maxc = fmaxf(fmaxf(rgb[0], rgb[1]), rgb[2]);
-        const float minc = fminf(fminf(rgb[0], rgb[1]), rgb[2]);
-        const float sat = (maxc > 0.0f) ? (maxc - minc) / maxc : 0.0f;
-        const float ss = (sat * sat) / (sat * sat + (1.0f - sat) * (1.0f - sat) + 1e-6f);
-
         if(ctx->hl_desat > 0.0f)
         {
-          const float vib_neg = ctx->hl_desat * ss * 0.5f;
+          const float vib_neg = ctx->hl_desat * ss_pre * 0.5f;
           const float w_vib = st_desat_weight(y_exposed, 1.0f, ctx->hl_desat_threshold) * vib_neg;
           w_final = fminf(w_final + w_vib, 1.0f);
         }
         if(ctx->hl_rotation != 0.0f)
         {
-          const float vib_neg = fabsf(ctx->hl_rotation) * ss * 1.0f;
+          const float vib_neg = fabsf(ctx->hl_rotation) * ss_pre * 1.0f;
           const float w_rot = st_desat_weight(y_exposed, 1.0f, ctx->hl_desat_threshold) * vib_neg;
           w_final = fmaxf(w_final, w_rot);
         }
@@ -1116,10 +1116,11 @@ void init_presets(dt_iop_module_so_t *self)
   p.spectral_brilliance = 5.0f;
   p.gray_point = 0.0f;
   p.vibrance = 1.0f;
-  p.hl_desaturation = 0.50f;
+  p.hl_desaturation = 0.55f;
   p.hl_desat_threshold = 0.45f;
-  p.hl_hue_shift = 0.0f;
-  p.gamut_knee = 0.15f;
+  p.hl_hue_shift = 
+  0.0f;
+  p.gamut_knee = 0.03f; //CB
   p.gamut_steepness = 0.50f;
   p.output_cs = DT_ST_CS_REC2020;
   p.color_look = 0;
