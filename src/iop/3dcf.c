@@ -53,6 +53,7 @@
 
 #include "bauhaus/bauhaus.h"
 #include "common/colorspaces.h"
+#include "common/guided_filter.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/imagebuf.h"
 #include "common/math.h"
@@ -69,7 +70,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-DT_MODULE_INTROSPECTION(4, dt_iop_3dcf_params_t) /* bump to 5 when params change */
+DT_MODULE_INTROSPECTION(5, dt_iop_3dcf_params_t)
 
 /* Type definitions for the ACES 2.0 SSTS pipeline context.
  * spectral_tone_data.c and spectral_tone_pipeline.c have been merged into 3dcf.c
@@ -112,9 +113,9 @@ typedef struct dt_iop_3dcf_params_t
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
   float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "perceptual brightness"
   float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "Abney rotation"
-  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.55 $DESCRIPTION: "highlight roll-off"
+  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.60 $DESCRIPTION: "highlight roll-off"
   float hl_desat_threshold;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.45 $DESCRIPTION: "desaturation threshold"
-  float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.03 $DESCRIPTION: "gamut knee"
+  float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.20 $DESCRIPTION: "gamut knee"
   float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "gamut steepness"
   dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "color space"
   dt_iop_st_look_t color_look;       // $DEFAULT: DT_ST_LOOK_NEUTRAL $DESCRIPTION: "color look"
@@ -122,6 +123,7 @@ typedef struct dt_iop_3dcf_params_t
   float contrast_pivot;        // $MIN: 0.01 $MAX: 0.99 $DEFAULT: 0.5 $DESCRIPTION: "contrast pivot"
   float toe_power;             // $MIN: 0.25 $MAX: 3.0 $DEFAULT: 1.0 $DESCRIPTION: "toe power"
   float shoulder_power;        // $MIN: 0.25 $MAX: 3.0 $DEFAULT: 1.0 $DESCRIPTION: "shoulder power"
+  float hl_detail_recovery;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.35 $DESCRIPTION: "detail recovery"
 } dt_iop_3dcf_params_t;
 
 /* SSTS (ACES 2.0 Single-Stage Tone Scale) precomputed parameters */
@@ -156,6 +158,7 @@ typedef struct
   float gamut_steepness;
   float toe_power;
   float shoulder_power;
+  float hl_detail_recovery;
   float gamut_fwd[9];
   float gamut_inv[9];
   int   gamut_enable;
@@ -202,6 +205,7 @@ typedef struct dt_st_cl_params_t
   float ssts_n_r;
   float ssts_n;
   float look_opacity;
+  float hl_detail_recovery;
   int   look_idx;
   int   gamut_enable;
 } dt_st_cl_params_t;
@@ -209,6 +213,7 @@ typedef struct dt_st_cl_params_t
 typedef struct dt_iop_3dcf_global_data_t
 {
   int kernel_3dcf;
+  int kernel_3dcf_extract_lum;
 } dt_iop_3dcf_global_data_t;
 
 typedef struct dt_iop_3dcf_gui_data_t
@@ -223,6 +228,7 @@ typedef struct dt_iop_3dcf_gui_data_t
   GtkWidget *hl_desaturation;
   GtkWidget *hl_desat_threshold;
   GtkWidget *hl_hue_shift;
+  GtkWidget *hl_detail_recovery;
   GtkWidget *gamut_knee;
   GtkWidget *gamut_steepness;
   dt_gui_collapsible_section_t advanced_section;
@@ -414,6 +420,10 @@ float dt_st_compute_y_tm(float y_scene, const dt_st_context_t *ctx)
              / (float)ctx->ssts.n;
 
   y_tm = powf(fmaxf(y_tm, 0.0f), 1.0f / 2.4f);
+
+  /* Clamp to [0, 1] before contrast curve: the shoulder formula assumes
+   * y_tm ∈ [0,1] and produces NaN/Inf when y_tm > 1 (powf(0, negative)). */
+  y_tm = fminf(y_tm, 1.0f);
 
   if(ctx->contrast != 1.0f || ctx->toe_power != 1.0f || ctx->shoulder_power != 1.0f)
   {
@@ -779,6 +789,7 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
   ctx->gamut_steepness = p->gamut_steepness;
   ctx->toe_power = fmaxf(p->toe_power, 0.0f);
   ctx->shoulder_power = fmaxf(p->shoulder_power, 0.0f);
+  ctx->hl_detail_recovery = fmaxf(p->hl_detail_recovery, 0.0f);
 
   /* Output gamut protection matrices from pre-computed lookup table */
   {
@@ -833,8 +844,54 @@ int legacy_params(dt_iop_module_t *self,
                   void **new_params, int32_t *new_params_size,
                   int *new_version)
 {
-  // 3dcf was first released at v4 — no legacy migration needed.
-  // If the struct ever changes, bump DT_MODULE_INTROSPECTION above.
+  // v4 → v5: added hl_detail_recovery field
+  if(old_version == 4)
+  {
+    typedef struct dt_iop_3dcf_params_v4_t
+    {
+      float contrast;
+      float gray_point;
+      float vibrance;
+      float spectral_brilliance;
+      float hl_hue_shift;
+      float hl_desaturation;
+      float hl_desat_threshold;
+      float gamut_knee;
+      float gamut_steepness;
+      dt_iop_st_colorspace_t output_cs;
+      dt_iop_st_look_t color_look;
+      float look_opacity;
+      float contrast_pivot;
+      float toe_power;
+      float shoulder_power;
+    } dt_iop_3dcf_params_v4_t;
+
+    const dt_iop_3dcf_params_v4_t *old = old_params;
+    dt_iop_3dcf_params_t *new_p = malloc(sizeof(dt_iop_3dcf_params_t));
+
+    new_p->contrast            = old->contrast;
+    new_p->gray_point          = old->gray_point;
+    new_p->vibrance            = old->vibrance;
+    new_p->spectral_brilliance = old->spectral_brilliance;
+    new_p->hl_hue_shift        = old->hl_hue_shift;
+    new_p->hl_desaturation     = old->hl_desaturation;
+    new_p->hl_desat_threshold  = old->hl_desat_threshold;
+    new_p->gamut_knee          = old->gamut_knee;
+    new_p->gamut_steepness     = old->gamut_steepness;
+    new_p->output_cs           = old->output_cs;
+    new_p->color_look          = old->color_look;
+    new_p->look_opacity        = old->look_opacity;
+    new_p->contrast_pivot      = old->contrast_pivot;
+    new_p->toe_power           = old->toe_power;
+    new_p->shoulder_power      = old->shoulder_power;
+    new_p->hl_detail_recovery  = 0.0f;
+
+    *new_params = new_p;
+    *new_params_size = sizeof(dt_iop_3dcf_params_t);
+    *new_version = 5;
+    return 0;
+  }
+
   return 1;
 }
 
@@ -954,9 +1011,37 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   const float *const mat = (look_idx > 0) ? color_looks[look_idx] : NULL;
   const float look_opacity = d->params.look_opacity;
 
+  /* === HL detail recovery: pre-compute original luminance base via guided filter === */
+  gray_image lum_orig_g = {0}, base_orig_g = {0};
+  const float hl_detail_recovery = d->ctx.hl_detail_recovery;
+  if(hl_detail_recovery > 0.0f)
+  {
+    lum_orig_g = new_gray_image(width, height);
+    base_orig_g = new_gray_image(width, height);
+
+    const float *lc = d->ctx.luma_coeff;
+    #ifdef _OPENMP
+    #pragma omp parallel for default(none) shared(in, lum_orig_g, npixels, ch, lc)
+    #endif
+    for(size_t k = 0; k < npixels; k++)
+    {
+      const size_t idx = k * ch;
+      lum_orig_g.data[k] = lc[0] * in[idx] + lc[1] * in[idx + 1] + lc[2] * in[idx + 2];
+    }
+
+    /* Normalize guided filter radius to sensor resolution (ref: 36 MP 3:2 K1) */
+    const float diag = sqrtf((float)piece->iwidth * piece->iwidth
+                            + (float)piece->iheight * piece->iheight);
+    const int gf_radius = fmaxf(4.0f, 8.0f * diag / 8848.0f);
+
+    guided_filter(in, lum_orig_g.data, base_orig_g.data,
+                  width, height, ch, gf_radius, 0.05f, 1.0f, 0.0f, FLT_MAX);
+  }
+
   #ifdef _OPENMP
   #pragma omp parallel for default(none) \
-    shared(in, out, width, height, ch, d, npixels, mat, look_opacity)
+    shared(in, out, width, height, ch, d, npixels, mat, look_opacity, \
+           hl_detail_recovery, lum_orig_g, base_orig_g)
   #endif
   for(size_t k = 0; k < npixels; k++)
   {
@@ -964,10 +1049,10 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     float rgb_in[3] = { in[idx], in[idx + 1], in[idx + 2] };
     float rgb_out[3];
 
-    /* Sanitize input: clamp to [-1e6, 1e6] and zero any NaN/Inf,
-     * matching the CL kernel entry guard exactly. */
+    /* Sanitize input: clamp negative (from CA / sharpening halos) to 0
+     * and zero any NaN/Inf. Negatives reachable after demosaic + lens. */
     for(int c = 0; c < 3; c++)
-      rgb_in[c] = isfinite(rgb_in[c]) ? fminf(fmaxf(rgb_in[c], -1e6f), 1e6f) : 0.0f;
+      rgb_in[c] = isfinite(rgb_in[c]) ? fmaxf(rgb_in[c], 0.0f) : 0.0f;
 
     /* Pre-pipeline safety net: sigmoid rolloff toward luma-gray */
     {
@@ -1001,10 +1086,38 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       for(int i = 0; i < 3; i++) rgb_out[i] = fmaxf(rgb_out[i], 0.0f);
     }
 
+    /* HL detail recovery: re-inject guided-filter detail with gain compensation */
+    if(hl_detail_recovery > 0.0f)
+    {
+      const float *lc = d->ctx.luma_coeff;
+      const float lum_orig = lc[0] * in[idx] + lc[1] * in[idx + 1] + lc[2] * in[idx + 2];
+      const float lum_tm = lc[0] * rgb_out[0] + lc[1] * rgb_out[1] + lc[2] * rgb_out[2];
+      if(lum_tm > 1e-6f && lum_orig > 1e-6f)
+      {
+        const float detail = lum_orig - base_orig_g.data[k];
+        const float gain = lum_tm / lum_orig;
+        const float lum_final = lum_tm + detail * hl_detail_recovery * gain;
+        if(lum_final > 1e-6f)
+        {
+          const float scale = fmaxf(lum_final / lum_tm, 0.25f);
+          rgb_out[0] *= scale;
+          rgb_out[1] *= scale;
+          rgb_out[2] *= scale;
+        }
+      }
+    }
+
     out[idx]     = rgb_out[0];
     out[idx + 1] = rgb_out[1];
     out[idx + 2] = rgb_out[2];
     if(ch == 4) out[idx + 3] = in[idx + 3];
+  }
+
+  // Free gray image buffers
+  if(hl_detail_recovery > 0.0f)
+  {
+    free_gray_image(&lum_orig_g);
+    free_gray_image(&base_orig_g);
   }
 }
 
@@ -1035,6 +1148,7 @@ static void st_fill_cl_params(const dt_iop_3dcf_data_t *d,
   clp->gamut_steepness = ctx->gamut_steepness;
   clp->toe_power       = ctx->toe_power;
   clp->shoulder_power  = ctx->shoulder_power;
+  clp->hl_detail_recovery = ctx->hl_detail_recovery;
 
   for(int i = 0; i < 9; i++) clp->gamut_fwd[i] = ctx->gamut_fwd[i];
   for(int i = 0; i < 9; i++) clp->gamut_inv[i] = ctx->gamut_inv[i];
@@ -1078,9 +1192,47 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   memset(&clp, 0, sizeof(clp));
   st_fill_cl_params(d, &clp);
 
-  return dt_opencl_enqueue_kernel_2d_args(
+  cl_int err = CL_SUCCESS;
+
+  /* HL detail recovery: extract luminance, run guided filter on GPU */
+  cl_mem dev_lum = NULL;
+  cl_mem dev_base = NULL;
+  if(clp.hl_detail_recovery > 0.0f)
+  {
+    dev_lum = dt_opencl_alloc_device(devid, width, height, sizeof(float));
+    dev_base = dt_opencl_alloc_device(devid, width, height, sizeof(float));
+    if(!dev_lum || !dev_base)
+    {
+      dt_opencl_release_mem_object(dev_lum);
+      dt_opencl_release_mem_object(dev_base);
+      return DT_OPENCL_PROCESS_CL;
+    }
+
+    err = dt_opencl_enqueue_kernel_2d_args(
+      devid, gd->kernel_3dcf_extract_lum, width, height,
+      CLARG(dev_in), CLARG(dev_lum), CLARG(width), CLARG(height), CLARG(clp));
+    if(err != CL_SUCCESS) goto error;
+
+    /* Normalize guided filter radius to sensor resolution (ref: 36 MP 3:2 K1) */
+    const float diag = sqrtf((float)piece->iwidth * piece->iwidth
+                            + (float)piece->iheight * piece->iheight);
+    const int gf_radius = fmaxf(4.0f, 8.0f * diag / 8848.0f);
+
+    err = guided_filter_cl(devid, dev_in, dev_lum, dev_base,
+                           width, height, 4, gf_radius, 0.05f, 1.0f, 0.0f, CL_FLT_MAX);
+    if(err != CL_SUCCESS) goto error;
+  }
+
+  err = dt_opencl_enqueue_kernel_2d_args(
     devid, gd->kernel_3dcf, width, height,
-    CLARG(dev_in), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(clp));
+    CLARG(dev_in), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(clp),
+    CLARG(dev_base));
+  if(err != CL_SUCCESS) goto error;
+
+error:
+  dt_opencl_release_mem_object(dev_lum);
+  dt_opencl_release_mem_object(dev_base);
+  return err;
 }
 
 void init_global(dt_iop_module_so_t *self)
@@ -1089,6 +1241,7 @@ void init_global(dt_iop_module_so_t *self)
   dt_iop_3dcf_global_data_t *gd = malloc(sizeof(dt_iop_3dcf_global_data_t));
   self->data = gd;
   gd->kernel_3dcf = dt_opencl_create_kernel(program, "kernel_3dcf");
+  gd->kernel_3dcf_extract_lum = dt_opencl_create_kernel(program, "kernel_3dcf_extract_lum");
 }
 
 void cleanup_global(dt_iop_module_so_t *self)
@@ -1097,6 +1250,7 @@ void cleanup_global(dt_iop_module_so_t *self)
   if(gd)
   {
     dt_opencl_free_kernel(gd->kernel_3dcf);
+    dt_opencl_free_kernel(gd->kernel_3dcf_extract_lum);
     free(self->data);
     self->data = NULL;
   }
@@ -1116,11 +1270,11 @@ void init_presets(dt_iop_module_so_t *self)
   p.spectral_brilliance = 5.0f;
   p.gray_point = 0.0f;
   p.vibrance = 1.0f;
-  p.hl_desaturation = 0.55f;
+  p.hl_desaturation = 0.60f;
   p.hl_desat_threshold = 0.45f;
   p.hl_hue_shift = 
   0.0f;
-  p.gamut_knee = 0.03f; //CB
+  p.gamut_knee = 0.20f; //CB
   p.gamut_steepness = 0.50f;
   p.output_cs = DT_ST_CS_REC2020;
   p.color_look = 0;
@@ -1128,6 +1282,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.contrast_pivot = 0.5f;
   p.toe_power = 1.0f;
   p.shoulder_power = 1.0f;
+  p.hl_detail_recovery = 0.35f;
 
   if(auto_apply_st)
   {
@@ -1172,6 +1327,7 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->hl_desaturation, p->hl_desaturation);
   dt_bauhaus_slider_set(g->hl_desat_threshold, p->hl_desat_threshold);
   dt_bauhaus_slider_set(g->hl_hue_shift, p->hl_hue_shift);
+  dt_bauhaus_slider_set(g->hl_detail_recovery, p->hl_detail_recovery);
   dt_bauhaus_slider_set(g->gamut_knee, p->gamut_knee);
   dt_bauhaus_slider_set(g->gamut_steepness, p->gamut_steepness);
   dt_bauhaus_combobox_set(g->color_space, p->output_cs);
@@ -1618,6 +1774,16 @@ void gui_init(dt_iop_module_t *self)
       "Positive rotates toward cool (blue), negative toward warm (salmon). \n"
       "Vibrance-negative desaturation: saturated pixels desaturate further. \n"
       "Independent of highlight roll-off."));
+
+  g->hl_detail_recovery = dt_bauhaus_slider_from_params(self, "hl_detail_recovery");
+  dt_bauhaus_slider_set_factor(g->hl_detail_recovery, 100.0f);
+  dt_bauhaus_slider_set_format(g->hl_detail_recovery, " %");
+  dt_bauhaus_slider_set_digits(g->hl_detail_recovery, 0);
+  gtk_widget_set_tooltip_text(g->hl_detail_recovery,
+    _("Restore local contrast in highlights smoothed by tone mapping. \n"
+      "Uses guided filter to extract detail from the original scene luminance \n"
+      "and re-injects it after tone mapping with gain compensation. \n"
+      "0% = off, 100% = full detail recovery."));
 
   /* gamut sub-group */
   dt_gui_box_add(GTK_BOX(self->widget), dt_ui_section_label_new(C_("section", "gamut")));

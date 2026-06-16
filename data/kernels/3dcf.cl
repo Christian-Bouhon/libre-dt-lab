@@ -61,6 +61,7 @@ typedef struct dt_st_cl_params_t
   float ssts_n_r;
   float ssts_n;
   float look_opacity;
+  float hl_detail_recovery;
   int   look_idx;            // 0 = no look, 1..10 = color_look_mat is active
   int   gamut_enable;
 } dt_st_cl_params_t;
@@ -83,6 +84,10 @@ static inline float st_compute_y_tm(const float y_scene, const dt_st_cl_params_t
 
   /* BT.1886 OETF */
   y_tm = pow(fmax(y_tm, 0.0f), 1.0f / 2.4f);
+
+  /* Clamp to [0, 1] before contrast curve: the shoulder formula assumes
+   * y_tm ∈ [0,1] and produces NaN/Inf when y_tm > 1 (pow(0, negative)). */
+  y_tm = fmin(y_tm, 1.0f);
 
   /* Post-SSTS contrast S-curve pivoted at contrast_pivot */
   if(p->contrast != 1.0f || p->toe_power != 1.0f || p->shoulder_power != 1.0f)
@@ -344,9 +349,10 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
   return rgb;
 }
 
-__kernel void kernel_3dcf(
+/* Extract luminance from RGBA image to a float buffer */
+__kernel void kernel_3dcf_extract_lum(
     read_only image2d_t input,
-    write_only image2d_t output,
+    __global float *dev_lum,
     const int width,
     const int height,
     const dt_st_cl_params_t p)
@@ -356,12 +362,37 @@ __kernel void kernel_3dcf(
   if(x >= width || y >= height) return;
 
   const int2 pos = (int2)(x, y);
+  const float4 pixel = read_imagef(input, sampleri, pos);
+  const float3 rgb = pixel.xyz;
+
+  const float lum = p.luma_coeff[0] * rgb.x + p.luma_coeff[1] * rgb.y + p.luma_coeff[2] * rgb.z;
+  dev_lum[y * width + x] = lum;
+}
+
+__kernel void kernel_3dcf(
+    read_only image2d_t input,
+    write_only image2d_t output,
+    const int width,
+    const int height,
+    const dt_st_cl_params_t p,
+    __global float *dev_base)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  if(x >= width || y >= height) return;
+
+  const int2 pos = (int2)(x, y);
   float4 pixel = read_imagef(input, sampleri, pos);
 
-  /* sanitize input range and drop NaNs (matches agx sanitisation) */
-  pixel = (float4)(select(clamp(pixel.xyz, -1e6f, 1e6f), (float3)(0.0f), !isfinite(pixel.xyz)), pixel.w);
+  /* sanitize input: clamp negative (from CA / sharpening halos) to 0 and drop NaNs */
+  pixel = (float4)(select(fmax(pixel.xyz, 0.0f), (float3)(0.0f), !isfinite(pixel.xyz)), pixel.w);
 
   float3 rgb_in = (float3)(pixel.x, pixel.y, pixel.z);
+
+  /* Save original luminance for detail recovery (before safety net modifies rgb_in) */
+  float lum_orig = 0.0f;
+  if(p.hl_detail_recovery > 0.0f && dev_base != NULL)
+    lum_orig = p.luma_coeff[0] * rgb_in.x + p.luma_coeff[1] * rgb_in.y + p.luma_coeff[2] * rgb_in.z;
 
   /* Pre-pipeline safety net: sigmoid rolloff toward luma-gray */
   {
@@ -390,6 +421,25 @@ __kernel void kernel_3dcf(
     rgb_out.y = g * (1.0f - p.look_opacity) + tg * p.look_opacity;
     rgb_out.z = b * (1.0f - p.look_opacity) + tb * p.look_opacity;
     rgb_out = fmax(rgb_out, (float3)(0.0f, 0.0f, 0.0f));
+  }
+
+  /* HL detail recovery: re-inject guided-filter detail with gain compensation */
+  if(p.hl_detail_recovery > 0.0f && dev_base != NULL)
+  {
+    const int pos_lin = y * width + x;
+    const float base = dev_base[pos_lin];
+    const float detail = lum_orig - base;
+    const float lum_tm = p.luma_coeff[0] * rgb_out.x + p.luma_coeff[1] * rgb_out.y + p.luma_coeff[2] * rgb_out.z;
+    if(lum_tm > 1e-6f && lum_orig > 1e-6f)
+    {
+      const float gain = lum_tm / lum_orig;
+      const float lum_final = lum_tm + detail * p.hl_detail_recovery * gain;
+      if(lum_final > 1e-6f)
+      {
+        const float scale = fmax(lum_final / lum_tm, 0.25f);
+        rgb_out *= scale;
+      }
+    }
   }
 
   float4 out_pixel = (float4)(rgb_out.x, rgb_out.y, rgb_out.z, pixel.w);
