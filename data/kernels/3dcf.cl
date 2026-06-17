@@ -349,9 +349,15 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
   return rgb;
 }
 
-/* Extract luminance from RGBA image to a float buffer */
+/* Extract luminance from RGBA image to a float buffer, and simultaneously
+ * produce a sanitized RGBA copy of the input to be used as the GUIDE for
+ * guided_filter_cl. Negative/NaN channels (CA fringing, sharpening halos)
+ * must be cleared on this guide too: it feeds the filter's local mean/
+ * variance regression, and a single stray NaN corrupts an entire window,
+ * not just one pixel. Mirrors the CPU's guide_sanitized buffer exactly. */
 __kernel void kernel_3dcf_extract_lum(
     read_only image2d_t input,
+    write_only image2d_t output_sanitized,
     __global float *dev_lum,
     const int width,
     const int height,
@@ -363,10 +369,13 @@ __kernel void kernel_3dcf_extract_lum(
 
   const int2 pos = (int2)(x, y);
   const float4 pixel = read_imagef(input, sampleri, pos);
-  const float3 rgb = pixel.xyz;
+
+  const float3 rgb = select(fmax(pixel.xyz, 0.0f), (float3)(0.0f), !isfinite(pixel.xyz));
 
   const float lum = p.luma_coeff[0] * rgb.x + p.luma_coeff[1] * rgb.y + p.luma_coeff[2] * rgb.z;
   dev_lum[y * width + x] = lum;
+
+  write_imagef(output_sanitized, pos, (float4)(rgb.x, rgb.y, rgb.z, pixel.w));
 }
 
 __kernel void kernel_3dcf(

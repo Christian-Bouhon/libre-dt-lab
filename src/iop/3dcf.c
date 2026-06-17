@@ -971,8 +971,15 @@ void tiling_callback(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
                      const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
                      dt_develop_tiling_t *tiling)
 {
-  tiling->factor = 2.0f;
-  tiling->factor_cl = 2.0f;
+  const dt_iop_3dcf_data_t *d = piece->data;
+
+  /* HL detail recovery allocates one extra full-size guide buffer plus two
+   * single-channel buffers (luminance + smoothed base). Account for that
+   * extra memory so tiling doesn't under-estimate on very large images. */
+  const gboolean hl_active = d && d->ctx.hl_detail_recovery > 0.0f;
+
+  tiling->factor = hl_active ? 3.5f : 2.0f;
+  tiling->factor_cl = hl_active ? 4.0f : 2.0f;
   tiling->maxbuf = 1.0f;
   tiling->maxbuf_cl = 1.0f;
   tiling->overhead = 0;
@@ -1013,20 +1020,44 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
 
   /* === HL detail recovery: pre-compute original luminance base via guided filter === */
   gray_image lum_orig_g = {0}, base_orig_g = {0};
+  float *guide_sanitized = NULL;
   const float hl_detail_recovery = d->ctx.hl_detail_recovery;
   if(hl_detail_recovery > 0.0f)
   {
     lum_orig_g = new_gray_image(width, height);
     base_orig_g = new_gray_image(width, height);
 
+    /* Sanitized copy of the full image, used as the guided-filter GUIDE.
+     * Negative/NaN channels (CA fringing, sharpening halos) MUST be cleared
+     * here too: the guide feeds the local mean/variance regression, and a
+     * single stray NaN corrupts the entire filter window around it, not
+     * just that pixel. Allocated/freed with dt_alloc_align/dt_free_align —
+     * the same matched pair already used for piece->data in init_pipe /
+     * cleanup_pipe, to avoid any allocator-mismatch crash on Windows. */
+    guide_sanitized = (float *)dt_alloc_aligned(sizeof(float) * (size_t)npixels * ch);
+
     const float *lc = d->ctx.luma_coeff;
     #ifdef _OPENMP
-    #pragma omp parallel for default(none) shared(in, lum_orig_g, npixels, ch, lc)
+    #pragma omp parallel for default(none) \
+      shared(in, lum_orig_g, guide_sanitized, npixels, ch, lc)
     #endif
     for(size_t k = 0; k < npixels; k++)
     {
       const size_t idx = k * ch;
-      lum_orig_g.data[k] = lc[0] * in[idx] + lc[1] * in[idx + 1] + lc[2] * in[idx + 2];
+      float r = in[idx], g = in[idx + 1], b = in[idx + 2];
+      r = isfinite(r) ? fmaxf(r, 0.0f) : 0.0f;
+      g = isfinite(g) ? fmaxf(g, 0.0f) : 0.0f;
+      b = isfinite(b) ? fmaxf(b, 0.0f) : 0.0f;
+
+      if(guide_sanitized)
+      {
+        guide_sanitized[idx]     = r;
+        guide_sanitized[idx + 1] = g;
+        guide_sanitized[idx + 2] = b;
+        if(ch == 4) guide_sanitized[idx + 3] = in[idx + 3];
+      }
+
+      lum_orig_g.data[k] = lc[0] * r + lc[1] * g + lc[2] * b;
     }
 
     /* Normalize guided filter radius to sensor resolution (ref: 36 MP 3:2 K1) */
@@ -1034,8 +1065,9 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
                             + (float)piece->iheight * piece->iheight);
     const int gf_radius = fmaxf(4.0f, 8.0f * diag / 8848.0f);
 
-    guided_filter(in, lum_orig_g.data, base_orig_g.data,
-                  width, height, ch, gf_radius, 0.05f, 1.0f, 0.0f, FLT_MAX);
+    if(guide_sanitized)
+      guided_filter(guide_sanitized, lum_orig_g.data, base_orig_g.data,
+                    width, height, ch, gf_radius, 0.05f, 1.0f, 0.0f, FLT_MAX);
   }
 
   #ifdef _OPENMP
@@ -1053,6 +1085,20 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
      * and zero any NaN/Inf. Negatives reachable after demosaic + lens. */
     for(int c = 0; c < 3; c++)
       rgb_in[c] = isfinite(rgb_in[c]) ? fmaxf(rgb_in[c], 0.0f) : 0.0f;
+
+    /* Save original luminance for detail recovery BEFORE the safety net
+     * desaturates rgb_in below. Captured from the already-sanitized values
+     * so CA fringing / NaN never reach the detail computation. This MUST
+     * happen at this exact point to match the GPU kernel (kernel_3dcf,
+     * "before safety net modifies rgb_in") — capturing it later from the
+     * raw "in" buffer, as the previous version did, silently diverged from
+     * OpenCL on any pixel with negative/NaN input channels. */
+    float lum_orig = 0.0f;
+    if(hl_detail_recovery > 0.0f)
+    {
+      const float *lc = d->ctx.luma_coeff;
+      lum_orig = lc[0] * rgb_in[0] + lc[1] * rgb_in[1] + lc[2] * rgb_in[2];
+    }
 
     /* Pre-pipeline safety net: sigmoid rolloff toward luma-gray */
     {
@@ -1086,11 +1132,12 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       for(int i = 0; i < 3; i++) rgb_out[i] = fmaxf(rgb_out[i], 0.0f);
     }
 
-    /* HL detail recovery: re-inject guided-filter detail with gain compensation */
+    /* HL detail recovery: re-inject guided-filter detail with gain compensation.
+     * lum_orig was captured right after sanitization, above — same value
+     * and same pipeline point as the GPU kernel. */
     if(hl_detail_recovery > 0.0f)
     {
       const float *lc = d->ctx.luma_coeff;
-      const float lum_orig = lc[0] * in[idx] + lc[1] * in[idx + 1] + lc[2] * in[idx + 2];
       const float lum_tm = lc[0] * rgb_out[0] + lc[1] * rgb_out[1] + lc[2] * rgb_out[2];
       if(lum_tm > 1e-6f && lum_orig > 1e-6f)
       {
@@ -1113,11 +1160,12 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     if(ch == 4) out[idx + 3] = in[idx + 3];
   }
 
-  // Free gray image buffers
+  // Free buffers used by HL detail recovery
   if(hl_detail_recovery > 0.0f)
   {
     free_gray_image(&lum_orig_g);
     free_gray_image(&base_orig_g);
+    dt_free_align(guide_sanitized);
   }
 }
 
@@ -1197,20 +1245,27 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   /* HL detail recovery: extract luminance, run guided filter on GPU */
   cl_mem dev_lum = NULL;
   cl_mem dev_base = NULL;
+  cl_mem dev_in_sanitized = NULL;
   if(clp.hl_detail_recovery > 0.0f)
   {
     dev_lum = dt_opencl_alloc_device(devid, width, height, sizeof(float));
     dev_base = dt_opencl_alloc_device(devid, width, height, sizeof(float));
-    if(!dev_lum || !dev_base)
+    /* Sanitized RGBA copy of dev_in, used as the guided-filter GUIDE instead
+     * of the raw dev_in. Mirrors the CPU's guide_sanitized buffer: negative/
+     * NaN channels from CA fringing must not reach the filter's local
+     * mean/variance regression on either platform. */
+    dev_in_sanitized = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
+    if(!dev_lum || !dev_base || !dev_in_sanitized)
     {
       dt_opencl_release_mem_object(dev_lum);
       dt_opencl_release_mem_object(dev_base);
+      dt_opencl_release_mem_object(dev_in_sanitized);
       return DT_OPENCL_PROCESS_CL;
     }
 
     err = dt_opencl_enqueue_kernel_2d_args(
       devid, gd->kernel_3dcf_extract_lum, width, height,
-      CLARG(dev_in), CLARG(dev_lum), CLARG(width), CLARG(height), CLARG(clp));
+      CLARG(dev_in), CLARG(dev_in_sanitized), CLARG(dev_lum), CLARG(width), CLARG(height), CLARG(clp));
     if(err != CL_SUCCESS) goto error;
 
     /* Normalize guided filter radius to sensor resolution (ref: 36 MP 3:2 K1) */
@@ -1218,7 +1273,7 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
                             + (float)piece->iheight * piece->iheight);
     const int gf_radius = fmaxf(4.0f, 8.0f * diag / 8848.0f);
 
-    err = guided_filter_cl(devid, dev_in, dev_lum, dev_base,
+    err = guided_filter_cl(devid, dev_in_sanitized, dev_lum, dev_base,
                            width, height, 4, gf_radius, 0.05f, 1.0f, 0.0f, CL_FLT_MAX);
     if(err != CL_SUCCESS) goto error;
   }
@@ -1232,6 +1287,7 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
 error:
   dt_opencl_release_mem_object(dev_lum);
   dt_opencl_release_mem_object(dev_base);
+  dt_opencl_release_mem_object(dev_in_sanitized);
   return err;
 }
 
