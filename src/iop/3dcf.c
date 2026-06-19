@@ -1243,19 +1243,22 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     lum_orig_g = new_gray_image(width, height);
     base_orig_g = new_gray_image(width, height);
 
-    /* Sanitized copy of the full image, used as the guided-filter GUIDE.
-     * Negative/NaN channels (CA fringing, sharpening halos) MUST be cleared
-     * here too: the guide feeds the local mean/variance regression, and a
-     * single stray NaN corrupts the entire filter window around it, not
-     * just that pixel. Allocated/freed with dt_alloc_align/dt_free_align —
-     * the same matched pair already used for piece->data in init_pipe /
-     * cleanup_pipe, to avoid any allocator-mismatch crash on Windows. */
+    /* Sanitized copy of the full image — brilliance-adjusted — used as
+     * the guided-filter GUIDE. The brilliance exposure factor is baked in
+     * here so that the guided filter's base is in the same perceptual
+     * domain as the tone-mapped output, preventing the gain
+     * (lum_tm / lum_orig) from exploding when perceptual brilliance is
+     * high. Negative/NaN channels (CA fringing, sharpening halos) MUST
+     * be cleared here too: the guide feeds the local mean/variance
+     * regression, and a single stray NaN corrupts the entire filter
+     * window. Allocated/freed with dt_alloc_align/dt_free_align. */
     guide_sanitized = (float *)dt_alloc_aligned(sizeof(float) * (size_t)npixels * ch);
+    const float bf = d->ctx.exposure_factor;
 
     const float *lc = d->ctx.luma_coeff;
     #ifdef _OPENMP
     #pragma omp parallel for default(none) \
-      shared(in, lum_orig_g, guide_sanitized, npixels, ch, lc)
+      shared(in, lum_orig_g, guide_sanitized, npixels, ch, lc, bf)
     #endif
     for(size_t k = 0; k < npixels; k++)
     {
@@ -1264,6 +1267,9 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       r = isfinite(r) ? fmaxf(r, 0.0f) : 0.0f;
       g = isfinite(g) ? fmaxf(g, 0.0f) : 0.0f;
       b = isfinite(b) ? fmaxf(b, 0.0f) : 0.0f;
+      r *= bf;
+      g *= bf;
+      b *= bf;
 
       if(guide_sanitized)
       {
@@ -1313,10 +1319,16 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     if(hl_detail_recovery > 0.0f)
     {
       const float *lc = d->ctx.luma_coeff;
-      lum_orig = lc[0] * rgb_in[0] + lc[1] * rgb_in[1] + lc[2] * rgb_in[2];
+      lum_orig = (lc[0] * rgb_in[0] + lc[1] * rgb_in[1] + lc[2] * rgb_in[2]) * d->ctx.exposure_factor;
     }
 
-    /* Pre-pipeline safety net: sigmoid rolloff toward luma-gray */
+    /* Pre-pipeline safety net: sigmoid rolloff toward luma-gray.
+     * Track the desaturation factor so the detail recovery below can
+     * attenuate proportionally — a pixel that was heavily desaturated
+     * (e.g. out-of-gamut blue → white) would otherwise receive a huge
+     * gain boost from the pre-desat luminance vs post-tm luminance
+     * mismatch, creating a halo outside the object. */
+    float hl_desat_factor = 0.0f;
     {
       const float lum = fmaxf(fmaxf(rgb_in[0], rgb_in[1]), rgb_in[2]);
       const float w = st_desat_weight(lum * d->ctx.exposure_factor, d->ctx.hl_desat, d->ctx.hl_desat_threshold);
@@ -1324,6 +1336,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       {
         const float t = fminf(w, 1.0f);
         const float ts = (t * t) / (t * t + (1.0f - t) * (1.0f - t) + 1e-6f);
+        hl_desat_factor = ts;
         if(isfinite(ts) && ts > 0.0f)
         {
           for(int c = 0; c < 3; c++)
@@ -1359,7 +1372,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       {
         const float detail = lum_orig - base_orig_g.data[k];
         const float gain = lum_tm / lum_orig;
-        const float lum_final = lum_tm + detail * hl_detail_recovery * gain;
+        const float lum_final = lum_tm + detail * hl_detail_recovery * (1.0f - hl_desat_factor) * gain;
         if(lum_final > 1e-6f)
         {
           const float scale = fmaxf(lum_final / lum_tm, 0.25f);

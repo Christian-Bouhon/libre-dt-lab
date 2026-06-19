@@ -412,10 +412,10 @@ __kernel void kernel_3dcf_extract_lum(
 
   const float3 rgb = select(fmax(pixel.xyz, 0.0f), (float3)(0.0f), !isfinite(pixel.xyz));
 
-  const float lum = p.luma_coeff[0] * rgb.x + p.luma_coeff[1] * rgb.y + p.luma_coeff[2] * rgb.z;
+  const float lum = (p.luma_coeff[0] * rgb.x + p.luma_coeff[1] * rgb.y + p.luma_coeff[2] * rgb.z) * p.exposure_factor;
   dev_lum[y * width + x] = lum;
 
-  write_imagef(output_sanitized, pos, (float4)(rgb.x, rgb.y, rgb.z, pixel.w));
+  write_imagef(output_sanitized, pos, (float4)(rgb.x * p.exposure_factor, rgb.y * p.exposure_factor, rgb.z * p.exposure_factor, pixel.w));
 }
 
 __kernel void kernel_3dcf(
@@ -441,9 +441,15 @@ __kernel void kernel_3dcf(
   /* Save original luminance for detail recovery (before safety net modifies rgb_in) */
   float lum_orig = 0.0f;
   if(p.hl_detail_recovery > 0.0f && dev_base != NULL)
-    lum_orig = p.luma_coeff[0] * rgb_in.x + p.luma_coeff[1] * rgb_in.y + p.luma_coeff[2] * rgb_in.z;
+    lum_orig = (p.luma_coeff[0] * rgb_in.x + p.luma_coeff[1] * rgb_in.y + p.luma_coeff[2] * rgb_in.z) * p.exposure_factor;
 
-  /* Pre-pipeline safety net: sigmoid rolloff toward luma-gray */
+  /* Pre-pipeline safety net: sigmoid rolloff toward luma-gray.
+   * Track the desaturation factor so the detail recovery below can
+   * attenuate proportionally — a pixel that was heavily desaturated
+   * (e.g. out-of-gamut blue → white) would otherwise receive a huge
+   * gain boost from the pre-desat luminance vs post-tm luminance
+   * mismatch, creating a halo outside the object. */
+  float hl_desat_factor = 0.0f;
   {
     const float lum = fmax(fmax(rgb_in.x, rgb_in.y), rgb_in.z);
     const float w = st_desat_weight(lum * p.exposure_factor, p.hl_desat, p.hl_desat_threshold);
@@ -451,6 +457,7 @@ __kernel void kernel_3dcf(
     {
       const float t = fmin(w, 1.0f);
       const float ts = (t * t) / (t * t + (1.0f - t) * (1.0f - t) + 1e-6f);
+      hl_desat_factor = ts;
       if(isfinite(ts) && ts > 0.0f)
         rgb_in = rgb_in * (1.0f - ts) + (float3)(lum, lum, lum) * ts;
     }
@@ -482,7 +489,7 @@ __kernel void kernel_3dcf(
     if(lum_tm > 1e-6f && lum_orig > 1e-6f)
     {
       const float gain = lum_tm / lum_orig;
-      const float lum_final = lum_tm + detail * p.hl_detail_recovery * gain;
+      const float lum_final = lum_tm + detail * p.hl_detail_recovery * (1.0f - hl_desat_factor) * gain;
       if(lum_final > 1e-6f)
       {
         const float scale = fmax(lum_final / lum_tm, 0.25f);
