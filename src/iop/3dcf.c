@@ -159,6 +159,7 @@ typedef struct
   float toe_power;
   float shoulder_power;
   float hl_detail_recovery;
+  float spectral_boundary[360];  /* max CIE xz distance from D50 per angle degree */
   float gamut_fwd[9];
   float gamut_inv[9];
   int   gamut_enable;
@@ -206,6 +207,7 @@ typedef struct dt_st_cl_params_t
   float ssts_n;
   float look_opacity;
   float hl_detail_recovery;
+  float spectral_boundary[360];
   int   look_idx;
   int   gamut_enable;
 } dt_st_cl_params_t;
@@ -510,18 +512,187 @@ static inline void st_output_gamut_protect(float rgb[3],
   rgb[2] = inv[6]*t[0] + inv[7]*t[1] + inv[8]*t[2];
 }
 
+/* Spectral locus CIE 1931 2-degree xy at 5 nm (380–700 nm) + endpoint at 780 nm.
+ * From 700 nm onward the coordinates plateau at (0.734690, 0.265310).
+ * Used to build the angle→max-distance lookup table for automatic non-spectral
+ * colour detection.  Purple-line interpolation is added at precompute time. */
+#define SPECTRAL_LOCUS_N 66
+static const float st_spectral_locus_xy[SPECTRAL_LOCUS_N][2] =
+{
+  { 0.174112f, 0.004964f },  /* 380 nm */
+  { 0.174008f, 0.004981f },  /* 385 */
+  { 0.173801f, 0.004915f },  /* 390 */
+  { 0.173560f, 0.004923f },  /* 395 */
+  { 0.173337f, 0.004797f },  /* 400 */
+  { 0.173021f, 0.004775f },  /* 405 */
+  { 0.172577f, 0.004799f },  /* 410 */
+  { 0.172087f, 0.004833f },  /* 415 */
+  { 0.171407f, 0.005102f },  /* 420 */
+  { 0.170301f, 0.005789f },  /* 425 */
+  { 0.168878f, 0.006900f },  /* 430 */
+  { 0.166895f, 0.008556f },  /* 435 */
+  { 0.164412f, 0.010858f },  /* 440 */
+  { 0.161105f, 0.013793f },  /* 445 */
+  { 0.156641f, 0.017705f },  /* 450 */
+  { 0.150985f, 0.022740f },  /* 455 */
+  { 0.143960f, 0.029703f },  /* 460 */
+  { 0.135503f, 0.039879f },  /* 465 */
+  { 0.124118f, 0.057803f },  /* 470 */
+  { 0.109594f, 0.086843f },  /* 475 */
+  { 0.091294f, 0.132702f },  /* 480 */
+  { 0.068706f, 0.200723f },  /* 485 */
+  { 0.045391f, 0.294976f },  /* 490 */
+  { 0.023460f, 0.412703f },  /* 495 */
+  { 0.008168f, 0.538423f },  /* 500 */
+  { 0.003859f, 0.654823f },  /* 505 */
+  { 0.013870f, 0.750186f },  /* 510 */
+  { 0.038852f, 0.812016f },  /* 515 */
+  { 0.074302f, 0.833803f },  /* 520 */
+  { 0.114161f, 0.826207f },  /* 525 */
+  { 0.154722f, 0.805864f },  /* 530 */
+  { 0.192876f, 0.781629f },  /* 535 */
+  { 0.229620f, 0.754329f },  /* 540 */
+  { 0.265775f, 0.724324f },  /* 545 */
+  { 0.301604f, 0.692308f },  /* 550 */
+  { 0.337363f, 0.658848f },  /* 555 */
+  { 0.373102f, 0.624451f },  /* 560 */
+  { 0.408736f, 0.589607f },  /* 565 */
+  { 0.444062f, 0.554714f },  /* 570 */
+  { 0.478775f, 0.520202f },  /* 575 */
+  { 0.512486f, 0.486591f },  /* 580 */
+  { 0.544787f, 0.454434f },  /* 585 */
+  { 0.575151f, 0.424232f },  /* 590 */
+  { 0.602933f, 0.396497f },  /* 595 */
+  { 0.627037f, 0.372491f },  /* 600 */
+  { 0.648233f, 0.351395f },  /* 605 */
+  { 0.665764f, 0.334011f },  /* 610 */
+  { 0.680079f, 0.319747f },  /* 615 */
+  { 0.691504f, 0.308342f },  /* 620 */
+  { 0.700606f, 0.299301f },  /* 625 */
+  { 0.707918f, 0.292027f },  /* 630 */
+  { 0.714032f, 0.285929f },  /* 635 */
+  { 0.719033f, 0.280935f },  /* 640 */
+  { 0.723032f, 0.276948f },  /* 645 */
+  { 0.725992f, 0.274008f },  /* 650 */
+  { 0.728272f, 0.271728f },  /* 655 */
+  { 0.729969f, 0.270031f },  /* 660 */
+  { 0.731089f, 0.268911f },  /* 665 */
+  { 0.731993f, 0.268007f },  /* 670 */
+  { 0.732719f, 0.267281f },  /* 675 */
+  { 0.733417f, 0.266583f },  /* 680 */
+  { 0.734047f, 0.265953f },  /* 685 */
+  { 0.734390f, 0.265610f },  /* 690 */
+  { 0.734592f, 0.265408f },  /* 695 */
+  { 0.734690f, 0.265310f },  /* 700 nm */
+  { 0.734690f, 0.265310f },  /* 780 nm (plateau) */
+};
+
+/* Build 360-bin lookup table: for each integer degree angle (0–359) from the
+ * D50 white point, store the maximum CIE xz distance of the spectral locus
+ * (including the purple line).  The table is used by st_spectral_gamut() to
+ * detect and smoothly roll off non-spectral chromaticities. */
+static void st_compute_spectral_boundary(float boundary[360],
+                                          float white_x_ratio,
+                                          float white_z_ratio)
+{
+  /* Convert white ratios to CIE xz */
+  const float wy = 1.0f;
+  const float wsum = white_x_ratio + wy + white_z_ratio;
+  const float white_cx = white_x_ratio / wsum;
+  const float white_cz = white_z_ratio / wsum;
+
+  /* Initialise to zero */
+  for(int i = 0; i < 360; i++) boundary[i] = 0.0f;
+
+  /* Process spectral locus points */
+  for(int i = 0; i < SPECTRAL_LOCUS_N; i++)
+  {
+    const float x = st_spectral_locus_xy[i][0];
+    const float y = st_spectral_locus_xy[i][1];
+    const float z = 1.0f - x - y;  /* CIE z = 1 − x − y */
+
+    const float dx = x - white_cx;
+    const float dz = z - white_cz;
+    const float dist = sqrtf(dx * dx + dz * dz);
+
+    float angle = atan2f(dz, dx) * (180.0f / (float)M_PI);
+    if(angle < 0.0f) angle += 360.0f;
+    int bin = (int)angle;
+    if(bin < 0) bin = 0;
+    if(bin >= 360) bin = 359;
+
+    if(dist > boundary[bin]) boundary[bin] = dist;
+  }
+
+  /* Purple line: interpolate N segments between endpoint 780 nm (idx N-1)
+   * and 380 nm (idx 0), then back to 780 nm to close the locus. */
+  {
+    const float x0 = st_spectral_locus_xy[SPECTRAL_LOCUS_N - 1][0];
+    const float y0 = st_spectral_locus_xy[SPECTRAL_LOCUS_N - 1][1];
+    const float x1 = st_spectral_locus_xy[0][0];
+    const float y1 = st_spectral_locus_xy[0][1];
+
+    const int NSEG = 32;
+    for(int i = 1; i <= NSEG; i++)
+    {
+      const float t = (float)i / (float)(NSEG + 1);
+      const float x = x0 + t * (x1 - x0);
+      const float y = y0 + t * (y1 - y0);
+      const float z = 1.0f - x - y;
+
+      const float dx = x - white_cx;
+      const float dz = z - white_cz;
+      const float dist = sqrtf(dx * dx + dz * dz);
+
+      float angle = atan2f(dz, dx) * (180.0f / (float)M_PI);
+      if(angle < 0.0f) angle += 360.0f;
+      int bin = (int)angle;
+      if(bin < 0) bin = 0;
+      if(bin >= 360) bin = 359;
+
+      if(dist > boundary[bin]) boundary[bin] = dist;
+    }
+  }
+
+  /* Fill any empty bins by forward-fill then backward-fill */
+  {
+    float last = 0.0f;
+    for(int i = 0; i < 360; i++)
+    {
+      if(boundary[i] > 0.0f) last = boundary[i];
+      else if(last > 0.0f) boundary[i] = last;
+    }
+    last = 0.0f;
+    for(int i = 359; i >= 0; i--)
+    {
+      if(boundary[i] > 0.0f) last = boundary[i];
+      else if(last > 0.0f) boundary[i] = last;
+    }
+  }
+
+  /* Ensure no bin is exactly zero (safety: fall back to minimum positive) */
+  float min_nonzero = 1e6f;
+  for(int i = 0; i < 360; i++)
+    if(boundary[i] > 0.0f && boundary[i] < min_nonzero)
+      min_nonzero = boundary[i];
+  if(min_nonzero > 1e5f) min_nonzero = 1.0f;  /* guard against all-zero */
+  for(int i = 0; i < 360; i++)
+    if(boundary[i] <= 0.0f) boundary[i] = min_nonzero;
+}
+
 static inline void st_spectral_gamut(
   float *x_tm, float *z_tm, float y_tm,
   const float white_x_ratio, const float white_z_ratio,
-  const float knee, const float steepness)
+  const float knee, const float steepness,
+  const float *spectral_boundary)
 {
   if(y_tm <= 0.0f) return;
   if(!isfinite(*x_tm) || !isfinite(*z_tm)) return;
 
   const float sum = *x_tm + y_tm + *z_tm;
   if(sum <= 0.0f) return;
-  const float cie_x = *x_tm / sum;
-  const float cie_z = *z_tm / sum;
+  float cie_x = *x_tm / sum;
+  float cie_z = *z_tm / sum;
 
   const float wy = 1.0f;
   const float wx = white_x_ratio;
@@ -530,10 +701,49 @@ static inline void st_spectral_gamut(
   const float white_cie_x = wx / wsum;
   const float white_cie_z = wz / wsum;
 
-  const float dx = cie_x - white_cie_x;
-  const float dz = cie_z - white_cie_z;
-  const float chroma_sq = dx * dx + dz * dz;
+  float dx = cie_x - white_cie_x;
+  float dz = cie_z - white_cie_z;
+  float chroma_sq = dx * dx + dz * dz;
 
+  /* Spectral locus boundary check — automatic detection of non-spectral colours.
+   * Runs before the user knee to catch colours whose chromaticity ratios lie
+   * outside the visible spectrum (e.g. laser primaries, narrow-band LEDs). */
+  if(spectral_boundary)
+  {
+    const float angle = atan2f(dz, dx);
+    float angle_deg = angle * (180.0f / (float)M_PI);
+    if(angle_deg < 0.0f) angle_deg += 360.0f;
+    int bin = (int)angle_deg;
+    if(bin < 0) bin = 0;
+    if(bin >= 360) bin = 359;
+    const float max_dist = spectral_boundary[bin];
+    const float target_dist = max_dist * 0.95f;  // CB margin: roll-off before boundary
+
+    if(max_dist > 0.0f && chroma_sq > target_dist * target_dist)
+    {
+      const float chroma = sqrtf(chroma_sq);
+      const float excess = chroma - target_dist;
+      const float bsteep = fmaxf(target_dist * 0.05f, 0.001f);
+      const float compression = excess / (excess + bsteep);
+      const float scale = (chroma - compression * excess) / chroma;
+
+      cie_x = white_cie_x + scale * dx;
+      cie_z = white_cie_z + scale * dz;
+      const float y_new = 1.0f - cie_x - cie_z;
+      if(y_new > 0.0f)
+      {
+        const float S_new = y_tm / y_new;
+        *x_tm = cie_x * S_new;
+        *z_tm = cie_z * S_new;
+        /* Recompute for knee below */
+        dx = cie_x - white_cie_x;
+        dz = cie_z - white_cie_z;
+        chroma_sq = dx * dx + dz * dz;
+      }
+    }
+  }
+
+  /* Existing knee — smooth circular roll-off controlled by user sliders */
   if(chroma_sq > knee * knee)
   {
     const float chroma = sqrtf(chroma_sq);
@@ -611,7 +821,8 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
                     ctx->white_chroma_x,
                     ctx->white_chroma_z,
                     ctx->gamut_knee,
-                    ctx->gamut_steepness);
+                    ctx->gamut_steepness,
+                    ctx->spectral_boundary);
 
   /* Step 7: XYZ -> Output RGB via precomputed matrix */
   const float *M = ctx->output_matrix;
@@ -824,6 +1035,11 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
       ctx->white_chroma_z = 0.333f;
     }
   }
+
+  /* Precompute spectral locus boundary relative to the pipeline's white point */
+  st_compute_spectral_boundary(ctx->spectral_boundary,
+                                ctx->white_chroma_x,
+                                ctx->white_chroma_z);
 
   /* Mid-tone gamma adjustment - Inversion pour que 'droite' éclaircisse (Gamma < 1.0) */
   ctx->gray_point = -fmaxf(fminf(p->gray_point, 1.0f), -1.0f);
@@ -1208,6 +1424,8 @@ static void st_fill_cl_params(const dt_iop_3dcf_data_t *d,
   clp->ssts_t_1 = (float)ctx->ssts.t_1;
   clp->ssts_n_r = (float)ctx->ssts.n_r;
   clp->ssts_n   = (float)ctx->ssts.n;
+
+  for(int i = 0; i < 360; i++) clp->spectral_boundary[i] = ctx->spectral_boundary[i];
 
   /* Same clamp as process(): color_looks has 11 entries (0..10) */
   const int look_idx = (d->params.color_look > 0 && d->params.color_look <= 10)

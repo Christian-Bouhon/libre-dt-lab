@@ -62,6 +62,7 @@ typedef struct dt_st_cl_params_t
   float ssts_n;
   float look_opacity;
   float hl_detail_recovery;
+  float spectral_boundary[360];
   int   look_idx;            // 0 = no look, 1..10 = color_look_mat is active
   int   gamut_enable;
 } dt_st_cl_params_t;
@@ -159,15 +160,16 @@ static inline float3 st_output_gamut_protect(float3 rgb, const float fwd[9], con
 /* Spectral gamut: film-like chromaticity roll-off in CIE xy, preserving Y */
 static inline void st_spectral_gamut(float *x_tm, float *z_tm, const float y_tm,
                                      const float white_x_ratio, const float white_z_ratio,
-                                     const float knee, const float steepness)
+                                     const float knee, const float steepness,
+                                     const float *spectral_boundary)
 {
   if(y_tm <= 0.0f) return;
   if(!isfinite(*x_tm) || !isfinite(*z_tm)) return;
 
   const float sum = *x_tm + y_tm + *z_tm;
   if(sum <= 0.0f) return;
-  const float cie_x = *x_tm / sum;
-  const float cie_z = *z_tm / sum;
+  float cie_x = *x_tm / sum;
+  float cie_z = *z_tm / sum;
 
   const float wy = 1.0f;
   const float wx = white_x_ratio;
@@ -176,10 +178,47 @@ static inline void st_spectral_gamut(float *x_tm, float *z_tm, const float y_tm,
   const float white_cie_x = wx / wsum;
   const float white_cie_z = wz / wsum;
 
-  const float dx = cie_x - white_cie_x;
-  const float dz = cie_z - white_cie_z;
-  const float chroma_sq = dx * dx + dz * dz;
+  float dx = cie_x - white_cie_x;
+  float dz = cie_z - white_cie_z;
+  float chroma_sq = dx * dx + dz * dz;
 
+  /* Spectral locus boundary check (before knee) */
+  if(spectral_boundary)
+  {
+    const float angle = atan2(dz, dx);
+    float angle_deg = angle * (180.0f / M_PI_F);
+    if(angle_deg < 0.0f) angle_deg += 360.0f;
+    int bin = (int)angle_deg;
+    if(bin < 0) bin = 0;
+    if(bin >= 360) bin = 359;
+    const float max_dist = spectral_boundary[bin];
+    const float target_dist = max_dist * 0.95f;
+
+    if(max_dist > 0.0f && chroma_sq > target_dist * target_dist)
+    {
+      const float chroma = sqrt(chroma_sq);
+      const float excess = chroma - target_dist;
+      const float bsteep = fmax(target_dist * 0.05f, 0.001f);
+      const float compression = excess / (excess + bsteep);
+      const float scale = (chroma - compression * excess) / chroma;
+
+      cie_x = white_cie_x + scale * dx;
+      cie_z = white_cie_z + scale * dz;
+      const float y_new = 1.0f - cie_x - cie_z;
+      if(y_new > 0.0f)
+      {
+        const float S_new = y_tm / y_new;
+        *x_tm = cie_x * S_new;
+        *z_tm = cie_z * S_new;
+        /* Recompute for knee */
+        dx = cie_x - white_cie_x;
+        dz = cie_z - white_cie_z;
+        chroma_sq = dx * dx + dz * dz;
+      }
+    }
+  }
+
+  /* Existing knee */
   if(chroma_sq > knee * knee)
   {
     const float chroma = sqrt(chroma_sq);
@@ -232,7 +271,8 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
   /* Step 6: spectral gamut roll-off */
   st_spectral_gamut(&x_tm, &z_tm, y_tm,
                     p->white_chroma_x, p->white_chroma_z,
-                    p->gamut_knee, p->gamut_steepness);
+                    p->gamut_knee, p->gamut_steepness,
+                    p->spectral_boundary);
 
   /* Step 7: XYZ -> output RGB */
   float3 rgb;
