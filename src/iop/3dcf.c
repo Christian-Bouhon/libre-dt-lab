@@ -625,20 +625,33 @@ static void st_compute_spectral_boundary(float boundary[360],
     if(dist > boundary[bin]) boundary[bin] = dist;
   }
 
-  /* Purple line: interpolate N segments between endpoint 780 nm (idx N-1)
-   * and 380 nm (idx 0), then back to 780 nm to close the locus. */
+  /* Purple line: interpolate N segments between endpoints 780 nm and 380 nm
+   * in CIE XYZ space (not xy), so the interpolation follows the physical
+   * mixture of two monochromatic lights rather than a straight line in xy
+   * chromaticity space. The two spectral endpoints converted with Y=1 give
+   * the correct tristimulus for linear mixing. */
   {
-    const float x0 = st_spectral_locus_xy[SPECTRAL_LOCUS_N - 1][0];
-    const float y0 = st_spectral_locus_xy[SPECTRAL_LOCUS_N - 1][1];
-    const float x1 = st_spectral_locus_xy[0][0];
-    const float y1 = st_spectral_locus_xy[0][1];
+    const float x_r = st_spectral_locus_xy[SPECTRAL_LOCUS_N - 1][0];  /* 780 nm */
+    const float y_r = st_spectral_locus_xy[SPECTRAL_LOCUS_N - 1][1];
+    const float x_b = st_spectral_locus_xy[0][0];  /* 380 nm */
+    const float y_b = st_spectral_locus_xy[0][1];
+
+    const float inv_y_r = 1.0f / y_r;
+    const float inv_y_b = 1.0f / y_b;
+    const float X_r = x_r * inv_y_r;
+    const float Z_r = (1.0f - x_r - y_r) * inv_y_r;
+    const float X_b = x_b * inv_y_b;
+    const float Z_b = (1.0f - x_b - y_b) * inv_y_b;
 
     const int NSEG = 32;
     for(int i = 1; i <= NSEG; i++)
     {
       const float t = (float)i / (float)(NSEG + 1);
-      const float x = x0 + t * (x1 - x0);
-      const float y = y0 + t * (y1 - y0);
+      const float X = X_r + t * (X_b - X_r);
+      const float Z = Z_r + t * (Z_b - Z_r);
+      const float sum_xyz = X + 1.0f + Z;
+      const float x = X / sum_xyz;
+      const float y = 1.0f / sum_xyz;
       const float z = 1.0f - x - y;
 
       const float dx = x - white_cx;
@@ -714,11 +727,12 @@ static inline void st_spectral_gamut(
     const float angle = atan2f(dz, dx);
     float angle_deg = angle * (180.0f / (float)M_PI);
     if(angle_deg < 0.0f) angle_deg += 360.0f;
+    if(angle_deg >= 360.0f) angle_deg -= 360.0f;
     int bin = (int)angle_deg;
-    if(bin < 0) bin = 0;
-    if(bin >= 360) bin = 359;
-    const float max_dist = spectral_boundary[bin];
-    const float target_dist = max_dist * 0.95f;  // CB margin: roll-off before boundary
+    int next = (bin + 1) % 360;
+    float frac = angle_deg - (float)bin;
+    float max_dist = spectral_boundary[bin] + frac * (spectral_boundary[next] - spectral_boundary[bin]);
+    const float target_dist = max_dist * 0.92f;
 
     if(max_dist > 0.0f && chroma_sq > target_dist * target_dist)
     {

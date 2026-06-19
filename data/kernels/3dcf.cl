@@ -188,11 +188,12 @@ static inline void st_spectral_gamut(float *x_tm, float *z_tm, const float y_tm,
     const float angle = atan2(dz, dx);
     float angle_deg = angle * (180.0f / M_PI_F);
     if(angle_deg < 0.0f) angle_deg += 360.0f;
+    if(angle_deg >= 360.0f) angle_deg -= 360.0f;
     int bin = (int)angle_deg;
-    if(bin < 0) bin = 0;
-    if(bin >= 360) bin = 359;
-    const float max_dist = spectral_boundary[bin];
-    const float target_dist = max_dist * 0.95f;
+    int next = (bin + 1) % 360;
+    float frac = angle_deg - (float)bin;
+    float max_dist = spectral_boundary[bin] + frac * (spectral_boundary[next] - spectral_boundary[bin]);
+    const float target_dist = max_dist * 0.92f;
 
     if(max_dist > 0.0f && chroma_sq > target_dist * target_dist)
     {
