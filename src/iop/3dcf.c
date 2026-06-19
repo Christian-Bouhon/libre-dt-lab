@@ -68,6 +68,7 @@
 #include <gtk/gtk.h>
 #include <math.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 DT_MODULE_INTROSPECTION(5, dt_iop_3dcf_params_t)
@@ -1238,6 +1239,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   gray_image lum_orig_g = {0}, base_orig_g = {0};
   float *guide_sanitized = NULL;
   const float hl_detail_recovery = d->ctx.hl_detail_recovery;
+  int guide_ok = 0;
   if(hl_detail_recovery > 0.0f)
   {
     lum_orig_g = new_gray_image(width, height);
@@ -1253,6 +1255,9 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
      * regression, and a single stray NaN corrupts the entire filter
      * window. Allocated/freed with dt_alloc_align/dt_free_align. */
     guide_sanitized = (float *)dt_alloc_aligned(sizeof(float) * (size_t)npixels * ch);
+    if(!guide_sanitized)
+      fprintf(stderr, "[3dcf] failed to allocate guide_sanitized (%zu bytes), detail recovery disabled\n",
+              sizeof(float) * (size_t)npixels * ch);
     const float bf = d->ctx.exposure_factor;
 
     const float *lc = d->ctx.luma_coeff;
@@ -1288,14 +1293,17 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     const int gf_radius = fmaxf(4.0f, 8.0f * diag / 8848.0f);
 
     if(guide_sanitized)
+    {
       guided_filter(guide_sanitized, lum_orig_g.data, base_orig_g.data,
                     width, height, ch, gf_radius, 0.05f, 1.0f, 0.0f, FLT_MAX);
+      guide_ok = 1;
+    }
   }
 
   #ifdef _OPENMP
   #pragma omp parallel for default(none) \
     shared(in, out, width, height, ch, d, npixels, mat, look_opacity, \
-           hl_detail_recovery, lum_orig_g, base_orig_g)
+           hl_detail_recovery, lum_orig_g, base_orig_g, guide_ok)
   #endif
   for(size_t k = 0; k < npixels; k++)
   {
@@ -1363,8 +1371,10 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
 
     /* HL detail recovery: re-inject guided-filter detail with gain compensation.
      * lum_orig was captured right after sanitization, above — same value
-     * and same pipeline point as the GPU kernel. */
-    if(hl_detail_recovery > 0.0f)
+     * and same pipeline point as the GPU kernel.
+     * guide_ok ensures we skip this when the guided-filter pre-pass failed
+     * (e.g. OOM on guide_sanitized), preventing use of uninitialized base. */
+    if(hl_detail_recovery > 0.0f && guide_ok)
     {
       const float *lc = d->ctx.luma_coeff;
       const float lum_tm = lc[0] * rgb_out[0] + lc[1] * rgb_out[1] + lc[2] * rgb_out[2];
