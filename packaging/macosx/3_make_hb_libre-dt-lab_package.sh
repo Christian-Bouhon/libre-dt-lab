@@ -314,6 +314,22 @@ for dtLibFile in $dtLibFiles; do
     install_dependencies "$dtLibFile"
 done
 
+# Explicitly bundle libSDL3.dylib if present (required at runtime by sdl2-compat on macOS)
+# This handles both Mach-O dependency and dlopen-based loading scenarios
+sdl3_lib_path=""
+for sdl3_candidate in "$homebrewHome/opt/sdl3/lib/libSDL3.dylib" "$homebrewHome/lib/libSDL3.dylib"; do
+  if [[ -f "$sdl3_candidate" ]]; then
+    sdl3_lib_path="$sdl3_candidate"
+    break
+  fi
+done
+if [[ -n "$sdl3_lib_path" && ! -f "$dtResourcesDir/lib/$(basename "$sdl3_lib_path")" ]]; then
+  echo "Installing SDL3 library $sdl3_lib_path"
+  cp -L "$sdl3_lib_path" "$dtResourcesDir/lib/"
+  # Also bundle any transitive dependencies of SDL3
+  install_dependencies "$sdl3_lib_path"
+fi
+
 # Reset executable paths to relative path
 dtExecFiles="$dtExecutables"
 dtExecFiles+=" "
@@ -334,6 +350,22 @@ if [[ ! -d "$dtResourcesDir"/share/themes/Mac/gtk-3.0 ]]; then
 fi
 cp -L "$homebrewHome"/share/themes/Mac/gtk-3.0/gtk-keys.css "$dtResourcesDir"/share/themes/Mac/gtk-3.0/
 
+# Create wrapper scripts for GUI executables that set DYLD_FALLBACK_LIBRARY_PATH
+# This ensures dlopen-based library loading (e.g. sdl2-compat finding libSDL3.dylib)
+# works correctly when the app is launched from Finder (not Terminal)
+for dtGuiExec in libre-dt-lab libre-dt-lab-chart; do
+  if [[ -f "$dtExecDir/$dtGuiExec" ]]; then
+    mv "$dtExecDir/$dtGuiExec" "$dtExecDir/$dtGuiExec.bin"
+    cat > "$dtExecDir/$dtGuiExec" << 'WRAPPER'
+#!/bin/bash
+DIR="$(dirname "$0")"
+export DYLD_FALLBACK_LIBRARY_PATH="$DIR/../Resources/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
+exec "$DIR/$(basename "$0").bin" "$@"
+WRAPPER
+    chmod +x "$dtExecDir/$dtGuiExec"
+  fi
+done
+
 # Sign app bundle
 if [ -n "$CODECERT" ]; then
     # Use certificate if one has been provided
@@ -345,5 +377,5 @@ else
     codesign --deep --force --preserve-metadata=entitlements,requirements,flags,runtime -s - ${dtWorkingDir}
 fi
 
-# Ensure executable permissions
-chmod +x ${dtExecDir}/libre-dt-lab
+# Ensure executable permissions (including wrapper targets)
+chmod +x ${dtExecDir}/libre-dt-lab ${dtExecDir}/libre-dt-lab.bin ${dtExecDir}/libre-dt-lab-chart.bin 2>/dev/null || true
