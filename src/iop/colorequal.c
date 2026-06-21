@@ -2610,25 +2610,28 @@ int mouse_moved(dt_iop_module_t *self,
   }
 
   // Read hue from the preview buffer
+  float hue_rad = 0.f;
+  gboolean have_hue = FALSE;
   dt_iop_gui_enter_critical_section(self);
   const float *buf    = g->preview_hue_buf;
   const int    bwidth  = g->preview_hue_buf_width;
   const int    bheight = g->preview_hue_buf_height;
-  const gboolean have_buf = (buf != NULL && bwidth > 0 && bheight > 0);
+  if(buf != NULL && bwidth > 0 && bheight > 0)
+  {
+    const int cx = CLAMP((int)(pzx * bwidth),  0, bwidth  - 1);
+    const int cy = CLAMP((int)(pzy * bheight), 0, bheight - 1);
+    hue_rad = buf[(size_t)cy * bwidth + cx];
+    have_hue = TRUE;
+  }
   dt_iop_gui_leave_critical_section(self);
 
-  if(!have_buf)
+  if(!have_hue)
   {
     g->cursor_valid = FALSE;
     return 0;
   }
 
-  // Cursor coordinates in the preview buffer
-  const int cx = CLAMP((int)(pzx * bwidth),  0, bwidth  - 1);
-  const int cy = CLAMP((int)(pzy * bheight), 0, bheight - 1);
-
   // UCS hue in radians (may be in [-π ; π])
-  float hue_rad = buf[(size_t)cy * bwidth + cx];
   if(hue_rad < 0.f) hue_rad += 2.f * M_PI_F;
 
   // Convert to GUI degrees: inverse of _conventional_hue_deg_to_ucs_rad()
