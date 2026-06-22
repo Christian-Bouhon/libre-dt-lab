@@ -114,7 +114,7 @@ typedef struct dt_iop_3dcf_params_t
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
   float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "perceptual brightness"
   float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "Abney rotation"
-  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.60 $DESCRIPTION: "highlight roll-off"
+  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "highlight roll-off"
   float hl_desat_threshold;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.45 $DESCRIPTION: "desaturation threshold"
   float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.20 $DESCRIPTION: "gamut knee"
   float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "gamut steepness"
@@ -124,7 +124,7 @@ typedef struct dt_iop_3dcf_params_t
   float contrast_pivot;        // $MIN: 0.01 $MAX: 0.99 $DEFAULT: 0.5 $DESCRIPTION: "contrast pivot"
   float toe_power;             // $MIN: 0.25 $MAX: 3.0 $DEFAULT: 1.0 $DESCRIPTION: "toe power"
   float shoulder_power;        // $MIN: 0.25 $MAX: 3.0 $DEFAULT: 1.0 $DESCRIPTION: "shoulder power"
-  float hl_detail_recovery;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.35 $DESCRIPTION: "detail recovery"
+  float hl_detail_recovery;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.20 $DESCRIPTION: "detail recovery"
 } dt_iop_3dcf_params_t;
 
 /* SSTS (ACES 2.0 Single-Stage Tone Scale) precomputed parameters */
@@ -1394,7 +1394,26 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       const float lum_tm = lc[0] * rgb_out[0] + lc[1] * rgb_out[1] + lc[2] * rgb_out[2];
       if(lum_tm > 1e-6f && lum_orig > 1e-6f)
       {
-        const float detail = lum_orig - base_orig_g.data[k];
+        float detail = lum_orig - base_orig_g.data[k];
+        /* Soft clamp detail amplitude: the threshold tightens as the
+         * slider increases, allowing more micro-contrast at low settings
+         * while preventing halos at high settings. Same soft shoulder
+         * formula as the spectral gamut and knee. */
+        {
+          const float t = fminf(hl_detail_recovery, 1.0f);
+          const float detail_frac = 0.10f * (1.0f - t * 0.50f);
+          const float bsteep_frac = 0.25f * (1.0f - t * 0.40f);
+          const float dl = fmaxf(lum_orig * detail_frac, 1e-6f);
+          const float da = fabsf(detail);
+          if(da > dl)
+          {
+            const float excess = da - dl;
+            const float bsteep = fmaxf(dl * bsteep_frac, 0.001f);
+            const float compression = excess / (excess + bsteep);
+            const float clamped_abs = dl + compression * bsteep;
+            detail = copysignf(clamped_abs, detail);
+          }
+        }
         const float gain = lum_tm / lum_orig;
         const float lum_final = lum_tm + detail * hl_detail_recovery * (1.0f - hl_desat_factor) * gain;
         if(lum_final > 1e-6f)
@@ -1581,10 +1600,9 @@ void init_presets(dt_iop_module_so_t *self)
   p.spectral_brilliance = 5.0f;
   p.gray_point = 0.0f;
   p.vibrance = 1.0f;
-  p.hl_desaturation = 0.60f;
+  p.hl_desaturation = 0.50f; //CB
   p.hl_desat_threshold = 0.45f;
-  p.hl_hue_shift = 
-  0.0f;
+  p.hl_hue_shift = 0.0f;
   p.gamut_knee = 0.20f; //CB
   p.gamut_steepness = 0.50f;
   p.output_cs = DT_ST_CS_REC2020;
@@ -1593,7 +1611,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.contrast_pivot = 0.5f;
   p.toe_power = 1.0f;
   p.shoulder_power = 1.0f;
-  p.hl_detail_recovery = 0.35f;
+  p.hl_detail_recovery = 0.20f; //CB
 
   if(auto_apply_st)
   {

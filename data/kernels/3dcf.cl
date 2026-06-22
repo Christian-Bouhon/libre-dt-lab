@@ -485,7 +485,22 @@ __kernel void kernel_3dcf(
   {
     const int pos_lin = y * width + x;
     const float base = dev_base[pos_lin];
-    const float detail = lum_orig - base;
+    float detail = lum_orig - base;
+    {
+      const float t = fmin(p.hl_detail_recovery, 1.0f);
+      const float detail_frac = 0.10f * (1.0f - t * 0.50f);
+      const float bsteep_frac = 0.25f * (1.0f - t * 0.40f);
+      const float dl = fmax(lum_orig * detail_frac, 1e-6f);
+      const float da = fabs(detail);
+      if(da > dl)
+      {
+        const float excess = da - dl;
+        const float bsteep = fmax(dl * bsteep_frac, 0.001f);
+        const float compression = excess / (excess + bsteep);
+        const float clamped_abs = dl + compression * bsteep;
+        detail = copysign(clamped_abs, detail);
+      }
+    }
     const float lum_tm = p.luma_coeff[0] * rgb_out.x + p.luma_coeff[1] * rgb_out.y + p.luma_coeff[2] * rgb_out.z;
     if(lum_tm > 1e-6f && lum_orig > 1e-6f)
     {
