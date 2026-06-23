@@ -2659,31 +2659,27 @@ int mouse_moved(dt_iop_module_t *self,
   // cursor_valid is set TRUE only when the hash matches, so the GUI
   // indicator (gui_post_expose) and the graph Gaussian mode
   // (_area_scrolled_callback) never see stale pipeline data.
-  //
-  // pp->nodes is walked under busy_mutex to avoid a race with the
-  // pipeline thread that may rebuild the node list concurrently.
-  // trylock is used so that a busy pipeline never stalls the GUI thread.
-  const gboolean was_valid = g->cursor_valid;
   g->cursor_valid = FALSE;
   dt_dev_pixelpipe_t *pp = self->dev->preview_pipe;
-  if(pp && dt_pthread_mutex_trylock(&pp->busy_mutex) == 0)
+  if(pp)
   {
-    for(GList *iter = pp->nodes; iter; iter = g_list_next(iter))
+    GList *iter = pp->nodes;
+    while(iter)
     {
-      dt_dev_pixelpipe_iop_t *piece = (dt_dev_pixelpipe_iop_t *)iter->data;
-      if(piece->module == self)
+      dt_dev_pixelpipe_iop_t *p = (dt_dev_pixelpipe_iop_t *)iter->data;
+      if(p->module == self)
       {
-        const dt_hash_t cur_hash = dt_dev_pixelpipe_piece_hash(piece, &piece->processed_roi_out, TRUE);
-        g->cursor_valid = (cur_hash == g->preview_pipe_hash);
+        const dt_hash_t cur_hash = dt_dev_pixelpipe_piece_hash(p, &p->processed_roi_out, TRUE);
+        if(cur_hash == g->preview_pipe_hash)
+        {
+          g->cursor_valid = TRUE;
+          dt_control_queue_redraw_center();
+        }
         break;
       }
+      iter = g_list_next(iter);
     }
-    dt_pthread_mutex_unlock(&pp->busy_mutex);
   }
-  // Trigger a center redraw only when the validity state actually changes,
-  // not on every mouse-move event, to avoid flooding the render queue.
-  if(g->cursor_valid != was_valid)
-    dt_control_queue_redraw_center();
   return 0;
 }
 
@@ -2961,12 +2957,9 @@ int scrolled(dt_iop_module_t *self,
   // up=1 → scroll up → increase value
   const float move = up ? +step : -step;
 
-  // Block zoom only if at least one slider actually moved.
-  // If all Gaussian weights are negligible (< 0.01), no slider changes
-  // and we let darktable zoom normally rather than silently consuming
-  // the scroll event.
-  const gboolean changed = _adjust_params_gaussian(self, self->params, g, move);
-  return changed ? 1 : 0;
+  _adjust_params_gaussian(self, self->params, g, move);
+
+  return 1; // consumes the event → BLOCKS image zoom
 }
 
 void color_picker_apply(dt_iop_module_t *self,
