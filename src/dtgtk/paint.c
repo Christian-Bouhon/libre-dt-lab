@@ -3607,6 +3607,28 @@ void dtgtk_cairo_paint_snapshots_restore(cairo_t *cr, const gint x, const gint y
   FINISH
 }
 
+void dtgtk_cairo_paint_funnel(cairo_t *cr, const gint x, const gint y, const gint w, const gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  // funnel: wide top, converging sides, narrow stem
+  cairo_move_to(cr, 0.0, 0.0);
+  cairo_line_to(cr, 1.0, 0.0);
+  cairo_line_to(cr, 0.65, 0.55);
+  cairo_line_to(cr, 0.65, 0.85);
+  cairo_line_to(cr, 0.35, 0.85);
+  cairo_line_to(cr, 0.35, 0.55);
+  cairo_close_path(cr);
+  cairo_stroke(cr);
+
+  // stem
+  cairo_move_to(cr, 0.5, 0.85);
+  cairo_line_to(cr, 0.5, 1.0);
+  cairo_stroke(cr);
+
+  FINISH
+}
+
 // clang-format off
 // modelines: These editor modelines have been set for all relevant files by tools/update_modelines.py
 // vim: shiftwidth=2 expandtab tabstop=2 cindent
