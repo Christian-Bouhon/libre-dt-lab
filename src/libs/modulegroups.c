@@ -32,6 +32,7 @@
 #include "gui/presets.h"
 #include "libs/lib.h"
 #include "libs/lib_api.h"
+#include "libs/workflow_helpers.h"
 #ifdef GDK_WINDOWING_QUARTZ
 #include "osx/osx.h"
 #endif
@@ -2985,6 +2986,46 @@ static const dt_action_def_t _action_def_cycle_module_groups
       _action_elements_cycle_module_groups,
       NULL, TRUE };
 
+static void _funnel_item_clicked(GtkWidget *widget, gpointer user_data)
+{
+  const int selected = GPOINTER_TO_INT(user_data);
+  dt_workflow_selector_set(selected);
+}
+
+static gboolean _funnel_pressed(GtkWidget *widget,
+                                GdkEventButton *event,
+                                gpointer user_data)
+{
+  if(event->type == GDK_BUTTON_PRESS && event->button == GDK_BUTTON_PRIMARY)
+  {
+    GtkWidget *pop = gtk_menu_new();
+    gtk_widget_set_name(pop, "modulegroups-popup");
+
+    struct { const char *label; int idx; } items[] = {
+      { _("display-referred (legacy)"), 0 },
+      { "filmicrgb",                    1 },
+      { "sigmoid",                      2 },
+      { "AgX",                          3 },
+      { "basecurve",                    4 },
+      { "3DCF",                         5 }
+    };
+
+    for(int i = 0; i < 6; i++)
+    {
+      GtkWidget *item = gtk_menu_item_new_with_label(items[i].label);
+      g_signal_connect(G_OBJECT(item), "activate",
+                       G_CALLBACK(_funnel_item_clicked), GINT_TO_POINTER(items[i].idx));
+      gtk_menu_shell_append(GTK_MENU_SHELL(pop), item);
+    }
+
+    gtk_widget_show_all(pop);
+    dt_gui_menu_popup(GTK_MENU(pop), NULL, GDK_GRAVITY_SOUTH, GDK_GRAVITY_NORTH);
+
+    return TRUE;
+  }
+  return FALSE;
+}
+
 void gui_init(dt_lib_module_t *self)
 {
   /* initialize ui widgets */
@@ -3042,6 +3083,13 @@ void gui_init(dt_lib_module_t *self)
   gtk_box_pack_start(GTK_BOX(d->hbox_buttons), self->presets_button, FALSE, FALSE, 0);
   g_signal_connect(self->presets_button, "button-press-event",
                    G_CALLBACK(_presets_pressed), self);
+
+  /* funnel icon for workflow selection */
+  GtkWidget *filter_icon = dtgtk_button_new(dtgtk_cairo_paint_funnel, 0, NULL);
+  gtk_widget_set_tooltip_text(filter_icon, _("select workflow"));
+  gtk_box_pack_start(GTK_BOX(d->hbox_search_box), filter_icon, FALSE, FALSE, 0);
+  g_signal_connect(G_OBJECT(filter_icon), "button-press-event",
+                   G_CALLBACK(_funnel_pressed), self);
 
   /* search box */
   d->text_entry = gtk_search_entry_new();

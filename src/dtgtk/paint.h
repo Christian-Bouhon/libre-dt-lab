@@ -358,6 +358,8 @@ void dtgtk_cairo_paint_shortcut(cairo_t *cr, gint x, gint y, gint w, gint h, gin
 void dtgtk_cairo_paint_pin(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** Paint a menu icon for filtering in topbar */
 void dtgtk_cairo_paint_filtering_menu(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** Paint a funnel/filter icon for workflow selection */
+void dtgtk_cairo_paint_funnel(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 
 /** Paint an icon for snapshots restore button */
 void dtgtk_cairo_paint_snapshots_restore(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);

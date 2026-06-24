@@ -172,6 +172,7 @@ FILE(GLOB SOURCE_FILES
   "imageio/imageio_rgbe.c"
   "imageio/imageio_tiff.c"
   "libs/lib.c"
+  "libs/workflow_helpers.c"
   "views/view.c"
   )
 
