@@ -110,7 +110,7 @@ typedef enum dt_iop_st_look_t
 typedef struct dt_iop_3dcf_params_t
 {
   float contrast;              // $MIN: 0.25 $MAX: 4.25 $DEFAULT: 2.25 $DESCRIPTION: "contrast"
-  float gray_point;            // $MIN: -1 $MAX: 1 $DEFAULT: 0 $DESCRIPTION: "mid-tones"
+  float gray_point;            // $MIN: -1 $MAX: 1 $DEFAULT: 0 $DESCRIPTION: "gamma"
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
   float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "perceptual brightness"
   float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "Abney rotation"
@@ -125,6 +125,7 @@ typedef struct dt_iop_3dcf_params_t
   float toe_power;             // $MIN: 0.25 $MAX: 3.0 $DEFAULT: 1.0 $DESCRIPTION: "toe power"
   float shoulder_power;        // $MIN: 0.25 $MAX: 3.0 $DEFAULT: 1.0 $DESCRIPTION: "shoulder power"
   float hl_detail_recovery;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.20 $DESCRIPTION: "detail recovery"
+  float hl_exposure;           // $MIN: 1.0 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "highlight power"
 } dt_iop_3dcf_params_t;
 
 /* SSTS (ACES 2.0 Single-Stage Tone Scale) precomputed parameters */
@@ -152,14 +153,15 @@ typedef struct
   float hl_rotation;
   float white_chroma_x;
   float white_chroma_z;
-  float gray_point;
-  float gray_gamma;
+  float gamma;
+  float gamma_power;
   float vibrance;
   float gamut_knee;
   float gamut_steepness;
   float toe_power;
   float shoulder_power;
   float hl_detail_recovery;
+  float hl_power;
   float spectral_boundary[360];  /* max CIE xz distance from D50 per angle degree */
   float gamut_fwd[9];
   float gamut_inv[9];
@@ -191,8 +193,8 @@ typedef struct dt_st_cl_params_t
   float hl_rotation;
   float white_chroma_x;
   float white_chroma_z;
-  float gray_point;
-  float gray_gamma;
+  float gamma;
+  float gamma_power;
   float vibrance;
   float gamut_knee;
   float gamut_steepness;
@@ -208,6 +210,7 @@ typedef struct dt_st_cl_params_t
   float ssts_n;
   float look_opacity;
   float hl_detail_recovery;
+  float hl_power;
   float spectral_boundary[360];
   int   look_idx;
   int   gamut_enable;
@@ -232,6 +235,7 @@ typedef struct dt_iop_3dcf_gui_data_t
   GtkWidget *hl_desat_threshold;
   GtkWidget *hl_hue_shift;
   GtkWidget *hl_detail_recovery;
+  GtkWidget *hl_power;
   GtkWidget *gamut_knee;
   GtkWidget *gamut_steepness;
   dt_gui_collapsible_section_t advanced_section;
@@ -447,6 +451,14 @@ float dt_st_compute_y_tm(float y_scene, const dt_st_context_t *ctx)
       const float exp_eff = c * (cs + (1.0f - cs) * t);
       y_tm = 1.0f - rp * powf(fmaxf((1.0f - y_tm) / rp, 0.0f), exp_eff);
     }
+  }
+
+  /* Highlight power — intégré à la courbe pour visibilité sur le graphique */
+  if(ctx->hl_power != 1.0f)
+  {
+    const float hl_w = y_tm * y_tm;
+    y_tm = y_tm + (1.0f - y_tm) * (ctx->hl_power - 1.0f) * hl_w;
+    y_tm = fminf(y_tm, 1.0f);
   }
 
   return y_tm;
@@ -820,10 +832,10 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
   float y_tm = dt_st_compute_y_tm(y_abs, ctx);
 
   /* Step 4: Mid-tone adjustment — gamma pivot */
-  if(ctx->gray_point != 0.0f)
+  if(ctx->gamma != 0.0f)
   {
     float y_lvl = fminf(fmaxf(y_tm, 0.0f), 1.0f);
-    y_lvl = powf(y_lvl, ctx->gray_gamma);
+    y_lvl = powf(y_lvl, ctx->gamma_power);
     y_tm = y_lvl;
   }
 
@@ -1016,6 +1028,7 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
   ctx->toe_power = fmaxf(p->toe_power, 0.0f);
   ctx->shoulder_power = fmaxf(p->shoulder_power, 0.0f);
   ctx->hl_detail_recovery = fmaxf(p->hl_detail_recovery, 0.0f);
+  ctx->hl_power = fmaxf(p->hl_exposure, 1.0f);
 
   /* Output gamut protection matrices from pre-computed lookup table */
   {
@@ -1057,8 +1070,8 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
                                 ctx->white_chroma_z);
 
   /* Mid-tone gamma adjustment - Inversion pour que 'droite' éclaircisse (Gamma < 1.0) */
-  ctx->gray_point = -fmaxf(fminf(p->gray_point, 1.0f), -1.0f);
-  ctx->gray_gamma = exp2f(ctx->gray_point);
+  ctx->gamma = -fmaxf(fminf(p->gray_point, 1.0f), -1.0f);
+  ctx->gamma_power = exp2f(ctx->gamma);
 
   ctx->vibrance = fmaxf(p->vibrance, 0.0f);
 
@@ -1116,10 +1129,61 @@ int legacy_params(dt_iop_module_t *self,
     new_p->toe_power           = old->toe_power;
     new_p->shoulder_power      = old->shoulder_power;
     new_p->hl_detail_recovery  = 0.0f;
+    new_p->hl_exposure         = 1.0f;
 
     *new_params = new_p;
     *new_params_size = sizeof(dt_iop_3dcf_params_t);
-    *new_version = 5;
+    *new_version = 6;
+    return 0;
+  }
+
+  // v5 → v6: added hl_exposure field
+  if(old_version == 5)
+  {
+    typedef struct dt_iop_3dcf_params_v5_t
+    {
+      float contrast;
+      float gray_point;
+      float vibrance;
+      float spectral_brilliance;
+      float hl_hue_shift;
+      float hl_desaturation;
+      float hl_desat_threshold;
+      float gamut_knee;
+      float gamut_steepness;
+      dt_iop_st_colorspace_t output_cs;
+      dt_iop_st_look_t color_look;
+      float look_opacity;
+      float contrast_pivot;
+      float toe_power;
+      float shoulder_power;
+      float hl_detail_recovery;
+    } dt_iop_3dcf_params_v5_t;
+
+    const dt_iop_3dcf_params_v5_t *old = old_params;
+    dt_iop_3dcf_params_t *new_p = malloc(sizeof(dt_iop_3dcf_params_t));
+
+    new_p->contrast            = old->contrast;
+    new_p->gray_point          = old->gray_point;
+    new_p->vibrance            = old->vibrance;
+    new_p->spectral_brilliance = old->spectral_brilliance;
+    new_p->hl_hue_shift        = old->hl_hue_shift;
+    new_p->hl_desaturation     = old->hl_desaturation;
+    new_p->hl_desat_threshold  = old->hl_desat_threshold;
+    new_p->gamut_knee          = old->gamut_knee;
+    new_p->gamut_steepness     = old->gamut_steepness;
+    new_p->output_cs           = old->output_cs;
+    new_p->color_look          = old->color_look;
+    new_p->look_opacity        = old->look_opacity;
+    new_p->contrast_pivot      = old->contrast_pivot;
+    new_p->toe_power           = old->toe_power;
+    new_p->shoulder_power      = old->shoulder_power;
+    new_p->hl_detail_recovery  = old->hl_detail_recovery;
+    new_p->hl_exposure         = 1.0f;
+
+    *new_params = new_p;
+    *new_params_size = sizeof(dt_iop_3dcf_params_t);
+    *new_version = 6;
     return 0;
   }
 
@@ -1461,14 +1525,15 @@ static void st_fill_cl_params(const dt_iop_3dcf_data_t *d,
   clp->hl_rotation     = ctx->hl_rotation;
   clp->white_chroma_x  = ctx->white_chroma_x;
   clp->white_chroma_z  = ctx->white_chroma_z;
-  clp->gray_point      = ctx->gray_point;
-  clp->gray_gamma      = ctx->gray_gamma;
+  clp->gamma           = ctx->gamma;
+  clp->gamma_power     = ctx->gamma_power;
   clp->vibrance        = ctx->vibrance;
   clp->gamut_knee      = ctx->gamut_knee;
   clp->gamut_steepness = ctx->gamut_steepness;
   clp->toe_power       = ctx->toe_power;
   clp->shoulder_power  = ctx->shoulder_power;
   clp->hl_detail_recovery = ctx->hl_detail_recovery;
+  clp->hl_power           = ctx->hl_power;
 
   for(int i = 0; i < 9; i++) clp->gamut_fwd[i] = ctx->gamut_fwd[i];
   for(int i = 0; i < 9; i++) clp->gamut_inv[i] = ctx->gamut_inv[i];
@@ -1651,6 +1716,7 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->shoulder_power, p->shoulder_power);
   dt_bauhaus_slider_set(g->toe_power, p->toe_power);
   dt_bauhaus_slider_set(g->spectral_brilliance, p->spectral_brilliance);
+  dt_bauhaus_slider_set(g->hl_power, p->hl_exposure);
   dt_bauhaus_slider_set(g->mid_tone, p->gray_point);
   dt_bauhaus_slider_set(g->vibrance, p->vibrance);
   dt_bauhaus_slider_set(g->hl_desaturation, p->hl_desaturation);
@@ -1844,24 +1910,24 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf,
     darktable.bauhaus->graph_fg.blue, 0.55f,
     dt_st_compute_y_tm(y_scene, &ctx));
 
-  /* 3. Full curve including mid-tones gamma (solid) */
+  /* 3. Full curve including gamma (solid) */
   DRAW_CURVE(2.0f,
     darktable.bauhaus->graph_fg_active.red,
     darktable.bauhaus->graph_fg_active.green,
     darktable.bauhaus->graph_fg_active.blue, 1.0f,
     ({
       float _y = dt_st_compute_y_tm(y_scene, &ctx);
-      if(ctx.gray_point != 0.0f)
-        _y = powf(fminf(fmaxf(_y, 0.0f), 1.0f), ctx.gray_gamma);
+      if(ctx.gamma != 0.0f)
+        _y = powf(fminf(fmaxf(_y, 0.0f), 1.0f), ctx.gamma_power);
       _y;
     }));
 
   #undef DRAW_CURVE
 
-  /* helper: compute tone-mapped Y with gray_gamma (full curve) */
+  /* helper: compute tone-mapped Y with gamma (full curve) */
   #define TONE_MAP(ys) ({ \
     float _y = dt_st_compute_y_tm((ys), &ctx); \
-    if(ctx.gray_point != 0.0f) _y = powf(fminf(fmaxf(_y, 0.0f), 1.0f), ctx.gray_gamma); \
+    if(ctx.gamma != 0.0f) _y = powf(fminf(fmaxf(_y, 0.0f), 1.0f), ctx.gamma_power); \
     fminf(fmaxf(_y, 0.0f), 1.0f); \
   })
 
@@ -2001,6 +2067,15 @@ void gui_init(dt_iop_module_t *self)
       "Higher values increase highlight headroom with a softer, film-like rolloff. \n"
       "Brightness is stabilised across the full range."));
 
+  g->hl_power = dt_bauhaus_slider_from_params(self, "hl_exposure");
+  dt_bauhaus_slider_set_factor(g->hl_power, 100.0f);
+  dt_bauhaus_slider_set_format(g->hl_power, " %");
+  dt_bauhaus_slider_set_digits(g->hl_power, 0);
+  gtk_widget_set_tooltip_text(g->hl_power,
+    _("Highlight power: recovers overexposed highlights. \n"
+      "100% = no change, higher values brighten the upper \n"
+      "part of the tone curve only."));
+
   g->contrast = dt_bauhaus_slider_from_params(self, "contrast");
   dt_bauhaus_slider_set_factor(g->contrast, 50.0f);
   dt_bauhaus_slider_set_offset(g->contrast, -112.5f);
@@ -2042,9 +2117,9 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->mid_tone, " %");
   dt_bauhaus_slider_set_digits(g->mid_tone, 0);
   gtk_widget_set_tooltip_text(g->mid_tone,
-    _("Mid-tone brightness adjustment (gamma). \n"
-      "Moving to the right (+100%) brightens mid-tones, \n"
-      "moving to the left (-100%) darkens them."));
+    _("Global gamma adjustment of the tone curve. \n"
+      "Moving to the right (+100%) brightens the image, \n"
+      "moving to the left (-100%) darkens it."));
 
   /* === COLOR section === */
   dt_gui_box_add(GTK_BOX(main_vbox), dt_ui_section_label_new(C_("section", "color")));

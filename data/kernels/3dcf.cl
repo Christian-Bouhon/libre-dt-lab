@@ -45,8 +45,8 @@ typedef struct dt_st_cl_params_t
   float hl_rotation;
   float white_chroma_x;
   float white_chroma_z;
-  float gray_point;
-  float gray_gamma;
+  float gamma;
+  float gamma_power;
   float vibrance;
   float gamut_knee;
   float gamut_steepness;
@@ -62,6 +62,7 @@ typedef struct dt_st_cl_params_t
   float ssts_n;
   float look_opacity;
   float hl_detail_recovery;
+  float hl_power;
   float spectral_boundary[360];
   int   look_idx;            // 0 = no look, 1..10 = color_look_mat is active
   int   gamut_enable;
@@ -111,6 +112,15 @@ static inline float st_compute_y_tm(const float y_scene, const dt_st_cl_params_t
       y_tm = 1.0f - rp * pow(fmax((1.0f - y_tm) / rp, 0.0f), exp_eff);
     }
   }
+
+  /* Highlight boost intégré à la courbe */
+  if(p->hl_power != 1.0f)
+  {
+    const float hl_w = y_tm * y_tm;
+    y_tm = y_tm + (1.0f - y_tm) * (p->hl_power - 1.0f) * hl_w;
+    y_tm = fmin(y_tm, 1.0f);
+  }
+
   return y_tm;
 }
 
@@ -257,11 +267,11 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
   /* Step 2-3: tone-mapped Y */
   float y_tm = st_compute_y_tm(y_abs, p);
 
-  /* Step 4: mid-tone gamma */
-  if(p->gray_point != 0.0f)
+  /* Step 4: gamma */
+  if(p->gamma != 0.0f)
   {
     float y_lvl = fmin(fmax(y_tm, 0.0f), 1.0f);
-    y_lvl = pow(y_lvl, p->gray_gamma);
+    y_lvl = pow(y_lvl, p->gamma_power);
     y_tm = y_lvl;
   }
 
