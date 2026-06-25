@@ -107,10 +107,14 @@ void dt_workflow_selector_set(const int selected)
   for(int i = 0; _tm_ops[i]; i++)
   {
     dt_iop_module_t *mod = _find_module(_tm_ops[i]);
-    if(mod && mod->enabled)
+    if(mod)
     {
-      mod->enabled = FALSE;
-      dt_dev_add_history_item(dev, mod, FALSE);
+      dt_iop_gui_set_expanded(mod, FALSE, FALSE);
+      if(mod->enabled)
+      {
+        mod->enabled = FALSE;
+        dt_dev_add_history_item(dev, mod, FALSE);
+      }
     }
   }
 
