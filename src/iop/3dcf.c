@@ -71,7 +71,7 @@
 #include <stdio.h>
 #include <string.h>
 
-DT_MODULE_INTROSPECTION(5, dt_iop_3dcf_params_t)
+DT_MODULE_INTROSPECTION(6, dt_iop_3dcf_params_t)
 
 /* Type definitions for the ACES 2.0 SSTS pipeline context.
  * spectral_tone_data.c and spectral_tone_pipeline.c have been merged into 3dcf.c
