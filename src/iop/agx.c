@@ -38,7 +38,7 @@
 #include <pango/pangocairo.h>
 #include <stdlib.h>
 
-DT_MODULE_INTROSPECTION(7, dt_iop_agx_params_t)
+DT_MODULE_INTROSPECTION(8, dt_iop_agx_params_t)
 
 const char *name()
 {
@@ -152,6 +152,9 @@ typedef struct dt_iop_agx_params_t
 
   // v5
   gboolean completely_reverse_primaries; // $DEFAULT: FALSE $DESCRIPTION: "reverse all"
+
+  // v8
+  float input_exposure; // $MIN: -18.0 $MAX: 18.0 $DEFAULT: 0.7 $DESCRIPTION: "input exposure compensation"
 } dt_iop_agx_params_t;
 
 typedef struct dt_iop_basic_curve_controls_t
@@ -269,6 +272,7 @@ typedef struct dt_iop_agx_data_t
 {
   tone_mapping_params_t tone_mapping_params;
   primaries_params_t primaries_params;
+  float input_exposure_factor;
 } dt_iop_agx_data_t;
 
 static void _set_scene_referred_default_params(dt_iop_agx_params_t *p);
@@ -287,6 +291,7 @@ int legacy_params(dt_iop_module_t *self,
     // to the CURRENT LATEST version, without further gradual migration steps
     dt_iop_agx_params_t *np = calloc(1, sizeof(dt_iop_agx_params_t));
     _set_scene_referred_default_params(np);
+    np->input_exposure = 0.0f;
     *new_params = np;
     *new_params_size = sizeof(dt_iop_agx_params_t);
     *new_version = self->so->version(); // SPECIAL CASE: jump directly to latest version
@@ -1395,6 +1400,10 @@ void process(dt_iop_module_t *self,
     {
       dt_apply_transposed_color_matrix(sanitised_in, pipe_to_base_transposed, base_rgb);
     }
+
+    // Apply input exposure compensation in linear RGB base space
+    for(size_t c = 0; c < 3; c++)
+      base_rgb[c] *= d->input_exposure_factor;
 
     _compress_into_gamut(base_rgb);
 
@@ -2548,6 +2557,7 @@ static void _set_scene_referred_default_params(dt_iop_agx_params_t *p)
 {
   _set_default_curve_and_look_params(p);
   _set_blenderlike_primaries(p);
+  p->input_exposure = 0.7f;
 }
 
 static void _make_punchy(dt_iop_agx_params_t * p)
@@ -2700,6 +2710,7 @@ void commit_params(dt_iop_module_t *self,
   // Calculate curve parameters once
   processing_params->tone_mapping_params = _calculate_tone_mapping_params(p);
   processing_params->primaries_params = _get_primaries_params(p);
+  processing_params->input_exposure_factor = powf(2.0f, p->input_exposure);
 }
 
 void reload_defaults(dt_iop_module_t *self)

@@ -63,7 +63,7 @@
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(1)
 
 
-DT_MODULE_INTROSPECTION(6, dt_iop_filmicrgb_params_t)
+DT_MODULE_INTROSPECTION(7, dt_iop_filmicrgb_params_t)
 
 /**
  * DOCUMENTATION
@@ -195,6 +195,7 @@ typedef struct dt_iop_filmicrgb_params_t
   gboolean compensate_icc_black; // $DEFAULT: FALSE $DESCRIPTION: "compensate output ICC profile black point"
   dt_iop_filmicrgb_spline_version_type_t spline_version; // $DEFAULT: DT_FILMIC_SPLINE_VERSION_V3 $DESCRIPTION: "spline handling"
   gboolean enable_highlight_reconstruction; // $DEFAULT: FALSE $DESCRIPTION: "enable highlight reconstruction"
+  float input_exposure; // $MIN: -18.0 $MAX: 18.0 $DEFAULT: 0.7 $DESCRIPTION: "input exposure compensation"
 } dt_iop_filmicrgb_params_t;
 // clang-format on
 
@@ -306,6 +307,7 @@ typedef struct dt_iop_filmicrgb_data_t
   struct dt_iop_filmic_rgb_spline_t spline DT_ALIGNED_ARRAY;
   dt_noise_distribution_t noise_distribution;
   gboolean enable_highlight_reconstruction;
+  float input_exposure_factor;
 } dt_iop_filmicrgb_data_t;
 
 
@@ -439,7 +441,7 @@ int legacy_params(dt_iop_module_t *self,
                   int32_t *new_params_size,
                   int *new_version)
 {
-  typedef struct dt_iop_filmicrgb_params_v6_t
+  typedef struct dt_iop_filmicrgb_params_v7_t
   {
     float grey_point_source;
     float black_point_source;
@@ -470,7 +472,8 @@ int legacy_params(dt_iop_module_t *self,
     gboolean compensate_icc_black;
     dt_iop_filmicrgb_spline_version_type_t spline_version;
     gboolean enable_highlight_reconstruction;
-  } dt_iop_filmicrgb_params_v6_t;
+    float input_exposure;
+  } dt_iop_filmicrgb_params_v7_t;
 
  if(old_version == 1)
   {
@@ -492,7 +495,7 @@ int legacy_params(dt_iop_module_t *self,
     } dt_iop_filmicrgb_params_v1_t;
 
     const dt_iop_filmicrgb_params_v1_t *o = (dt_iop_filmicrgb_params_v1_t *)old_params;
-    dt_iop_filmicrgb_params_v6_t *n = malloc(sizeof(dt_iop_filmicrgb_params_v6_t));
+    dt_iop_filmicrgb_params_v7_t *n = malloc(sizeof(dt_iop_filmicrgb_params_v7_t));
 
     n->grey_point_source = o->grey_point_source;
     n->white_point_source = o->white_point_source;
@@ -528,8 +531,8 @@ int legacy_params(dt_iop_module_t *self,
     n->enable_highlight_reconstruction = TRUE;
 
     *new_params = n;
-    *new_params_size = sizeof(dt_iop_filmicrgb_params_v6_t);
-    *new_version = 6;
+    *new_params_size = sizeof(dt_iop_filmicrgb_params_v7_t);
+    *new_version = 7;
     return 0;
   }
   if(old_version == 2)
@@ -563,7 +566,7 @@ int legacy_params(dt_iop_module_t *self,
     } dt_iop_filmicrgb_params_v2_t;
 
     const dt_iop_filmicrgb_params_v2_t *o = (dt_iop_filmicrgb_params_v2_t *)old_params;
-    dt_iop_filmicrgb_params_v6_t *n = malloc(sizeof(dt_iop_filmicrgb_params_v6_t));
+    dt_iop_filmicrgb_params_v7_t *n = malloc(sizeof(dt_iop_filmicrgb_params_v7_t));
 
     n->grey_point_source = o->grey_point_source;
     n->white_point_source = o->white_point_source;
@@ -598,8 +601,8 @@ int legacy_params(dt_iop_module_t *self,
     convert_to_spline_v3((dt_iop_filmicrgb_params_t*)n);
 
     *new_params = n;
-    *new_params_size = sizeof(dt_iop_filmicrgb_params_v6_t);
-    *new_version = 6;
+    *new_params_size = sizeof(dt_iop_filmicrgb_params_v7_t);
+    *new_version = 7;
     return 0;
   }
 
@@ -643,7 +646,7 @@ int legacy_params(dt_iop_module_t *self,
     } dt_iop_filmicrgb_params_v3_t;
 
     const dt_iop_filmicrgb_params_v3_t *o = (dt_iop_filmicrgb_params_v3_t *)old_params;
-    dt_iop_filmicrgb_params_v6_t *n = malloc(sizeof(dt_iop_filmicrgb_params_v6_t));
+    dt_iop_filmicrgb_params_v7_t *n = malloc(sizeof(dt_iop_filmicrgb_params_v7_t));
 
     n->grey_point_source = o->grey_point_source;
     n->white_point_source = o->white_point_source;
@@ -677,8 +680,8 @@ int legacy_params(dt_iop_module_t *self,
     convert_to_spline_v3((dt_iop_filmicrgb_params_t*)n);
 
     *new_params = n;
-    *new_params_size = sizeof(dt_iop_filmicrgb_params_v6_t);
-    *new_version = 6;
+    *new_params_size = sizeof(dt_iop_filmicrgb_params_v7_t);
+    *new_version = 7;
     return 0;
   }
   if(old_version == 4)
@@ -716,7 +719,7 @@ int legacy_params(dt_iop_module_t *self,
     } dt_iop_filmicrgb_params_v4_t;
 
     const dt_iop_filmicrgb_params_v4_t *o = (dt_iop_filmicrgb_params_v4_t *)old_params;
-    dt_iop_filmicrgb_params_v6_t *n = malloc(sizeof(dt_iop_filmicrgb_params_v6_t));
+    dt_iop_filmicrgb_params_v7_t *n = malloc(sizeof(dt_iop_filmicrgb_params_v7_t));
 
     memcpy(n, o, sizeof(dt_iop_filmicrgb_params_v4_t));
     // structure didn't change except the enum instead of gint for internal_version
@@ -740,8 +743,8 @@ int legacy_params(dt_iop_module_t *self,
     convert_to_spline_v3((dt_iop_filmicrgb_params_t*)n);
 
     *new_params = n;
-    *new_params_size = sizeof(dt_iop_filmicrgb_params_v6_t);
-    *new_version = 6;
+    *new_params_size = sizeof(dt_iop_filmicrgb_params_v7_t);
+    *new_version = 7;
     return 0;
   }
   if(old_version == 5)
@@ -779,7 +782,7 @@ int legacy_params(dt_iop_module_t *self,
     } dt_iop_filmicrgb_params_v5_t;
 
     const dt_iop_filmicrgb_params_v5_t *o = (dt_iop_filmicrgb_params_v5_t *)old_params;
-    dt_iop_filmicrgb_params_v6_t *n = malloc(sizeof(dt_iop_filmicrgb_params_v6_t));
+    dt_iop_filmicrgb_params_v7_t *n = malloc(sizeof(dt_iop_filmicrgb_params_v7_t));
 
     // Copy over the old parameters
     n->grey_point_source = o->grey_point_source;
@@ -811,12 +814,13 @@ int legacy_params(dt_iop_module_t *self,
     n->compensate_icc_black = o->compensate_icc_black;
     n->spline_version = o->spline_version;
 
-    // New parameter
+    // New parameters
     n->enable_highlight_reconstruction = TRUE;
+    n->input_exposure = 0.0f;
 
     *new_params = n;
-    *new_params_size = sizeof(dt_iop_filmicrgb_params_v6_t);
-    *new_version = 6;
+    *new_params_size = sizeof(dt_iop_filmicrgb_params_v7_t);
+    *new_version = 7;
     return 0;
   }
   return 1;
@@ -1973,21 +1977,27 @@ static inline void filmic_v5(const float *const restrict in, float *const restri
   {
     const float *const restrict pix_in = in + k;
 
+    // Apply input exposure compensation
+    dt_aligned_pixel_t pix_scaled;
+    for(size_t c = 0; c < 3; c++)
+      pix_scaled[c] = pix_in[c] * data->input_exposure_factor;
+    pix_scaled[3] = pix_in[3];
+
     dt_aligned_pixel_t max_rgb = { 0.f };
     dt_aligned_pixel_t naive_rgb = { 0.f };
 
-    RGB_tone_mapping_v4(pix_in, naive_rgb, data, spline, display_black, display_white);
-    norm_tone_mapping_v4(pix_in, max_rgb, DT_FILMIC_METHOD_MAX_RGB, work_profile, data,
+    RGB_tone_mapping_v4(pix_scaled, naive_rgb, data, spline, display_black, display_white);
+    norm_tone_mapping_v4(pix_scaled, max_rgb, DT_FILMIC_METHOD_MAX_RGB, work_profile, data,
                          spline, norm_min, norm_max, display_black, display_white);
 
-    // Mix max RGB with naive RGB
+    // Mix max RGB with naive RGB
     dt_aligned_pixel_t pix_out;
     for_each_channel(c, aligned(pix_out, max_rgb, naive_rgb))
       pix_out[c] = (0.5f - data->saturation) * naive_rgb[c] + (0.5f + data->saturation) * max_rgb[c];
 
     // Save Ych in Kirk/Filmlight Yrg
     dt_aligned_pixel_t Ych_original = { 0.f };
-    RGB_to_Ych(pix_in, input_matrix_trans, Ych_original);
+    RGB_to_Ych(pix_scaled, input_matrix_trans, Ych_original);
 
     // Get final Ych in Kirk/Filmlight Yrg
     dt_aligned_pixel_t Ych_final = { 0.f };
@@ -3099,6 +3109,7 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1, dt_dev_pixelpipe_
   d->reconstruct_grey_vs_color = (p->reconstruct_grey_vs_color / 100.0f + 1.f) / 2.f;
 
   d->enable_highlight_reconstruction = p->enable_highlight_reconstruction;
+  d->input_exposure_factor = powf(2.0f, p->input_exposure);
 }
 
 void gui_focus(dt_iop_module_t *self, gboolean in)
@@ -3155,6 +3166,7 @@ void reload_defaults(dt_iop_module_t *self)
   d->black_point_source = self->so->get_f("black_point_source")->Float.Default;
   d->white_point_source = self->so->get_f("white_point_source")->Float.Default;
   d->output_power = self->so->get_f("output_power")->Float.Default;
+  d->input_exposure = self->so->get_f("input_exposure")->Float.Default;
 
   self->default_enabled = FALSE;
 

@@ -31,7 +31,7 @@
 #include <gtk/gtk.h>
 #include <stdlib.h>
 
-DT_MODULE_INTROSPECTION(3, dt_iop_sigmoid_params_t)
+DT_MODULE_INTROSPECTION(4, dt_iop_sigmoid_params_t)
 
 
 #define MIDDLE_GREY 0.1845f
@@ -70,6 +70,7 @@ typedef struct dt_iop_sigmoid_params_t
   float blue_rotation;    // $MIN: -0.4  $MAX: 0.4  $DEFAULT: 0.0 $DESCRIPTION: "blue rotation"
   float purity;           // $MIN:  0.0  $MAX: 1.0  $DEFAULT: 0.0 $DESCRIPTION: "recover purity"
   dt_iop_sigmoid_base_primaries_t base_primaries; // $DEFAULT: DT_SIGMOID_WORK_PROFILE $DESCRIPTION: "base primaries"
+  float input_exposure; // $MIN: -18.0 $MAX: 18.0 $DEFAULT: 0.7 $DESCRIPTION: "input exposure compensation"
 } dt_iop_sigmoid_params_t;
 
 int legacy_params(dt_iop_module_t *self,
@@ -99,7 +100,10 @@ int legacy_params(dt_iop_module_t *self,
 
     /* v3 params */
     dt_iop_sigmoid_base_primaries_t base_primaries;
-  } dt_iop_sigmoid_params_v3_t;
+
+    /* v4 params */
+    float input_exposure;
+  } dt_iop_sigmoid_params_v4_t;
 
   if(old_version == 1)
   {
@@ -114,12 +118,12 @@ int legacy_params(dt_iop_module_t *self,
     } dt_iop_sigmoid_params_v1_t;
 
     // Copy the common part of the params struct
-    dt_iop_sigmoid_params_v3_t *n = calloc(1, sizeof(dt_iop_sigmoid_params_v3_t));
+    dt_iop_sigmoid_params_v4_t *n = calloc(1, sizeof(dt_iop_sigmoid_params_v4_t));
     memcpy(n, old_params, sizeof(dt_iop_sigmoid_params_v1_t));
 
     *new_params = n;
-    *new_params_size = sizeof(dt_iop_sigmoid_params_v3_t);
-    *new_version = 3;
+    *new_params_size = sizeof(dt_iop_sigmoid_params_v4_t);
+    *new_version = 4;
 
     return 0;
   }
@@ -144,12 +148,12 @@ int legacy_params(dt_iop_module_t *self,
       float purity;
     } dt_iop_sigmoid_params_v2_t;
     // Copy the common part of the params struct
-    dt_iop_sigmoid_params_v3_t *n = calloc(1, sizeof(dt_iop_sigmoid_params_v3_t));
+    dt_iop_sigmoid_params_v4_t *n = calloc(1, sizeof(dt_iop_sigmoid_params_v4_t));
     memcpy(n, old_params, sizeof(dt_iop_sigmoid_params_v2_t));
 
     *new_params = n;
-    *new_params_size = sizeof(dt_iop_sigmoid_params_v3_t);
-    *new_version = 3;
+    *new_params_size = sizeof(dt_iop_sigmoid_params_v4_t);
+    *new_version = 4;
 
     return 0;
   }
@@ -171,6 +175,7 @@ typedef struct dt_iop_sigmoid_data_t
   float rotation[3];
   float purity;
   dt_iop_sigmoid_base_primaries_t base_primaries;
+  float input_exposure_factor;
 } dt_iop_sigmoid_data_t;
 
 typedef struct dt_iop_sigmoid_gui_data_t
@@ -389,6 +394,7 @@ void commit_params(dt_iop_module_t *self,
   module_data->rotation[1] = params->green_rotation;
   module_data->rotation[2] = params->blue_rotation;
   module_data->base_primaries = params->base_primaries;
+  module_data->input_exposure_factor = powf(2.0f, params->input_exposure);
 }
 
 static void _calculate_adjusted_primaries(const dt_iop_sigmoid_data_t *const module_data,
@@ -588,9 +594,15 @@ void process_loglogistic_rgb_ratio(const dt_dev_pixelpipe_iop_t *piece,
     float *const restrict pix_out = out + k;
     dt_aligned_pixel_t pre_out;
     dt_aligned_pixel_t pix_in_strict_positive;
+    dt_aligned_pixel_t pix_in_scaled;
+
+    // Apply input exposure compensation
+    for(size_t c = 0; c < 3; c++)
+      pix_in_scaled[c] = pix_in[c] * module_data->input_exposure_factor;
+    pix_in_scaled[3] = pix_in[3];
 
     // Force negative values to zero
-    _desaturate_negative_values(pix_in, pix_in_strict_positive);
+    _desaturate_negative_values(pix_in_scaled, pix_in_strict_positive);
 
     // Preserve color ratios by applying the tone curve on a luma estimate and then scale the RGB tripplet uniformly
     const float luma = (pix_in_strict_positive[0] + pix_in_strict_positive[1] + pix_in_strict_positive[2]) / 3.0f;
@@ -729,11 +741,16 @@ void process_loglogistic_per_channel(dt_develop_t *dev,
   {
     const float *const restrict pix_in = in + k;
     float *const restrict pix_out = out + k;
-    dt_aligned_pixel_t pix_in_base, pix_in_strict_positive;
+    dt_aligned_pixel_t pix_in_scaled, pix_in_base, pix_in_strict_positive;
     dt_aligned_pixel_t per_channel;
 
+    // Apply input exposure compensation
+    for(size_t c = 0; c < 3; c++)
+      pix_in_scaled[c] = pix_in[c] * module_data->input_exposure_factor;
+    pix_in_scaled[3] = pix_in[3];
+
     // Convert to "base primaries"
-    dt_apply_transposed_color_matrix(pix_in, pipe_to_base, pix_in_base);
+    dt_apply_transposed_color_matrix(pix_in_scaled, pipe_to_base, pix_in_base);
 
     // Force negative values to zero
     _desaturate_negative_values(pix_in_base, pix_in_strict_positive);
