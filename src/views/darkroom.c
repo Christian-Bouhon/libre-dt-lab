@@ -1315,9 +1315,10 @@ static gboolean _dev_load_requested_image(gpointer user_data)
 
   // we have to init all module instances other than "base" instance
   char option[1024];
-  for(const GList *modules = g_list_last(dev->iop);
+  const gboolean reverse_mods = dt_conf_get_bool("darkroom/ui/reverse_module_order");
+  for(const GList *modules = reverse_mods ? g_list_first(dev->iop) : g_list_last(dev->iop);
       modules;
-      modules = g_list_previous(modules))
+      modules = reverse_mods ? g_list_next(modules) : g_list_previous(modules))
   {
     dt_iop_module_t *module = modules->data;
     if(module->multi_priority > 0)
@@ -2222,6 +2223,8 @@ static void _preference_changed(gpointer instance,
          (module->blend_params->mask_mode != DEVELOP_MASK_DISABLED) &&
          (module->blend_params->mask_mode != DEVELOP_MASK_ENABLED));
   }
+
+  dt_dev_reorder_gui_module_list(dev);
 }
 
 static void _update_display_profile_cmb(GtkWidget *cmb_display_profile)
@@ -3494,10 +3497,11 @@ void enter(dt_view_t *self)
   if(sw) gtk_scrolled_window_set_propagate_natural_width(sw, FALSE);
 
   char option[1024];
+  const gboolean reverse_mods = dt_conf_get_bool("darkroom/ui/reverse_module_order");
 
-  for(const GList *modules = g_list_last(dev->iop);
+  for(const GList *modules = reverse_mods ? g_list_first(dev->iop) : g_list_last(dev->iop);
       modules;
-      modules = g_list_previous(modules))
+      modules = reverse_mods ? g_list_next(modules) : g_list_previous(modules))
   {
     dt_iop_module_t *module = modules->data;
 

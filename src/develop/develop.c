@@ -3882,9 +3882,10 @@ dt_hash_t dt_dev_hash_distort_plus(dt_develop_t *dev,
 void dt_dev_reorder_gui_module_list(dt_develop_t *dev)
 {
   int pos_module = 0;
-  for(const GList *modules = g_list_last(dev->iop);
+  const gboolean reverse = dt_conf_get_bool("darkroom/ui/reverse_module_order");
+  for(const GList *modules = reverse ? g_list_first(dev->iop) : g_list_last(dev->iop);
       modules;
-      modules = g_list_previous(modules))
+      modules = reverse ? g_list_next(modules) : g_list_previous(modules))
   {
     dt_iop_module_t *module = modules->data;
 

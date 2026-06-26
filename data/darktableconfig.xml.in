@@ -4141,6 +4141,13 @@
     <shortdescription>show detach button in module headers</shortdescription>
     <longdescription>show a button in module headers to detach the module into a separate window. this setting requires a restart to take effect</longdescription>
   </dtconfig>
+  <dtconfig prefs="darkroom" section="modules">
+    <name>darkroom/ui/reverse_module_order</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>reverse processing module order</shortdescription>
+    <longdescription>display the first processing module at the top of the list instead of the bottom. this changes the visual order only, not the actual pixel pipeline order</longdescription>
+  </dtconfig>
   <dtconfig>
     <name>darkroom/ui/anticipate_move</name>
     <type min="1.0" max="2.0">float</type>
