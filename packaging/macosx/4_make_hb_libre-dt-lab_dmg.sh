@@ -97,7 +97,26 @@ echo '
 # Finalizing creation
 chmod -Rf go-w /Volumes/"${PROGN}"
 sync
-hdiutil detach ${device}
+
+# Detach with retries (resource busy is common on CI)
+try_count=0
+hdiutil_success=0
+
+while [ $hdiutil_success -ne 1 -a $try_count -lt 8 ]; do
+    if hdiutil detach "${device}" -force
+    then
+        hdiutil_success=1
+        break
+    fi
+    try_count=$(( try_count + 1 ))
+    echo "'hdiutil detach' failed (attempt ${try_count}). Retrying..."
+    sleep 2
+done
+
+if [ $hdiutil_success -ne 1 ]; then
+    echo "FATAL: 'hdiutil detach' FAILED!"
+    exit 1
+fi
 VERSION=$(git describe --tags --match release-* 2>/dev/null | sed 's/^release-//;s/-/+/;s/-/~/;s/rc/~rc/') || VERSION=$(git rev-parse --short HEAD)
 DMG="${PROGN}-${VERSION}-$(uname -m)"
 hdiutil convert "pack.temp.dmg" -format UDZO -imagekey zlib-level=9 -o "${DMG}"
