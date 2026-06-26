@@ -750,7 +750,10 @@ static void _basics_show(dt_lib_module_t *self)
   dt_gui_add_class(d->vbox_basic,"dt_plugin_ui");
 
   dt_lib_modulegroups_basic_item_position_t item_pos = FIRST_MODULE;
-  for(GList *modules = g_list_last(darktable.develop->iop); modules; modules = g_list_previous(modules))
+  const gboolean reverse_mods = dt_conf_get_bool("darkroom/ui/reverse_module_order");
+  for(GList *modules = reverse_mods ? g_list_first(darktable.develop->iop) : g_list_last(darktable.develop->iop);
+      modules;
+      modules = reverse_mods ? g_list_next(modules) : g_list_previous(modules))
   {
     dt_iop_module_t *module = modules->data;
 
