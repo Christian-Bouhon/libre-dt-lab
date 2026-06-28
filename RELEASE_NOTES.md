@@ -70,6 +70,10 @@ changes (where available).
 
 - N/A
 
+- Fixed the on-screen rating message showing the wrong value when
+  rating multiple images at once (for example, clearing 1-star still
+  reported rating 1).
+
 ## Lua
 
 ### API Version
