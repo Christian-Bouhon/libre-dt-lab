@@ -298,6 +298,17 @@ int legacy_params(dt_iop_module_t *self,
 
     return 0;
   }
+  else if(old_version == 7)
+  {
+    dt_iop_agx_params_t *np = calloc(1, sizeof(dt_iop_agx_params_t));
+    memcpy(np, old_params, sizeof(dt_iop_agx_params_t) - sizeof(float));
+    np->input_exposure = 0.0f;
+    *new_params = np;
+    *new_params_size = sizeof(dt_iop_agx_params_t);
+    *new_version = 8;
+
+    return 0;
+  }
 
   return 1;
 }

@@ -823,6 +823,16 @@ int legacy_params(dt_iop_module_t *self,
     *new_version = 7;
     return 0;
   }
+  if(old_version == 6)
+  {
+    dt_iop_filmicrgb_params_v7_t *n = calloc(1, sizeof(dt_iop_filmicrgb_params_v7_t));
+    memcpy(n, old_params, sizeof(dt_iop_filmicrgb_params_v7_t) - sizeof(float));
+
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_filmicrgb_params_v7_t);
+    *new_version = 7;
+    return 0;
+  }
   return 1;
 }
 

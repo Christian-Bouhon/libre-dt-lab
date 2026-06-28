@@ -157,6 +157,17 @@ int legacy_params(dt_iop_module_t *self,
 
     return 0;
   }
+  else if(old_version == 3)
+  {
+    dt_iop_sigmoid_params_v4_t *n = calloc(1, sizeof(dt_iop_sigmoid_params_v4_t));
+    memcpy(n, old_params, sizeof(dt_iop_sigmoid_params_v4_t) - sizeof(float));
+
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_sigmoid_params_v4_t);
+    *new_version = 4;
+
+    return 0;
+  }
 
   return 1;
 }
