@@ -114,8 +114,8 @@ typedef struct dt_iop_3dcf_params_t
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
   float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "perceptual brightness"
   float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "Abney rotation"
-  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "highlight roll-off"
-  float hl_desat_threshold;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.45 $DESCRIPTION: "desaturation threshold"
+  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.70 $DESCRIPTION: "highlight roll-off"
+  float hl_desat_threshold;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.55 $DESCRIPTION: "desaturation threshold"
   float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.20 $DESCRIPTION: "gamut knee"
   float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "gamut steepness"
   dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "color space"
@@ -125,7 +125,7 @@ typedef struct dt_iop_3dcf_params_t
   float toe_power;             // $MIN: 0.25 $MAX: 3.0 $DEFAULT: 1.0 $DESCRIPTION: "toe power"
   float shoulder_power;        // $MIN: 0.25 $MAX: 3.0 $DEFAULT: 1.0 $DESCRIPTION: "shoulder power"
   float hl_detail_recovery;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.20 $DESCRIPTION: "detail recovery"
-  float hl_exposure;           // $MIN: 1.0 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "highlight power"
+  float hl_exposure;           // $MIN: 1.0 $MAX: 2.0 $DEFAULT: 1.5 $DESCRIPTION: "highlight power"
 } dt_iop_3dcf_params_t;
 
 /* SSTS (ACES 2.0 Single-Stage Tone Scale) precomputed parameters */
@@ -1665,8 +1665,8 @@ void init_presets(dt_iop_module_so_t *self)
   p.spectral_brilliance = 5.0f;
   p.gray_point = 0.0f;
   p.vibrance = 1.0f;
-  p.hl_desaturation = 0.50f; //CB
-  p.hl_desat_threshold = 0.45f;
+  p.hl_desaturation = 0.70f; //CB
+  p.hl_desat_threshold = 0.55f;
   p.hl_hue_shift = 0.0f;
   p.gamut_knee = 0.20f; //CB
   p.gamut_steepness = 0.50f;
@@ -1677,6 +1677,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.toe_power = 1.0f;
   p.shoulder_power = 1.0f;
   p.hl_detail_recovery = 0.20f; //CB
+  p.hl_exposure = 1.5f;
 
   if(auto_apply_st)
   {
@@ -2069,12 +2070,12 @@ void gui_init(dt_iop_module_t *self)
 
   g->hl_power = dt_bauhaus_slider_from_params(self, "hl_exposure");
   dt_bauhaus_slider_set_factor(g->hl_power, 100.0f);
+  dt_bauhaus_slider_set_offset(g->hl_power, -150.0f);
   dt_bauhaus_slider_set_format(g->hl_power, " %");
   dt_bauhaus_slider_set_digits(g->hl_power, 0);
   gtk_widget_set_tooltip_text(g->hl_power,
     _("Highlight power: recovers overexposed highlights. \n"
-      "100% = no change, higher values brighten the upper \n"
-      "part of the tone curve only."));
+      "0% = default, negative dims, positive brightens."));
 
   g->contrast = dt_bauhaus_slider_from_params(self, "contrast");
   dt_bauhaus_slider_set_factor(g->contrast, 50.0f);
