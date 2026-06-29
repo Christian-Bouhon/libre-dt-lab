@@ -76,7 +76,7 @@ typedef enum _encode_state_t
 typedef struct _object_data_t
 {
   dt_ai_environment_t *env; // AI environment for model registry
-  dt_seg_context_t *seg;    // SAM context (encoder+decoder)
+  dt_seg_context_t *seg;    // segmentation context (encoder+decoder)
   float *mask;              // current mask buffer (preview pipe size)
   int mask_w, mask_h;       // mask dimensions
   gboolean model_loaded;    // whether the model was loaded
@@ -662,13 +662,23 @@ static void _run_decoder(dt_masks_form_gui_t *gui)
   const float sx = (wd > 0) ? (float)d->encode_w / wd : 1.0f;
   const float sy = (ht > 0) ? (float)d->encode_h / ht : 1.0f;
 
-  // always send all accumulated points; on the first click reset the
-  // previous mask, on subsequent clicks keep it so the decoder gets
-  // both all points AND the previous mask as boundary context;
-  // after decode, prev_mask carries refinement context, don't reset it
+  // always send all accumulated points
+  // SAM: on the first click reset prev_mask, on subsequent clicks keep it
+  //      as boundary context (has_mask_input flag tells the decoder)
+  // SegNext: no has_mask_input flag — reset prev_mask on every call so
+  //          the decoder always makes a fresh prediction with all points
   const int n_prompt_points = gui->guipoints_count;
-  if(gui->guipoints_count <= 1 && !d->has_selection)
+  if(dt_seg_supports_box(d->seg))
+  {
+    // SAM path
+    if(gui->guipoints_count <= 1 && !d->has_selection)
+      dt_seg_reset_prev_mask(d->seg);
+  }
+  else
+  {
+    // SegNext path
     dt_seg_reset_prev_mask(d->seg);
+  }
 
   // headroom: one peak point per pass + 2 box corners (SAM only)
   const int n_passes = CLAMP(dt_conf_get_int(CONF_OBJECT_REFINE_PASSES_KEY),
@@ -705,6 +715,9 @@ static void _run_decoder(dt_masks_form_gui_t *gui)
 
   for(int pass = 0; pass < n_passes; pass++)
   {
+    // SegNext: no has_mask_input flag — reset prev_mask each pass
+    if(!dt_seg_supports_box(d->seg))
+      dt_seg_reset_prev_mask(d->seg);
     float *new_mask = dt_seg_compute_mask(d->seg, points, n_points, &mw, &mh);
     if(!new_mask) break;
 
