@@ -1534,6 +1534,26 @@ char *dt_ai_models_download_sync(const char *model_id,
   // find the latest compatible release for this darktable version
   char *release_error = NULL;
   char *release_tag = _find_latest_compatible_release(repository, &release_error);
+
+  // fallback: if the configured repo has no compatible release, try the
+  // fork's hardcoded repo (handles users upgrading from upstream darktable
+  // whose darktablerc still points to darktable-org/darktable-ai)
+  if(!release_tag)
+  {
+    g_free(release_error);
+    release_error = NULL;
+    dt_print(DT_DEBUG_AI, "[ai_models] configured repo %s has no compatible "
+             "release, trying fallback Christian-Bouhon/darktable-ai",
+             repository);
+    release_tag = _find_latest_compatible_release("Christian-Bouhon/darktable-ai",
+                                                   &release_error);
+    if(release_tag)
+    {
+      g_free(repository);
+      repository = g_strdup("Christian-Bouhon/darktable-ai");
+    }
+  }
+
   if(!release_tag)
   {
     if(release_error)

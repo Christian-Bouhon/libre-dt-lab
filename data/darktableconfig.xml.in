@@ -413,7 +413,7 @@
   <dtconfig>
     <name>plugins/ai/repository</name>
     <type>string</type>
-    <default>darktable-org/darktable-ai</default>
+    <default>Christian-Bouhon/darktable-ai</default>
     <shortdescription>AI models GitHub repository</shortdescription>
     <longdescription>GitHub repository for downloading AI models (format: owner/repo)</longdescription>
   </dtconfig>
