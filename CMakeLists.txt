@@ -184,6 +184,18 @@ endfunction(generate_version_gen_c)
 if(DEFINED PROJECT_VERSION AND PROJECT_VERSION VERSION_GREATER 0)
   #project version is defined by -D on the cmake command line
   # only use that value, do not update it at make time
+  # append short git hash for experimental builds
+  if(NOT SOURCE_PACKAGE)
+    execute_process(
+      COMMAND git rev-parse --short=7 HEAD
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      OUTPUT_VARIABLE _GIT_HASH
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    if(_GIT_HASH)
+      set(PROJECT_VERSION "${PROJECT_VERSION}+${_GIT_HASH}")
+    endif()
+  endif()
   generate_version_gen_c(${PROJECT_VERSION} "version override")
 else(DEFINED PROJECT_VERSION AND PROJECT_VERSION VERSION_GREATER 0)
   if(NOT SOURCE_PACKAGE) # i.e., a git checkout
