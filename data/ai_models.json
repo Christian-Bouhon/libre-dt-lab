@@ -2,13 +2,6 @@
   "version": 1,
   "models": [
     {
-      "id": "mask-object-sam21-small",
-      "name": "mask sam2.1 hiera small",
-      "task": "mask",
-      "min_version": "1.0",
-      "default": false
-    },
-    {
       "id": "mask-object-segnext-b2hq",
       "name": "mask segnext vitb-sax2 hq",
       "task": "mask",

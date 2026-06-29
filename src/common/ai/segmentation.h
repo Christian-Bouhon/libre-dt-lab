@@ -30,8 +30,8 @@
  * may be invoked from a background thread, the decoder typically
  * runs on the UI thread on a user click. Callers must serialise
  * dt_seg_encode_image / dt_seg_compute_mask / dt_seg_reset_*
- * against each other (and against dt_seg_free) — the prev_mask and
- * has_prev_mask fields are mutated by both encode and compute.
+ * against each other (and against dt_seg_free) — the prev_mask
+ * field is mutated by both encode and compute.
  */
 typedef struct dt_seg_context_t dt_seg_context_t;
 
@@ -41,13 +41,11 @@ typedef struct dt_seg_context_t dt_seg_context_t;
 typedef struct dt_seg_point_t
 {
   float x, y;  ///< pixel coordinates in the original image space
-  int label;   ///< 0 = background (exclude), 1 = foreground (include),
-               ///< 2 = box top-left corner, 3 = box bottom-right corner
-               ///< (box prompts are SAM-only; check dt_seg_supports_box)
+  int label;   ///< 0 = background (exclude), 1 = foreground (include)
 } dt_seg_point_t;
 
 /**
- * @brief Load a SAM segmentation model from the model registry.
+ * @brief Load a segmentation model from the model registry.
  *        Expects encoder.onnx and decoder.onnx in the model directory.
  *        The execution provider is taken from the environment (read from
  *        the plugins/ai/provider config key at dt_ai_env_init time).
@@ -69,7 +67,7 @@ dt_seg_context_t *dt_seg_load(dt_ai_environment_t *env,
 void dt_seg_warmup_decoder(dt_seg_context_t *ctx);
 
 /**
- * @brief Encode an image (run the SAM encoder once).
+ * @brief Encode an image (run the encoder once).
  *        The result is cached -- subsequent calls with the same context
  *        skip re-encoding.
  * @param ctx Segmentation context.
@@ -110,11 +108,9 @@ float *dt_seg_compute_mask(dt_seg_context_t *ctx,
 gboolean dt_seg_is_encoded(dt_seg_context_t *ctx);
 
 /**
- * @brief Check if the loaded model supports box prompts.
- *        SAM models support box prompts (label 2/3 corner points).
- *        SegNext models only support point prompts.
- * @param ctx Segmentation context (NULL-safe).
- * @return TRUE if box prompts are supported, FALSE otherwise.
+ * @brief Always returns FALSE — the current model only supports point prompts.
+ * @param ctx Segmentation context (NULL-safe, unused).
+ * @return FALSE
  */
 gboolean dt_seg_supports_box(dt_seg_context_t *ctx);
 
