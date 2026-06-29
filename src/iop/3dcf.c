@@ -1692,11 +1692,6 @@ void init_presets(dt_iop_module_so_t *self)
     dt_gui_presets_update_autoapply(BUILTIN_PRESET("scene-referred default"),
                                     self->op, self->version(), TRUE);
   }
-
-  dt_gui_presets_add_generic(_("default 3D Colorimetric Film"), self->op,
-                              self->version(),
-                              &p, sizeof(p),
-                              TRUE, DEVELOP_BLEND_CS_RGB_SCENE);
 }
 
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker,
