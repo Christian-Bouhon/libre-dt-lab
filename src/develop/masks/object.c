@@ -635,7 +635,7 @@ static gboolean _compute_bbox(const float *const restrict mask,
   return TRUE;
 }
 
-static void _run_decoder(dt_masks_form_gui_t *gui)
+static void _run_decoder(dt_masks_form_gui_t *gui, const gboolean is_first_click)
 {
   _object_data_t *d = _get_data(gui);
   if(!d || !d->seg || !dt_seg_is_encoded(d->seg))
@@ -662,15 +662,21 @@ static void _run_decoder(dt_masks_form_gui_t *gui)
   const float sy = (ht > 0) ? (float)d->encode_h / ht : 1.0f;
 
   // always send all accumulated points
-  // SAM: on the first click reset prev_mask, on subsequent clicks keep it
-  //      as boundary context (has_mask_input flag tells the decoder)
-  // SegNext: no has_mask_input flag — reset prev_mask before the loop so
-  //          each new user click starts with a fresh prediction
+  // SAM: on the first click of a selection round, reset prev_mask; on
+  //      subsequent clicks keep it as boundary context (has_mask_input
+  //      flag tells the decoder how to interpret it). is_first_click is
+  //      captured by the caller BEFORE has_selection/guipoints_count are
+  //      mutated, since checking them here would always read post-mutation
+  //      state (see _object_events_button_released).
+  // SegNext: no has_mask_input flag -- the decoder cannot distinguish a
+  //          fresh prediction from a refinement pass, and every call
+  //          already resends the full accumulated point list anyway, so
+  //          prev_mask is reset unconditionally before each new click.
   const int n_prompt_points = gui->guipoints_count;
   if(dt_seg_supports_box(d->seg))
   {
     // SAM path
-    if(gui->guipoints_count <= 1 && !d->has_selection)
+    if(is_first_click)
       dt_seg_reset_prev_mask(d->seg);
   }
   else
@@ -1389,9 +1395,16 @@ static int _object_events_button_released(dt_iop_module_t *module,
   dt_masks_dynbuf_add_2(gui->guipoints, d->drag_start_x, d->drag_start_y);
   dt_masks_dynbuf_add(gui->guipoints_payload, label);
   gui->guipoints_count++;
+
+  // capture BEFORE mutating has_selection: _run_decoder needs to know
+  // whether this is the first click of a new selection round to decide
+  // whether prev_mask should be reset (see comment in _run_decoder).
+  // checking !d->has_selection from inside _run_decoder would always be
+  // false here, since the flag below has already been raised.
+  const gboolean was_first_click = !d->has_selection;
   d->has_selection = TRUE;
 
-  _run_decoder(gui);
+  _run_decoder(gui, was_first_click);
 
   // auto-update vectorization preview after each decode
   if(d->mask)
