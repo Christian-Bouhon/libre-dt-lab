@@ -199,7 +199,7 @@ typedef struct dt_ai_model_info_t {
   const char *name;        ///< Display name
   const char *description; ///< Short description
   const char *task_type;   ///< e.g. "mask", "denoise"
-  const char *arch;        ///< e.g. "segnext"
+  const char *arch;        ///< e.g. "sam2", "segnext"
   const char *backend;     ///< Backend type (e.g. "onnx")
   int num_inputs;          ///< Number of model inputs (default 1)
   const char *attributes;  ///< Optional attributes

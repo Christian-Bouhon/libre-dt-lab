@@ -41,7 +41,9 @@ typedef struct dt_seg_context_t dt_seg_context_t;
 typedef struct dt_seg_point_t
 {
   float x, y;  ///< pixel coordinates in the original image space
-  int label;   ///< 0 = background (exclude), 1 = foreground (include)
+  int label;   ///< 0 = background (exclude), 1 = foreground (include),
+               ///< 2 = box top-left corner, 3 = box bottom-right corner
+               ///< (box prompts are SAM-only; check dt_seg_supports_box)
 } dt_seg_point_t;
 
 /**
@@ -108,9 +110,11 @@ float *dt_seg_compute_mask(dt_seg_context_t *ctx,
 gboolean dt_seg_is_encoded(dt_seg_context_t *ctx);
 
 /**
- * @brief Always returns FALSE — the current model only supports point prompts.
- * @param ctx Segmentation context (NULL-safe, unused).
- * @return FALSE
+ * @brief Check if the loaded model supports box prompts.
+ *        SAM models support box prompts (label 2/3 corner points).
+ *        SegNext models only support point prompts.
+ * @param ctx Segmentation context (NULL-safe).
+ * @return TRUE if box prompts are supported, FALSE otherwise.
  */
 gboolean dt_seg_supports_box(dt_seg_context_t *ctx);
 

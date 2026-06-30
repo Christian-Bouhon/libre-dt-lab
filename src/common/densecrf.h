@@ -37,7 +37,7 @@ extern "C" {
 /**
  * @brief Refine a binary segmentation mask using Dense CRF.
  *
- * Takes unary probabilities (e.g. from sigmoid of decoder logits) and
+ * Takes unary probabilities (e.g. from sigmoid of SAM logits) and
  * an RGB guide image, runs mean-field inference to sharpen mask
  * boundaries along image edges.
  *

@@ -598,6 +598,43 @@ static gboolean _find_peak_point(const float *const restrict mask,
   return TRUE;
 }
 
+// tight bbox around mask>threshold, padded by `padding` (fraction of
+// bbox extent); FALSE if mask is empty
+static gboolean _compute_bbox(const float *const restrict mask,
+                              const int w,
+                              const int h,
+                              const float threshold,
+                              const float padding,
+                              dt_seg_point_t *const tl,
+                              dt_seg_point_t *const br)
+{
+  int min_x = INT_MAX, min_y = INT_MAX, max_x = INT_MIN, max_y = INT_MIN;
+  for(int y = 0; y < h; y++)
+  {
+    for(int x = 0; x < w; x++)
+    {
+      if(mask[(size_t)y * w + x] > threshold)
+      {
+        if(x < min_x) min_x = x;
+        if(y < min_y) min_y = y;
+        if(x > max_x) max_x = x;
+        if(y > max_y) max_y = y;
+      }
+    }
+  }
+  if(max_x == INT_MIN) return FALSE;
+
+  const int pad_x = (int)((max_x - min_x) * padding) + 1;
+  const int pad_y = (int)((max_y - min_y) * padding) + 1;
+  tl->x = (float)CLAMP(min_x - pad_x, 0, w - 1);
+  tl->y = (float)CLAMP(min_y - pad_y, 0, h - 1);
+  tl->label = 2;
+  br->x = (float)CLAMP(max_x + pad_x, 0, w - 1);
+  br->y = (float)CLAMP(max_y + pad_y, 0, h - 1);
+  br->label = 3;
+  return TRUE;
+}
+
 static void _run_decoder(dt_masks_form_gui_t *gui)
 {
   _object_data_t *d = _get_data(gui);
@@ -624,15 +661,28 @@ static void _run_decoder(dt_masks_form_gui_t *gui)
   const float sx = (wd > 0) ? (float)d->encode_w / wd : 1.0f;
   const float sy = (ht > 0) ? (float)d->encode_h / ht : 1.0f;
 
-  // always send all accumulated points; reset prev_mask on every call
-  // (SegNext does not have a has_mask_input flag, so iterative refinement
-  // via prev_mask is not supported — each call is a fresh prediction)
+  // always send all accumulated points
+  // SAM: on the first click reset prev_mask, on subsequent clicks keep it
+  //      as boundary context (has_mask_input flag tells the decoder)
+  // SegNext: no has_mask_input flag — reset prev_mask before the loop so
+  //          each new user click starts with a fresh prediction
   const int n_prompt_points = gui->guipoints_count;
-  dt_seg_reset_prev_mask(d->seg);
+  if(dt_seg_supports_box(d->seg))
+  {
+    // SAM path
+    if(gui->guipoints_count <= 1 && !d->has_selection)
+      dt_seg_reset_prev_mask(d->seg);
+  }
+  else
+  {
+    // SegNext path
+    dt_seg_reset_prev_mask(d->seg);
+  }
 
   const int n_passes = CLAMP(dt_conf_get_int(CONF_OBJECT_REFINE_PASSES_KEY),
                              1, 3);
-  dt_seg_point_t *points = g_new(dt_seg_point_t, n_prompt_points + n_passes);
+  // headroom: one peak point per pass + 2 box corners (SAM only)
+  dt_seg_point_t *points = g_new(dt_seg_point_t, n_prompt_points + n_passes + 2);
   for(int i = 0; i < n_prompt_points; i++)
   {
     points[i].x = gp[i * 2 + 0] * sx;
@@ -657,12 +707,13 @@ static void _run_decoder(dt_masks_form_gui_t *gui)
 
   const float threshold
     = CLAMP(dt_conf_get_float(CONF_OBJECT_THRESHOLD_KEY), 0.3f, 0.9f);
+  const gboolean supports_box = dt_seg_supports_box(d->seg);
   int mw = 0, mh = 0;
   float *mask = NULL;
+  gboolean box_added = FALSE;
 
   for(int pass = 0; pass < n_passes; pass++)
   {
-    dt_seg_reset_prev_mask(d->seg);
     float *new_mask = dt_seg_compute_mask(d->seg, points, n_points, &mw, &mh);
     if(!new_mask) break;
 
@@ -686,6 +737,17 @@ static void _run_decoder(dt_masks_form_gui_t *gui)
     {
       points[n_points++] = peak;
       any_added = TRUE;
+    }
+    if(supports_box && !box_added)
+    {
+      dt_seg_point_t tl, br;
+      if(_compute_bbox(mask, mw, mh, threshold, 0.05f, &tl, &br))
+      {
+        points[n_points++] = tl;
+        points[n_points++] = br;
+        box_added = TRUE;
+        any_added = TRUE;
+      }
     }
     if(!any_added) break;
   }
