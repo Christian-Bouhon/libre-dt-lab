@@ -1614,7 +1614,7 @@ static void _accels_window_sticky(GtkWidget *widget,
   gtk_widget_get_allocation(dt_ui_main_window(darktable.gui->ui), &alloc);
 
   gtk_window_set_resizable(win, TRUE);
-  gtk_window_set_icon_name(win, "darktable");
+  gtk_window_set_icon_name(win, "libre-dt-lab");
   gtk_window_set_default_size(win, alloc.width * 0.7, alloc.height * 0.7);
   g_signal_connect(win, "destroy", G_CALLBACK(_accels_window_destroy), vm);
 

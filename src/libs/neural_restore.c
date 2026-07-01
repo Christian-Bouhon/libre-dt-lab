@@ -4374,7 +4374,7 @@ void gui_init(dt_lib_module_t *self)
                        ? saved_dir : "$(FILE_FOLDER)");
   g_free(saved_dir);
   gtk_widget_set_tooltip_text(d->output_dir_entry,
-                              _("output folder — supports darktable variables\n"
+                              _("output folder — supports libre-dt-lab variables\n"
                                 "$(FILE_FOLDER) = source image folder"));
   gtk_widget_set_hexpand(d->output_dir_entry, TRUE);
   g_signal_connect(d->output_dir_entry, "changed",

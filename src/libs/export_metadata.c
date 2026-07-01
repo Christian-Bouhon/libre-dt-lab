@@ -176,7 +176,7 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
   GtkWidget *exiftag = gtk_check_button_new_with_label(_("EXIF data"));
   gtk_widget_set_tooltip_text(exiftag, _("export EXIF metadata"));
   GtkWidget *dtmetadata = gtk_check_button_new_with_label(_("metadata"));
-  gtk_widget_set_tooltip_text(dtmetadata, _("export darktable XMP metadata (from metadata editor module)"));
+  gtk_widget_set_tooltip_text(dtmetadata, _("export libre-dt-lab XMP metadata (from metadata editor module)"));
 
   GtkWidget *calculated;
   if(!ondisk)
@@ -184,7 +184,7 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
     calculated = gtk_check_button_new_with_label(_("only embedded"));
     gtk_widget_set_tooltip_text(calculated, _("per default the interface sends some (limited) metadata beside the image to remote storage.\n"
         "to avoid this and let only image embedded darktable XMP metadata, check this flag.\n"
-        "if remote storage doesn't understand darktable XMP metadata, you can use calculated metadata instead"));
+        "if remote storage doesn't understand libre-dt-lab XMP metadata, you can use calculated metadata instead"));
     gtk_widget_set_margin_start(calculated, DT_PIXEL_APPLY_DPI(10));
   }
   else
@@ -210,7 +210,7 @@ char *dt_lib_export_metadata_configuration_dialog(char *metadata_presets, const 
   GtkWidget *hierarchical = gtk_check_button_new_with_label(_("hierarchical tags"));
   gtk_widget_set_tooltip_text(hierarchical, _("export hierarchical tags (to Xmp.lr.Hierarchical Subject)"));
   GtkWidget *dthistory = gtk_check_button_new_with_label(_("develop history"));
-  gtk_widget_set_tooltip_text(dthistory, _("export darktable development data (recovery purpose in case of loss of database or XMP file)"));
+  gtk_widget_set_tooltip_text(dthistory, _("export libre-dt-lab development data (recovery purpose in case of loss of database or XMP file)"));
 
   // specific rules
   GtkTreeView *view = d->view = GTK_TREE_VIEW(gtk_tree_view_new());

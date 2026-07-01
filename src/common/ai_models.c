@@ -388,7 +388,7 @@ static gboolean _setup_registry(dt_ai_registry_t *registry)
   char *models = dt_ai_resolve_models_path_override();
   if(!models)
     models = g_build_filename(g_get_user_data_dir(),
-                              "darktable", "models", NULL);
+                              "libre-dt-lab", "models", NULL);
   char *cache = g_build_filename(cachedir, "ai_downloads", NULL);
 
   // attempt both before bailing so the log reports every missing dir
@@ -1564,7 +1564,7 @@ char *dt_ai_models_download_sync(const char *model_id,
     {
       char *dt_ver = _get_darktable_version_prefix();
       char *err = g_strdup_printf(
-        _("no compatible ai model release found for darktable %s"),
+        _("no compatible ai model release found for libre-dt-lab %s"),
         dt_ver ? dt_ver : darktable_package_version);
       g_free(dt_ver);
       SET_STATUS_AND_RETURN(DT_AI_MODEL_ERROR, err);

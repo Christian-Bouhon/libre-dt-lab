@@ -143,10 +143,10 @@ static int usage(const char *argv0)
 // Trying to keep the length of the text within 80 columns
 // Using 2-4 spaces for the indentation of the inline help
 
-  printf("darktable %s\n"
+  printf("libre-dt-lab %s\n"
          "Copyright (C) 2012-%s Johannes Hanika and other contributors.\n\n"
          "<https://www.darktable.org>\n"
-         "darktable is an open source photography workflow application and\n"
+         "libre-dt-lab is an open source photography workflow application and\n"
          "non-destructive raw developer for photographers.\n"
          "GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>\n"
          "This is free software: you are free to change and redistribute it.\n"
@@ -155,14 +155,14 @@ static int usage(const char *argv0)
          darktable_last_commit_year);
 
   printf("Usage:\n"
-         "  darktable [OPTIONS] [IMAGE_FILE | IMAGE_FOLDER]\n"
+         "  libre-dt-lab [OPTIONS] [IMAGE_FILE | IMAGE_FOLDER]\n"
          "\n"
          "Options:\n"
          "\n"
          "--cachedir DIR\n"
-         "    darktable keeps a cache of image thumbnails for fast image preview\n"
+         "    libre-dt-lab keeps a cache of image thumbnails for fast image preview\n"
          "    and precompiled OpenCL binaries for fast startup. By default the\n"
-         "    cache is located in $HOME/.cache/darktable/. Multiple thumbnail\n"
+         "    cache is located in $HOME/.cache/libre-dt-lab/. Multiple thumbnail\n"
          "    caches may exist in parallel, one for each library file.\n"
          "\n"
          "--conf KEY=VALUE\n"
@@ -171,33 +171,33 @@ static int usage(const char *argv0)
          "    on exit.\n"
          "\n"
          "--configdir DIR\n"
-         "    Where darktable stores user-specific configuration.\n"
-         "    The default location is $HOME/.config/darktable/\n"
+         "    Where libre-dt-lab stores user-specific configuration.\n"
+         "    The default location is $HOME/.config/libre-dt-lab/\n"
          "\n"
          "--datadir DIR\n"
-         "    Define the directory where darktable finds its runtime data.\n"
+         "    Define the directory where libre-dt-lab finds its runtime data.\n"
          "    The default location depends on your installation.\n"
-         "    Typical locations are /opt/darktable/share/darktable/ \n"
-         "    and /usr/share/darktable/\n"
+         "    Typical locations are /opt/libre-dt-lab/share/libre-dt-lab/ \n"
+         "    and /usr/share/libre-dt-lab/\n"
          "\n"
          "--library FILE\n"
-         "    Specifies an alternate location for darktable's image information database,\n"
+         "    Specifies an alternate location for libre-dt-lab's image information database,\n"
          "    which is stored in an SQLite file by default (library.db) in the directory\n"
-         "    specified by --configdir or $HOME/.config/darktable/. You can use this\n"
+         "    specified by --configdir or $HOME/.config/libre-dt-lab/. You can use this\n"
          "    option for experimentation without affecting your original library.db.\n"
-         "    If the specified database file doesn't exist, darktable will create it.\n"
+         "    If the specified database file doesn't exist, libre-dt-lab will create it.\n"
          "\n"
-         "    When darktable starts, it locks the library to the current user by writing\n"
+         "    When libre-dt-lab starts, it locks the library to the current user by writing\n"
          "    the process identifier (PID) to a lock file named FILE.lock next to the\n"
-         "    specified library. If a lock file already exists, darktable will exit.\n"
+         "    specified library. If a lock file already exists, libre-dt-lab will exit.\n"
          "\n"
          "    :memory: -> Use this option as FILE to keep the database in system memory,\n"
-         "    discarding changes on darktable termination.\n"
+         "    discarding changes on libre-dt-lab termination.\n"
          "\n"
          "--localedir DIR\n"
-         "    Define where darktable can find its language-specific text\n"
+         "    Define where libre-dt-lab can find its language-specific text\n"
          "    strings. The default location depends on your installation.\n"
-         "    Typical locations are /opt/darktable/share/locale/\n"
+         "    Typical locations are /opt/libre-dt-lab/share/locale/\n"
          "    and /usr/share/locale/\n"
          "\n"
 #ifdef USE_LUA
@@ -1608,10 +1608,10 @@ int dt_init(int argc,
           "\n"
           "%s\n"
           "\n"
-          "please fix this and then run darktable again"), which_failed);
-      dt_gui_show_standalone_yes_no_dialog(_("darktable - unable to create directories"),
+           "please fix this and then run libre-dt-lab again"), which_failed);
+      dt_gui_show_standalone_yes_no_dialog(_("libre-dt-lab - unable to create directories"),
                                            user_dirs_failure_text,
-                                           _("_quit darktable"),
+                                           _("_quit libre-dt-lab"),
                                            NULL);
       // There is no REAL need to free the string before exiting, but we do it
       // to avoid creating a code pattern that could be mistakenly copy-pasted
@@ -2543,11 +2543,11 @@ void dt_configure_runtime_performance(const int old, char *info)
   if(old < 5)
   {
     g_strlcat(info, INFO_HEADER, DT_PERF_INFOSIZE);
-    g_strlcat(info, _("the user interface and the underlying internals for tuning darktable performance have changed."), DT_PERF_INFOSIZE);
+    g_strlcat(info, _("the user interface and the underlying internals for tuning libre-dt-lab performance have changed."), DT_PERF_INFOSIZE);
     g_strlcat(info, "\n", DT_PERF_INFOSIZE);
     g_strlcat(info, _("you won't find headroom and friends any longer, instead in preferences/processing use:"), DT_PERF_INFOSIZE);
     g_strlcat(info, "\n  ", DT_PERF_INFOSIZE);
-    g_strlcat(info, _("1) darktable resources"), DT_PERF_INFOSIZE);
+    g_strlcat(info, _("1) libre-dt-lab resources"), DT_PERF_INFOSIZE);
     g_strlcat(info, "\n  ", DT_PERF_INFOSIZE);
     g_strlcat(info, _("2) tune OpenCL performance"), DT_PERF_INFOSIZE);
     g_strlcat(info, "\n\n", DT_PERF_INFOSIZE);

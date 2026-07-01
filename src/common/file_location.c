@@ -194,7 +194,7 @@ gboolean dt_loc_init_user_config_dir(const char *configdir)
   char *default_config_dir = g_build_filename(g_get_user_config_dir(), "libre-dt-lab", NULL);
   darktable.configdir = dt_loc_init_generic(configdir, NULL, default_config_dir);
   g_free(default_config_dir);
-  return dt_check_opendir("darktable.configdir", darktable.configdir);
+  return dt_check_opendir("libre-dt-lab.configdir", darktable.configdir);
 }
 
 gboolean dt_loc_init_tmp_dir(const char *tmpdir)

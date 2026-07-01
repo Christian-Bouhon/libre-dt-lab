@@ -601,7 +601,7 @@ static void _import_clicked(GtkWidget *w, dt_lib_styles_t *d)
   filter = GTK_FILE_FILTER(gtk_file_filter_new());
   gtk_file_filter_add_pattern(filter, "*.dtstyle");
   gtk_file_filter_add_pattern(filter, "*.DTSTYLE");
-  gtk_file_filter_set_name(filter, _("darktable style files"));
+  gtk_file_filter_set_name(filter, _("libre-dt-lab style files"));
   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(filechooser), filter);
 
   filter = GTK_FILE_FILTER(gtk_file_filter_new());

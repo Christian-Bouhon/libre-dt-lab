@@ -1322,7 +1322,7 @@ static void _show_ort_probe_result(GtkWindow *parent, const char *path, const ch
     dlg = gtk_message_dialog_new(parent,
       GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
       GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
-      _("ONNX Runtime %s detected.\nRestart darktable to apply."), version);
+      _("ONNX Runtime %s detected.\nRestart libre-dt-lab to apply."), version);
   else
     dlg = gtk_message_dialog_new(parent,
       GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
@@ -1370,7 +1370,7 @@ static void _on_detect_system_ort(GtkButton *button, gpointer user_data)
       GTK_WINDOW(data->parent_dialog),
       GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
       GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
-      _("ONNX Runtime %s [%s]\n%s\n\nRestart darktable to apply."),
+      _("ONNX Runtime %s [%s]\n%s\n\nRestart libre-dt-lab to apply."),
       f->version, f->eps, f->path);
     gtk_dialog_run(GTK_DIALOG(dlg));
     gtk_widget_destroy(dlg);

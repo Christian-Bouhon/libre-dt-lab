@@ -542,7 +542,7 @@ static uint16_t _calculate_clut_haldclut(dt_iop_lut3d_params_t *const p,
     if(png.height == 2)
     {
       dt_print(DT_DEBUG_ALWAYS, "[lut3d] this darktable build is not compatible with compressed CLUT");
-      dt_control_log(_("this darktable build is not compatible with compressed CLUT"));
+      dt_control_log(_("this libre-dt-lab build is not compatible with compressed CLUT"));
     }
     else
     {

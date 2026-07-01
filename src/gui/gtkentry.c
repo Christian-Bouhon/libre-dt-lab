@@ -116,8 +116,8 @@ static dt_gtkentry_completion_spec _default_path_compl_list[]
       { "OPENCL.ACTIVATED", N_("$(OPENCL.ACTIVATED) - whether OpenCL is activated") },
       { "CATEGORY[,]", N_("$(CATEGORY[n,category]) - subtag of level n in hierarchical tags") },
       { "TAGS", N_("$(TAGS) - tags as set in metadata settings") },
-      { "DARKTABLE.NAME", N_("$(DARKTABLE.NAME) - darktable name") },
-      { "DARKTABLE.VERSION", N_("$(DARKTABLE.VERSION) - current darktable version") },
+      { "DARKTABLE.NAME", N_("$(DARKTABLE.NAME) - libre-dt-lab name") },
+      { "DARKTABLE.VERSION", N_("$(DARKTABLE.VERSION) - current libre-dt-lab version") },
       { "SIDECAR_TXT", N_("$(SIDECAR_TXT) - contents of .txt sidecar file, if present") },
       { "WORKSPACE.LABEL", N_("$(WORKSPACE.LABEL) - label of the current workspace") },
       { NULL, NULL } };

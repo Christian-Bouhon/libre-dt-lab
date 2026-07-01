@@ -321,7 +321,7 @@ static cmsHPROFILE _create_lcms_profile(const char *desc,
   cmsMLUsetASCII(mlu3, "en", "US", dmdd);
   cmsWriteTag(profile, cmsSigDeviceModelDescTag, mlu3);
 
-  cmsMLUsetASCII(mlu4, "en", "US", "darktable");
+  cmsMLUsetASCII(mlu4, "en", "US", "libre-dt-lab");
   cmsWriteTag(profile, cmsSigDeviceMfgDescTag, mlu4);
 
   cmsMLUfree(mlu1);

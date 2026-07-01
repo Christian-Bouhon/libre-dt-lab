@@ -135,7 +135,7 @@ static GtkWidget *_get_logo(void)
     g_object_unref(pb);
   }
   else
-    logo = gtk_label_new("darktable");
+    logo = gtk_label_new("libre-dt-lab");
 
   gtk_widget_set_name(logo, "welcome-logo");
   gtk_widget_set_halign(logo, GTK_ALIGN_CENTER);
@@ -686,7 +686,7 @@ void dt_welcome_screen_show(dt_welcome_screen_t *ws)
   // ── static header (logo + app name) – never moves between pages ──────────
   dt_gui_box_add(GTK_BOX(content), _get_logo());
 
-  GtkWidget *app_name = gtk_label_new(_("Welcome to darktable!"));
+  GtkWidget *app_name = gtk_label_new(_("Welcome to libre-dt-lab!"));
   gtk_widget_set_name(app_name, "welcome-title");
   gtk_widget_set_halign(app_name, GTK_ALIGN_CENTER);
   dt_gui_box_add(GTK_BOX(content), app_name);
@@ -837,7 +837,7 @@ static dt_welcome_screen_t *_build_welcome_screen(void)
     (ws, page_idx, _("<b>You are all set!</b>"), TRUE);
   dt_welcome_screen_page_add_paragraph
     (ws, page_idx,
-     _("darktable is extremely configurable and has a wealth of options. "
+     _("libre-dt-lab is extremely configurable and has a wealth of options. "
        "Here we covered just the most essential ones — make sure to explore the "
        "<b>preferences</b> to get the full picture."),
      TRUE);
@@ -847,7 +847,7 @@ static dt_welcome_screen_t *_build_welcome_screen(void)
 
     /* xgettext: %s is a URL; keep <a href="%s"> and </a> unchanged */
     gchar *text = g_strdup_printf(_("Read the <a href=\"%s\">user manual</a> "
-                                    "to learn more and make the most of darktable."),
+                                    "to learn more and make the most of libre-dt-lab."),
                                   manual_url);
     dt_welcome_screen_page_add_paragraph(ws, page_idx, text, TRUE);
     g_free(text);
@@ -861,7 +861,7 @@ static dt_welcome_screen_t *_build_welcome_screen(void)
      TRUE);
 
   dt_welcome_screen_page_add_paragraph
-    (ws, page_idx, _("Happy editing with darktable!"), TRUE);
+    (ws, page_idx, _("Happy editing with libre-dt-lab!"), TRUE);
 
   return ws;
 }

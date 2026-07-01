@@ -260,7 +260,7 @@ static void _scan_all_paths(dt_ai_environment_t *env)
     g_strfreev(tokens);
   }
 
-  char *datadir = g_build_filename(g_get_user_data_dir(), "darktable", "models", NULL);
+  char *datadir = g_build_filename(g_get_user_data_dir(), "libre-dt-lab", "models", NULL);
   _scan_directory(env, datadir);
   g_free(datadir);
 }

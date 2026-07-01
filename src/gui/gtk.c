@@ -191,8 +191,8 @@ static void _fullscreen_key_accel_callback(dt_action_t *action)
   // workaround for GTK Quartz backend bug
   gtk_window_set_title(GTK_WINDOW(widget),
                        widget == dt_ui_main_window(darktable.gui->ui)
-                       ? "darktable"
-                       : _("darktable - darkroom preview"));
+                       ? "Libre DT-Lab"
+                       : _("libre-dt-lab - darkroom preview"));
 #endif
 }
 
@@ -1447,7 +1447,7 @@ int dt_gui_theme_init(dt_gui_gtk_t *gui)
     g_strlcpy(gui->gtkrc, css_theme, sizeof(gui->gtkrc));
   }
   else
-    g_snprintf(gui->gtkrc, sizeof(gui->gtkrc), "darktable");
+    g_snprintf(gui->gtkrc, sizeof(gui->gtkrc), "libre-dt-lab");
   // actually load the theme
   dt_gui_load_theme(gui->gtkrc);
   return 1;
@@ -1563,14 +1563,14 @@ int dt_gui_gtk_init(dt_gui_gtk_t *gui)
   gtk_widget_show(help_root_menu);
 
   GtkWidget *help_menu = gtk_menu_new();
-  GtkWidget *help_manual = gtk_menu_item_new_with_label(C_("menu", "darktable Manual"));
+  GtkWidget *help_manual = gtk_menu_item_new_with_label(C_("menu", "libre-dt-lab Manual"));
   gtk_menu_shell_append(GTK_MENU_SHELL(help_menu), help_manual);
   gtk_widget_show(help_manual);
   dt_gui_add_help_link(help_manual, "document_root");
   g_signal_connect(G_OBJECT(help_manual), "activate",
                    G_CALLBACK(dt_gui_show_help), help_manual);
 
-  GtkWidget *help_home = gtk_menu_item_new_with_label(C_("menu", "darktable Homepage"));
+  GtkWidget *help_home = gtk_menu_item_new_with_label(C_("menu", "libre-dt-lab Homepage"));
   gtk_menu_shell_append(GTK_MENU_SHELL(help_menu), help_home);
   gtk_widget_show(help_home);
   g_signal_connect(G_OBJECT(help_home), "activate",
@@ -3305,7 +3305,7 @@ gboolean dt_gui_show_standalone_yes_no_dialog(const char *title,
   // themes not yet loaded, no CSS add some manual padding
   const int padding = darktable.themes ? 0 : 5;
 
-  gtk_window_set_icon_name(GTK_WINDOW(window), "darktable");
+  gtk_window_set_icon_name(GTK_WINDOW(window), "libre-dt-lab");
   gtk_window_set_title(GTK_WINDOW(window), title);
   g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 
@@ -3398,7 +3398,7 @@ char *dt_gui_show_standalone_string_dialog(const char *title,
   dt_osx_disallow_fullscreen(window);
 #endif
 
-  gtk_window_set_icon_name(GTK_WINDOW(window), "darktable");
+  gtk_window_set_icon_name(GTK_WINDOW(window), "libre-dt-lab");
   gtk_window_set_title(GTK_WINDOW(window), title);
   g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), NULL);
 

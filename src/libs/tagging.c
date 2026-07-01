@@ -3565,7 +3565,7 @@ void gui_init(dt_lib_module_t *self)
      _("toggle sort by name or by count"), N_("sort"));
   d->toggle_dttags_button = NEW_TOGGLE_BUTTON
     (dtgtk_cairo_paint_check_mark, _toggle_dttags_button_callback,
-     _("toggle show or not darktable tags"), N_("dttags"));
+     _("toggle show or not libre-dt-lab tags"), N_("dttags"));
   d->dttags_flag = FALSE;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(d->toggle_dttags_button), FALSE);
 

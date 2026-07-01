@@ -314,7 +314,7 @@ void finalize_store(dt_imageio_module_storage_t *self,
   MapiMessage m_msg;
   ZeroMemory(&m_msg, sizeof (m_msg));
   m_msg.lpszSubject = (LPSTR) _convert_to_widechar(CP_UTF8,
-                                                   _("images exported from darktable"));
+                                                   _("images exported from libre-dt-lab"));
   m_msg.lpszNoteText = (LPSTR) _convert_to_widechar(CP_ACP, body);
 
   m_msg.nFileCount = num_images;
@@ -404,7 +404,7 @@ void finalize_store(dt_imageio_module_storage_t *self,
 
   argv[0] = "xdg-email";
   argv[1] = "--subject";
-  argv[2] = _("images exported from darktable");
+  argv[2] = _("images exported from libre-dt-lab");
   argv[3] = "--body";
   int n = 5;
 

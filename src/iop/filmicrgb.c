@@ -4585,7 +4585,7 @@ void gui_init(dt_iop_module_t *self)
   // Color science
   g->version = dt_bauhaus_combobox_from_params(self, "version");
   gtk_widget_set_tooltip_text(g->version,
-                              _("v3 is darktable 3.0 desaturation method, same as color balance.\n"
+                              _("v3 is libre-dt-lab 3.0 desaturation method, same as color balance.\n"
                                 "v4 is a newer desaturation method, based on spectral purity of light."));
 
   g->preserve_color = dt_bauhaus_combobox_from_params(self, "preserve_color");

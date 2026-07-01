@@ -58,8 +58,8 @@
 
 #include <string.h>
 
-static const gchar *app_id = "darktable";
-static const gchar *kwallet_folder = "darktable credentials";
+static const gchar *app_id = "libre-dt-lab";
+static const gchar *kwallet_folder = "libre-dt-lab credentials";
 
 static const gchar *kwallet_service_name = "org.kde.kwalletd";
 static const gchar *kwallet_path = "/modules/kwalletd";

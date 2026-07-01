@@ -621,7 +621,7 @@ void gui_init(dt_lib_module_t *self)
   META_FLAG_BUTTON(N_("colors"),   colors,   3, _("select colors metadata"));
   META_FLAG_BUTTON(N_("tags"),     tags,     0, _("select tags metadata"));
   META_FLAG_BUTTON(N_("geo tags"), geotags,  3, _("select geo tags metadata"));
-  META_FLAG_BUTTON(N_("metadata"), metadata, 0, _("select darktable metadata (from metadata editor module)"));
+  META_FLAG_BUTTON(N_("metadata"), metadata, 0, _("select libre-dt-lab metadata (from metadata editor module)"));
 
   d->copy_metadata_button = dt_action_button_new
     (meta, N_("copy"),

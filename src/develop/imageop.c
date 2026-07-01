@@ -3422,7 +3422,7 @@ static void _gui_detach(dt_iop_module_t *module)
   // create detach window
   GtkWidget *win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   char title[256];
-  snprintf(title, sizeof(title), "%s — %s", module->name(), _("darktable"));
+  snprintf(title, sizeof(title), "%s — %s", module->name(), _("libre-dt-lab"));
   gtk_window_set_title(GTK_WINDOW(win), title);
   gtk_window_set_default_size(GTK_WINDOW(win), 400, 500);
   gtk_window_set_transient_for(GTK_WINDOW(win),

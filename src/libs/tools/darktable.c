@@ -61,7 +61,7 @@ static gboolean _lib_darktable_button_press_callback(GtkWidget *widget,
 
 const char *name(dt_lib_module_t *self)
 {
-  return _("darktable");
+  return _("libre-dt-lab");
 }
 
 dt_view_type_flags_t views(dt_lib_module_t *self)

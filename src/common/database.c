@@ -3878,7 +3878,7 @@ void dt_database_show_error(const dt_database_t *db, const char *dblabel)
     // clang-format on
 
     gboolean delete_lockfiles =
-      dt_gui_show_standalone_yes_no_dialog(_("error starting darktable"),
+      dt_gui_show_standalone_yes_no_dialog(_("error starting libre-dt-lab"),
                                            label_text,
                                            _("_cancel"),
                                            _("_delete database lock files"));
@@ -3905,7 +3905,7 @@ void dt_database_show_error(const dt_database_t *db, const char *dblabel)
         if(status==0)
           dt_gui_show_standalone_yes_no_dialog
             (_("done"),
-             _("\nsuccessfully deleted the lock files.\nyou can now restart darktable\n"),
+             _("\nsuccessfully deleted the lock files.\nyou can now restart libre-dt-lab\n"),
              _("_ok"), NULL);
         else
           dt_gui_show_standalone_yes_no_dialog
@@ -3962,7 +3962,7 @@ static gboolean pid_is_alive(int pid)
 
     if(g_file_get_contents("", &contents, &length, NULL))
     {
-      if(strstr(contents, "darktable") == NULL)
+      if(strstr(contents, "libre-dt-lab") == NULL)
       {
         pid_is_alive = FALSE;
       }
@@ -4130,11 +4130,11 @@ static void _too_new_db_version(const gchar *dbname,
        "\n"
        "<span style='italic'>%s</span>\n"
        "\n"
-       "is too new for this build of darktable "
-       "(this means the database was created or upgraded by a newer darktable version)\n"),
+"is too new for this build of libre-dt-lab "
+        "(this means the database was created or upgraded by a newer libre-dt-lab version)\n"),
        dbname);
-  dt_gui_show_standalone_yes_no_dialog(_("darktable - too new db version"), label_text,
-                                         _("_quit darktable"), NULL);
+  dt_gui_show_standalone_yes_no_dialog(_("libre-dt-lab - too new db version"), label_text,
+                                          _("_quit libre-dt-lab"), NULL);
   g_free(label_text);
 }
 
@@ -4158,8 +4158,8 @@ static void _ask_for_upgrade(const gchar *dbname,
                                                dbname);
 
   gboolean shall_we_update_the_db =
-    dt_gui_show_standalone_yes_no_dialog(_("darktable - schema migration"), label_text,
-                                         _("_close darktable"), _("_upgrade database"));
+    dt_gui_show_standalone_yes_no_dialog(_("libre-dt-lab - schema migration"), label_text,
+                                         _("_close libre-dt-lab"), _("_upgrade database"));
 
   g_free(label_text);
 
@@ -4326,17 +4326,17 @@ start:
     if(has_gui)
     {
       char *readonly_db_text = g_markup_printf_escaped(
-        _("you do not have write access to at least one of the darktable databases:\n"
+        _("you do not have write access to at least one of the libre-dt-lab databases:\n"
           "\n"
           "<span style='italic'>%s</span>\n"
           "<span style='italic'>%s</span>\n"
           "\n"
-          "please fix this and then run darktable again"),
+          "please fix this and then run libre-dt-lab again"),
         dbfilename_library,
         dbfilename_data);
-      dt_gui_show_standalone_yes_no_dialog(_("darktable - read-only database detected"),
+      dt_gui_show_standalone_yes_no_dialog(_("libre-dt-lab - read-only database detected"),
                                            readonly_db_text,
-                                           _("_quit darktable"),
+                                           _("_quit libre-dt-lab"),
                                            NULL);
       // There is no REAL need to free the string before exiting, but we do it
       // to avoid creating a code pattern that could be mistakenly copy-pasted
@@ -4514,29 +4514,29 @@ start:
 
       if(data_snap)
       {
-        dialog = gtk_dialog_new_with_buttons(_("darktable - error opening database"),
+        dialog = gtk_dialog_new_with_buttons(_("libre-dt-lab - error opening database"),
                                             NULL,
                                             dflags,
-                                            _("_close darktable"), GTK_RESPONSE_CLOSE,
+                                            _("_close libre-dt-lab"), GTK_RESPONSE_CLOSE,
                                             _("_attempt restore"), GTK_RESPONSE_ACCEPT,
                                             _("_delete database"), GTK_RESPONSE_REJECT,
                                             NULL);
         gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
-        label_options = _("do you want to close darktable now to manually restore\n"
+        label_options = _("do you want to close libre-dt-lab now to manually restore\n"
                           "the database from a backup, attempt an automatic restore\n"
                           "from the most recent snapshot or delete the corrupted database\n"
                           "and start with a new one?");
       }
       else
       {
-        dialog = gtk_dialog_new_with_buttons(_("darktable - error opening database"),
+        dialog = gtk_dialog_new_with_buttons(_("libre-dt-lab - error opening database"),
                                             NULL,
                                             dflags,
-                                            _("_close darktable"), GTK_RESPONSE_CLOSE,
+                                            _("_close libre-dt-lab"), GTK_RESPONSE_CLOSE,
                                             _("_delete database"), GTK_RESPONSE_REJECT,
                                             NULL);
         gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);
-        label_options = _("do you want to close darktable now to manually restore\n"
+        label_options = _("do you want to close libre-dt-lab now to manually restore\n"
                           "the database from a backup or delete the corrupted database\n"
                           "and start with a new one?");
       }
@@ -4688,29 +4688,29 @@ start:
 
     if(data_snap)
     {
-      dialog = gtk_dialog_new_with_buttons(_("darktable - error opening database"),
+      dialog = gtk_dialog_new_with_buttons(_("libre-dt-lab - error opening database"),
                                           NULL,
                                           dflags,
-                                          _("_close darktable"), GTK_RESPONSE_CLOSE,
+                                          _("_close libre-dt-lab"), GTK_RESPONSE_CLOSE,
                                           _("_attempt restore"), GTK_RESPONSE_ACCEPT,
                                           _("_delete database"), GTK_RESPONSE_REJECT,
                                           NULL);
       gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
-      label_options = _("do you want to close darktable now to manually restore\n"
+      label_options = _("do you want to close libre-dt-lab now to manually restore\n"
                         "the database from a backup, attempt an automatic restore\n"
                         "from the most recent snapshot or delete the corrupted database\n"
                         "and start with a new one?");
     }
     else
     {
-      dialog = gtk_dialog_new_with_buttons(_("darktable - error opening database"),
+      dialog = gtk_dialog_new_with_buttons(_("libre-dt-lab - error opening database"),
                                           NULL,
                                           dflags,
-                                          _("_close darktable"), GTK_RESPONSE_CLOSE,
+                                          _("_close libre-dt-lab"), GTK_RESPONSE_CLOSE,
                                           _("_delete database"), GTK_RESPONSE_REJECT,
                                           NULL);
       gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);
-      label_options = _("do you want to close darktable now to manually restore\n"
+      label_options = _("do you want to close libre-dt-lab now to manually restore\n"
                         "the database from a backup or delete the corrupted database\n"
                         "and start with a new one?");
     }

@@ -132,7 +132,7 @@ const char **description(dt_iop_module_t *self)
      _("harmonize colors toward a selected palette in perceptual space"),
      _("creative color grading"),
      _("linear, RGB, scene-referred"),
-     _("darktable UCS / JCH (perceptual)"),
+     _("libre-dt-lab UCS / JCH (perceptual)"),
      _("linear, RGB, scene-referred"));
 }
 

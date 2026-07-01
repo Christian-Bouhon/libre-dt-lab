@@ -3514,7 +3514,7 @@ static void _populate_collect_combo(GtkWidget *w)
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_EXPOSURE_PROGRAM);
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_METERING_MODE);
 
-    dt_bauhaus_combobox_add_section(w, _("darktable"));
+    dt_bauhaus_combobox_add_section(w, _("libre-dt-lab"));
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_GROUP_ID);
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_LOCAL_COPY);
     ADD_COLLECT_ENTRY(DT_COLLECTION_PROP_HISTORY);

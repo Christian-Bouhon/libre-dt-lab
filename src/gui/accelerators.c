@@ -2798,7 +2798,7 @@ static void _import_extended_clicked(GtkButton *button, gpointer user_data)
      _("_ok"), GTK_RESPONSE_OK,
      NULL);
   gtk_dialog_set_default_response(GTK_DIALOG(dialog), GTK_RESPONSE_REJECT);
-  GtkWidget *label = gtk_label_new(_("add darktable sample shortcuts?\n"
+  GtkWidget *label = gtk_label_new(_("add libre-dt-lab sample shortcuts?\n"
                                      "\n"
                                      "this will overwrite any existing shortcuts\n"
                                      "using the same key+mouse combinations!\n"

@@ -582,7 +582,7 @@ void dt_gui_preferences_show()
   dt_stop_backthumbs_crawler(FALSE);
   GtkWindow *win = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
   _preferences_dialog =
-    gtk_dialog_new_with_buttons(_("darktable preferences"), win,
+    gtk_dialog_new_with_buttons(_("libre-dt-lab preferences"), win,
                                 GTK_DIALOG_DESTROY_WITH_PARENT | GTK_DIALOG_MODAL,
                                 NULL, NULL);
   dt_gui_dialog_restore_size(GTK_DIALOG(_preferences_dialog), "preferences");
@@ -645,7 +645,7 @@ void dt_gui_preferences_show()
   gtk_widget_destroy(_preferences_dialog);
 
   if(restart_required)
-    dt_control_log(_("darktable needs to be restarted for settings to take effect"));
+    dt_control_log(_("libre-dt-lab needs to be restarted for settings to take effect"));
 
   dt_start_backthumbs_crawler();
   DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_PREFERENCES_CHANGE);
@@ -1227,7 +1227,7 @@ static void import_preset(GtkButton *button,
   filter = GTK_FILE_FILTER(gtk_file_filter_new());
   gtk_file_filter_add_pattern(filter, "*.dtpreset");
   gtk_file_filter_add_pattern(filter, "*.DTPRESET");
-  gtk_file_filter_set_name(filter, _("darktable preset files"));
+  gtk_file_filter_set_name(filter, _("libre-dt-lab preset files"));
   gtk_file_chooser_add_filter(GTK_FILE_CHOOSER(chooser), filter);
 
   filter = GTK_FILE_FILTER(gtk_file_filter_new());
