@@ -3005,7 +3005,7 @@ static gboolean _funnel_pressed(GtkWidget *widget,
     gtk_widget_set_name(pop, "modulegroups-popup");
 
     struct { const char *label; int idx; } items[] = {
-      { _("display-referred (legacy)"), 0 },
+      { _("none"),                      0 },
       { "filmicrgb",                    1 },
       { "sigmoid",                      2 },
       { "AgX",                          3 },

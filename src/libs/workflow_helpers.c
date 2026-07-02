@@ -92,7 +92,7 @@ void dt_workflow_selector_set(const int selected)
   const char *op = NULL;
   switch(selected)
   {
-    case 0: name = "display-referred (legacy)"; op = NULL; break;
+    case 0: name = "none"; op = NULL; break;
     case 1: name = "scene-referred (filmic)";   op = "filmicrgb"; break;
     case 2: name = "scene-referred (sigmoid)";  op = "sigmoid"; break;
     case 3: name = "scene-referred (AgX)";      op = "agx"; break;
