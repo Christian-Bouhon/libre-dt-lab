@@ -43,6 +43,8 @@
 #include "color_conversion.h"
 #include "rgb_norms.h"
 
+#define EXPOSURE_BOOST_EV 0.25f
+
 /*
   Narkowicz (2016) rational approximation of the ACES RRT+ODT curve for sRGB output.
   Widely used in real-time rendering for its simplicity and visual quality.
@@ -507,9 +509,9 @@ const float contrast_brilliance_power,
 
       const float x_scaled = y_in / k;
       if(workflow_mode == 1)
-        y_out = _aces_tone_map(x_scaled) * k;
+        y_out = _aces_tone_map(x_scaled * exp2(EXPOSURE_BOOST_EV)) * k;
       else
-        y_out = ACES_RRT_ODT_tonemap(x_scaled * 2.0f) * k;
+        y_out = ACES_RRT_ODT_tonemap(x_scaled * 2.0f * exp2(EXPOSURE_BOOST_EV)) * k;
     }
     else if(workflow_mode == 3)
     {

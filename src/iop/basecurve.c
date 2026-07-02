@@ -73,6 +73,7 @@
 #define MAXNODES 20
 
 #define ACES_EXPOSURE_ADJUST 2.0f
+#define EXPOSURE_BOOST_EV    0.25f
 #define ROLLOFF_THRESHOLD 0.80f
 
 DT_MODULE_INTROSPECTION(12, dt_iop_basecurve_params_t)
@@ -1675,9 +1676,9 @@ static void apply_postprocess(float *rgb, dt_iop_basecurve_data_t *const d,
     const float x_scaled = y_in / k_scale;
 
     if(d->workflow_mode == 1)
-      y_out = _aces_tone_map(x_scaled) * k_scale;
+      y_out = _aces_tone_map(x_scaled * exp2f(EXPOSURE_BOOST_EV)) * k_scale;
     else
-      y_out = ACES_RRT_ODT_tonemap(x_scaled * ACES_EXPOSURE_ADJUST) * k_scale;
+      y_out = ACES_RRT_ODT_tonemap(x_scaled * ACES_EXPOSURE_ADJUST * exp2f(EXPOSURE_BOOST_EV)) * k_scale;
   }
   else if(d->workflow_mode == 3)
   {
