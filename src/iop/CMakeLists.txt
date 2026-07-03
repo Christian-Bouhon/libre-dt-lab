@@ -146,6 +146,7 @@ endif(GMIC_FOUND)
 add_iop(toneequal "toneequal.c" DEFAULT_VISIBLE)
 add_iop(filmicrgb "filmicrgb.c")
 add_iop(3dcf "3dcf.c")
+add_iop(aces20 "aces20.c")
 add_iop(spectral_tone "spectral_tone.c")
 # Single translation unit — spectral_tone_data.c and spectral_tone_pipeline.c
 # have been merged into 3dcf.c for Windows/MinGW compatibility.

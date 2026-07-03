@@ -144,6 +144,7 @@ const dt_iop_order_entry_t legacy_order[] = {
   { {45.3f }, "sigmoid", 0},
   { {45.5f }, "agx", 0},
   { {45.7f }, "3dcf", 0},
+  { {45.75f }, "aces20", 0},
   { {45.8f }, "spectral_tone", 0},
   { {46.0f }, "filmic", 0},
   { {46.5f }, "filmicrgb", 0},
@@ -262,6 +263,7 @@ const dt_iop_order_entry_t v30_order[] = {
   { {45.3f }, "sigmoid", 0},
   { {45.5f }, "agx", 0},
   { {45.7f }, "3dcf", 0},
+  { {45.75f }, "aces20", 0},
   { {45.8f }, "spectral_tone", 0},
   { {46.0f }, "filmicrgb", 0},       // same, upgraded
   { {36.0f }, "lut3d", 0},           // apply a creative style or film emulation, possibly non-linear
@@ -384,6 +386,7 @@ const dt_iop_order_entry_t v50_order[] = {
   { {45.3f }, "sigmoid", 0},
   { {45.5f }, "agx", 0},
   { {45.7f }, "3dcf", 0},
+  { {45.75f }, "aces20", 0},
   { {45.8f }, "spectral_tone", 0},
   { {46.0f }, "filmicrgb", 0},       // same, upgraded
   { {36.0f }, "lut3d", 0},           // apply a creative style or film emulation, possibly non-linear
@@ -507,6 +510,7 @@ const dt_iop_order_entry_t v30_jpg_order[] = {
   { { 45.3f }, "sigmoid", 0},
   { {45.5f }, "agx", 0},
   { {45.7f }, "3dcf", 0},
+  { {45.75f }, "aces20", 0},
   { {45.8f }, "spectral_tone", 0},
   { { 46.0f }, "filmicrgb", 0 },     // same, upgraded
   { { 36.0f }, "lut3d", 0 },         // apply a creative style or film emulation, possibly non-linear
@@ -632,6 +636,7 @@ const dt_iop_order_entry_t v50_jpg_order[] = {
   { { 45.3f }, "sigmoid", 0},
   { {45.5f }, "agx", 0},
   { {45.7f }, "3dcf", 0},
+  { {45.75f }, "aces20", 0},
   { {45.8f }, "spectral_tone", 0},
   { { 46.0f }, "filmicrgb", 0 },     // same, upgraded
   { { 36.0f }, "lut3d", 0 },         // apply a creative style or film emulation, possibly non-linear
@@ -755,6 +760,7 @@ void dt_ioppr_migrate_legacy_iop_order_list(GList *iop_order_list)
   _insert_before(iop_order_list, "highlights", "rasterfile");
   _insert_before(iop_order_list, "colorbalance", "colorharmonizer");
   _insert_before(iop_order_list, "filmicrgb", "3dcf");
+  _insert_before(iop_order_list, "filmicrgb", "aces20");
   _insert_before(iop_order_list, "filmicrgb", "spectral_tone");
 }
 

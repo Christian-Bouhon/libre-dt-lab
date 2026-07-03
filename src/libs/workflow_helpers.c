@@ -28,7 +28,7 @@
 
 static const char *_tm_ops[] =
 {
-  "filmicrgb", "sigmoid", "agx", "basecurve", "3dcf", NULL
+  "filmicrgb", "sigmoid", "agx", "basecurve", "3dcf", "aces20", NULL
 };
 
 static dt_iop_module_t *_find_module(const char *op)
@@ -99,6 +99,7 @@ void dt_workflow_selector_set(const int selected)
     case 3: name = "scene-referred (AgX)";      op = "agx"; break;
     case 4: name = "scene-referred (basecurve)";op = "basecurve"; break;
     case 5: name = "scene-referred (3DCF)";     op = "3dcf"; break;
+    case 6: name = "scene-referred (ACES 2.0)"; op = "aces20"; break;
     default: return;
   }
 

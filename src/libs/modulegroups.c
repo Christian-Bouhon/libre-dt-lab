@@ -1513,6 +1513,13 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
         AM("3dcf/spectral brilliance");                                                                  \
         AM("3dcf/color look");                                                                           \
       }                                                                                                           \
+      else if(wf_aces20)                                                                                 \
+      {                                                                                                           \
+        AM("aces20/odt");                                                                                \
+        AM("aces20/peak luminance (nits)");                                                               \
+        AM("aces20/exposure (EV)");                                                                      \
+        AM("aces20/gamut compression");                                                                  \
+      }                                                                                                           \
       AM("channelmixerrgb/temperature");                                                                          \
       AM("channelmixerrgb/chroma");                                                                               \
       AM("channelmixerrgb/hue");                                                                                  \
@@ -1574,6 +1581,8 @@ void init_presets(dt_lib_module_t *self)
     dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (basecurve)");
   const gboolean wf_3dcf =
     dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (3DCF)");
+  const gboolean wf_aces20 =
+    dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (ACES 2.0)");
   const gboolean wf_none =
     dt_conf_is_equal("plugins/darkroom/workflow", "none");
 
@@ -1687,6 +1696,7 @@ void init_presets(dt_lib_module_t *self)
     else if(wf_agx) AM("agx");
     else if(wf_basecurve) AM("basecurve");
     else if(wf_3dcf) AM("3dcf");
+    else if(wf_aces20) AM("aces20");
     else AM("sigmoid");
   }
   else
@@ -1786,6 +1796,9 @@ void init_presets(dt_lib_module_t *self)
     AM("basecurve");
   if(wf_3dcf || wf_none)
     AM("3dcf");
+  if(wf_aces20 || wf_none)
+    AM("aces20");
+  AM("aces20");
   AM("toneequal");
   AM("crop");
   AM("ashift");
@@ -1891,6 +1904,8 @@ static gchar *_presets_get_minimal(dt_lib_module_t *self)
                                                "scene-referred (basecurve)");
   const gboolean wf_3dcf = dt_conf_is_equal("plugins/darkroom/workflow",
                                                "scene-referred (3DCF)");
+  const gboolean wf_aces20 = dt_conf_is_equal("plugins/darkroom/workflow",
+                                               "scene-referred (ACES 2.0)");
 
   // all modules
   gchar *tx = NULL;
@@ -1912,6 +1927,8 @@ static gchar *_presets_get_minimal(dt_lib_module_t *self)
       AM("basecurve");
     else if(wf_3dcf)
       AM("3dcf");
+    else if(wf_aces20)
+      AM("aces20");
   }
   else
     AM("basecurve");
