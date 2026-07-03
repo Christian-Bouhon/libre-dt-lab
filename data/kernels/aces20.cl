@@ -19,11 +19,12 @@
     ACES 2.0 CAM DRT Reference Rendering — OpenCL Kernel
 
     Full ACES 2.0 CAM DRT pipeline (Hellwig 2022):
-      pipe_RGB → AP1
-      → SSTS per-channel on AP1 → display-referred AP1
-      → XYZ abs nits (×100) → Hellwig JMh
-      → Chroma compression (J unchanged by tone mapping)
-      → XYZ(D60) → AP1 (÷100 to display-referred)
+      pipe_RGB → AP1 → XYZ (D60)
+      → ×100 to absolute nits → Hellwig JMh
+      → Tonemap & compress in JMh:
+          J → Y → tonescale(Y) → J' (display J)
+          M ← chroma_compress(M, J', orig_J)
+      → XYZ(D60) → /100 → AP1 (D60)
       → Gamut compression → pipe_RGB
     ---------------------------------------------------------------------------
 */
@@ -76,12 +77,6 @@ __constant float dt_ac_panlrcm[9] =
 #define DT_AC_SURR_C      0.59f
 #define DT_AC_SURR_NC     0.9f
 
-#define DT_AC_LIMIT_JMAX 100.0f
-#define DT_AC_MODEL_GAMMA 0.8794641436f
-#define DT_AC_COMPR        2.4f
-#define DT_AC_SAT          1.3f
-#define DT_AC_SAT_THR      0.005f
-#define DT_AC_CC_SCALE     1.000053f
 #define DT_AC_REF_LUM    100.0f
 
 /* AP1 reach table (360 entries) */
@@ -162,7 +157,13 @@ typedef struct
   float ssts_t_1;
   float ssts_n_r;
   float ssts_n;
-  int   _pad[8];
+  float model_gamma_inv;
+  float chroma_compress_scale;
+  float cc_sat;
+  float cc_sat_thr;
+  float cc_compr;
+  float limit_j_max;
+  int   _pad[9];
 } dt_ac_cl_params_t;
 
 /* ====================================================================
@@ -232,7 +233,7 @@ static inline float chroma_norm(float h)
   const float m = 11.34072f * a + 16.46899f * a2 + 7.88380f * a3
                 + 14.66441f * b - 6.37224f * b2 + 9.19364f * b3
                 + 77.12896f;
-  return m * DT_AC_CC_SCALE;
+  return m;
 }
 
 /* ====================================================================
@@ -344,7 +345,30 @@ static inline void jmh_to_xyz(__private const float jmh[3],
  * Chroma Compression
  * ==================================================================== */
 
-static inline void chroma_compress(__private float jmh[3], float orig_j)
+/* ====================================================================
+ * Hellwig CAM — Lightness J ↔ Luminance Y
+ * ==================================================================== */
+
+static inline float y_to_j(float y, float f_l, float a_w, float z)
+{
+  if(y <= 0.0f) return 0.0f;
+  const float fl_y = pow(f_l * fabs(y) / 100.0f, 0.42f);
+  const float a_y = (400.0f * fl_y) / (27.13f + fl_y);
+  return 100.0f * pow(fmax(a_y, 0.0f) / a_w, DT_AC_SURR_C * z);
+}
+
+static inline float j_to_y(float j, float f_l, float a_w, float z)
+{
+  if(j <= 0.0f) return 0.0f;
+  const float A = a_w * pow(j / 100.0f, 1.0f / (DT_AC_SURR_C * z));
+  const float abs_a = fabs(A);
+  if(abs_a < 1e-12f) return 0.0f;
+  return (100.0f / f_l) * pow((27.13f * abs_a) / (400.0f - min(abs_a, 399.9f)),
+                               1.0f / 0.42f);
+}
+
+static inline void chroma_compress(__private float jmh[3], float orig_j,
+                                    __private const dt_ac_cl_params_t *p)
 {
   const float j = fmax(jmh[0], 1e-12f);
   float m = jmh[1];
@@ -352,24 +376,48 @@ static inline void chroma_compress(__private float jmh[3], float orig_j)
 
   if(m <= 0.0f) return;
 
-  m *= pow(j / fmax(orig_j, 1e-12f), DT_AC_MODEL_GAMMA);
+  m *= pow(j / fmax(orig_j, 1e-12f), p->model_gamma_inv);
 
-  const float m_norm = chroma_norm(h);
+  const float m_norm = chroma_norm(h) * p->chroma_compress_scale;
   m /= m_norm;
 
-  const float n_j = j / DT_AC_LIMIT_JMAX;
+  const float n_j = j / p->limit_j_max;
   const float sn_j = fmax(0.0f, 1.0f - n_j);
-  const float limit = pow(n_j, DT_AC_MODEL_GAMMA)
+  const float limit = pow(n_j, p->model_gamma_inv)
                       * reach_from_table(h) / m_norm;
 
   if(limit <= 0.0f) return;
 
   m = limit - gamma_toe(limit - m, limit - 0.001f,
-                         sn_j * DT_AC_SAT,
-                         sqrt(n_j * n_j + DT_AC_SAT_THR), 0);
-  m = gamma_toe(m, limit, n_j * DT_AC_COMPR, sn_j, 0);
+                         sn_j * p->cc_sat,
+                         sqrt(n_j * n_j + p->cc_sat_thr), 0);
+  m = gamma_toe(m, limit, n_j * p->cc_compr, sn_j, 0);
 
   jmh[1] = fmax(m * m_norm, 0.0f);
+}
+
+/* ====================================================================
+ * Forward Tonemap & Compress (inside JMh space)
+ * ==================================================================== */
+
+static inline void tonemap_and_compress_fwd(__private float jmh[3],
+    __private const dt_ac_cl_params_t *p)
+{
+  const float orig_j = jmh[0];
+
+  /* J → Y (nits) → scene-linear normalized */
+  const float linear = j_to_y(orig_j, p->f_l, p->a_w, p->z)
+                       / DT_AC_REF_LUM;
+
+  /* Apply SSTS on luminance Y */
+  const float tonemapped_y = ssts_fwd(linear, p->ssts_s_2, p->ssts_m_2,
+                                       p->ssts_g, p->ssts_t_1, p->ssts_n_r);
+
+  /* Y → J' (display J after tone mapping) */
+  jmh[0] = y_to_j(tonemapped_y, p->f_l, p->a_w, p->z);
+
+  /* Chroma compression with original J reference */
+  chroma_compress(jmh, orig_j, p);
 }
 
 /* ====================================================================
@@ -394,26 +442,22 @@ static inline void pipeline_eval(__private const float rgb_in[3],
 
   for(int c = 0; c < 3; c++) ap1[c] = fmax(ap1[c], 0.0f);
 
-  /* Step 2: Per-channel SSTS tone mapping on AP1 (ACES 2.0 reference) */
-  float ap1_disp[3];
-  for(int c = 0; c < 3; c++)
-    ap1_disp[c] = ssts_fwd(fmax(ap1[c], 0.0f) * p->exposure_factor,
-                            p->ssts_s_2, p->ssts_m_2, p->ssts_g,
-                            p->ssts_t_1, p->ssts_n_r)
-                  / DT_AC_REF_LUM;
+  /* Apply exposure */
+  for(int c = 0; c < 3; c++) ap1[c] *= p->exposure_factor;
 
-  /* Step 3: Display AP1 → XYZ (absolute nits for CAM) */
-  float xyz_abs[3];
-  apply_mat(xyz_abs, dt_ac_ap1_to_xyz, ap1_disp);
-  for(int c = 0; c < 3; c++)
-    xyz_abs[c] *= DT_AC_REF_LUM;
+  /* Step 2: AP1 → XYZ (scene linear) */
+  float xyz[3];
+  apply_mat(xyz, dt_ac_ap1_to_xyz, ap1);
+
+  /* Step 3: ×100 to absolute nits for CAM */
+  for(int c = 0; c < 3; c++) xyz[c] *= DT_AC_REF_LUM;
 
   /* Step 4: XYZ → JMh */
   float jmh[3];
-  xyz_to_jmh(xyz_abs, p->d_rgb, p->f_l, p->a_w, p->z, jmh);
+  xyz_to_jmh(xyz, p->d_rgb, p->f_l, p->a_w, p->z, jmh);
 
-  /* Step 5: Chroma compression (J unchanged by tone mapping) */
-  chroma_compress(jmh, jmh[0]);
+  /* Step 5: Tonemap & compress inside JMh */
+  tonemap_and_compress_fwd(jmh, p);
 
   /* Step 6: JMh → XYZ (in nits) */
   float xyz_out[3];
@@ -425,7 +469,7 @@ static inline void pipeline_eval(__private const float rgb_in[3],
   for(int c = 0; c < 3; c++)
     ap1_out[c] = fmax(ap1_out[c], 0.0f) / DT_AC_REF_LUM;
 
-  /* Step 10: Gamut compression */
+  /* Step 8: Gamut compression */
   const float maxc = fmax(ap1_out[0], fmax(ap1_out[1], ap1_out[2]));
   const float new_max = gamut_compress_max(maxc, p->gamut_strength, p->gamut_knee);
   if(maxc > 0.0f && new_max != maxc)
@@ -436,7 +480,7 @@ static inline void pipeline_eval(__private const float rgb_in[3],
     ap1_out[2] *= s;
   }
 
-  /* Step 11: AP1 → pipe RGB */
+  /* Step 9: AP1 → pipe RGB */
   float rgb[3];
   apply_mat(rgb, p->inv_matrix, ap1_out);
 

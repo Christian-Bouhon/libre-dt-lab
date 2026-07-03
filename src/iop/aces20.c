@@ -23,19 +23,23 @@
     pipeline using the Hellwig 2022 CAM DRT (colour appearance model display
     rendering transform):
 
-      pipe_RGB → AP1 (D60) → XYZ (D60) → Hellwig JMh
-        → SSTS on J (via Y) → Chroma compression (JMh)
-        → XYZ (D60) → AP1 (D60)
+      pipe_RGB → AP1 (D60) → XYZ (D60)
+        → ×100 to absolute nits → Hellwig JMh
+        → Tonemap & compress in JMh:
+            J → Y → tonescale(Y) → J' (display J)
+            M ← chroma_compress(M, J', orig_J)
+        → Gamut Compression (JMh)
+        → XYZ (D60) → /100 → AP1 (D60)
         → Gamut Compression (AP1) → pipe_RGB
 
     The input/output colour spaces are determined by the pipe's working profile,
     not hardcoded.  The module always stays in IOP_CS_RGB and converts to/from
-    ACES AP0 D60 internally.
+    ACES AP1 D60 internally.
 
     References:
-      - ACES 2.0 CAM DRT (Hellwig 2022):
-        github.com/nick-shaw/aces-ot-vwg-experiments (hellwig_lib_rc1.h)
-      - ACES 2.0 SSTS: aces-core/lib/Lib.Academy.Tonescale.ctl
+      - ACES 2.0 (official, April 2025):
+        github.com/aces-aswf/aces-core
+        lib/Lib.Academy.OutputTransform.ctl, Lib.Academy.Tonescale.ctl
       - AP0/AP1 matrices: SMPTE ST 2065-1, ACES Specification
     ---------------------------------------------------------------------------
 */
@@ -161,25 +165,33 @@ static const float dt_ac_panlrcm[9] =
 };
 
 /* Hellwig CAM viewing-condition parameters */
-#define DT_AC_LA     100.0f
-#define DT_AC_YB      20.0f
-#define DT_AC_RA       2.0f
-#define DT_AC_BA       0.05f
-#define DT_AC_SURR_F   0.9f
-#define DT_AC_SURR_C   0.59f
-#define DT_AC_SURR_NC  0.9f
+#define DT_AC_LA         100.0f
+#define DT_AC_YB          20.0f
+#define DT_AC_RA           2.0f
+#define DT_AC_BA           0.05f    /* 1/20 — CAM16 standard, verified with panlrcm/1403 */
+#define DT_AC_SURR_F       0.9f
+#define DT_AC_SURR_C       0.59f
+#define DT_AC_SURR_NC      0.9f
+
+/* ACES 2.0 CAM non-linear compression constants */
+#define DT_AC_CAM_NL_OFFSET  27.13f   /* = 0.2713 * ref_lum */
+#define DT_AC_CAM_NL_SCALE  400.0f    /* = 4.0 * ref_lum */
 
 /* ACES D60 white point in XYZ (Y=100) */
 static const float dt_ac_aces_white_xyz[3] = { 95.2646074570f, 100.0f, 100.8825184352f };
 
-/* Chroma compression constants */
-#define DT_AC_LIMIT_JMAX  100.0f
-#define DT_AC_MODEL_GAMMA  0.8794641436f
-#define DT_AC_COMPR         2.4f
-#define DT_AC_SAT           1.3f
-#define DT_AC_SAT_THR       0.005f
-#define DT_AC_CC_SCALE      1.000053f
+/* Reference luminance (nits) — ACES D60 white = 100 nits */
 #define DT_AC_REF_LUM     100.0f
+
+/* Limit J_max for chroma compression (static SDR default, scaled dynamically) */
+#define DT_AC_LIMIT_JMAX_SDR  100.0f
+
+/* Chroma compression constants (base values, scaled by peak luminance) */
+#define DT_AC_COMPR_BASE      2.4f
+#define DT_AC_COMPR_FACT      3.3f
+#define DT_AC_SAT_BASE        1.3f
+#define DT_AC_SAT_FACT        0.69f
+#define DT_AC_EXPAND_THR      0.5f
 
 /* ====================================================================
  * Type Definitions
@@ -219,9 +231,21 @@ typedef struct
 
   /* Hellwig CAM precomputed values (constant for ACES D60 white) */
   float f_l;
-  float a_w;
+  float a_w;                /* A_w — white achromatic signal for J = 100*(A/A_w)^cz */
   float z;
-  float d_rgb[3];           /* Chromatic adaptation D_RGB for D60 white */
+  float f_l_n;              /* F_L_n = F_L / ref_lum */
+  float cz;                 /* model_gamma = surround_c * z */
+  float inv_cz;             /* 1 / cz */
+  float a_w_j;              /* A_w_J = NLC(F_L) for Y↔J conversions */
+  float d_rgb[3];           /* D_RGB = F_L_n * Y_w / RGB_w[c] (includes F_L adaptation) */
+
+  /* Dynamic chroma compression parameters (per ACES 2.0 official) */
+  float model_gamma_inv;
+  float chroma_compress_scale;
+  float cc_sat;
+  float cc_sat_thr;
+  float cc_compr;
+  float limit_j_max;
 } dt_ac_context_t;
 
 /* Module parameters */
@@ -259,7 +283,13 @@ typedef struct dt_ac_cl_params_t
   float ssts_t_1;
   float ssts_n_r;
   float ssts_n;
-  int   _pad[8];
+  float model_gamma_inv;
+  float chroma_compress_scale;
+  float cc_sat;
+  float cc_sat_thr;
+  float cc_compr;
+  float limit_j_max;
+  int   _pad[9];
 } dt_ac_cl_params_t;
 
 /* OpenCL global data */
@@ -477,46 +507,69 @@ static inline float _ac_chroma_norm(float h)
   const float m = 11.34072f * a + 16.46899f * a2 + 7.88380f * a3
                 + 14.66441f * b - 6.37224f * b2 + 9.19364f * b3
                 + 77.12896f;
-  return m * DT_AC_CC_SCALE;
+  return m;
 }
 
 /* ====================================================================
- * Hellwig 2022 CAM — Post-Adaptation Non-Linear Compression
+ * ACES 2.0 — Post-Adaptation Cone Response Compression
  *
- * Forward:  LMS → non-linear response RGB_a
- * Inverse:  RGB_a → linear LMS
+ * Matches aces-core Lib.Academy.OutputTransform.ctl:
+ *   fwd: Ra = copysign(pow(|v|, 0.42) / (27.13 + pow(|v|, 0.42)), v)
+ *   inv: Rc = copysign(pow(27.13 * |Ra| / (1 - |Ra|), 1/0.42), Ra)
+ *
+ * F_L and ref_lum scalings are baked into the d_rgb factor.
  * ==================================================================== */
 
-static inline void _ac_nlc_fwd(const float rgb[3], float rgb_a[3], float f_l)
+static inline float _ac_nlc_fwd_single(float v)
 {
-  for(int c = 0; c < 3; c++)
-  {
-    const float abs_rgb = fabsf(rgb[c]);
-    if(abs_rgb < 1e-12f)
-    {
-      rgb_a[c] = 0.0f;
-      continue;
-    }
-    const float fl_lms = powf(f_l * abs_rgb / 100.0f, 0.42f);
-    const float sign = (rgb[c] >= 0.0f) ? 1.0f : -1.0f;
-    rgb_a[c] = sign * (400.0f * fl_lms) / (27.13f + fl_lms);
-  }
+  const float abs_v = fabsf(v);
+  if(abs_v < 1e-12f) return 0.0f;
+  const float fl = powf(abs_v, 0.42f);
+  return copysignf(fl / (DT_AC_CAM_NL_OFFSET + fl), v);
 }
 
-static inline void _ac_nlc_inv(const float rgb_a[3], float rgb[3], float f_l)
+static inline float _ac_nlc_inv_single(float v)
+{
+  const float abs_v = fminf(fabsf(v), 0.99f);
+  if(abs_v < 1e-12f) return 0.0f;
+  const float fl = (DT_AC_CAM_NL_OFFSET * abs_v) / (1.0f - abs_v);
+  return copysignf(powf(fl, 1.0f / 0.42f), v);
+}
+
+/* ====================================================================
+ * 3×3 Matrix Inversion (general, for cofactor method)
+ * ==================================================================== */
+
+static inline void _mat_inv_3x3(float inv[9], const float m[9])
+{
+  const float a = m[0], b = m[1], c = m[2];
+  const float d = m[3], e = m[4], f = m[5];
+  const float g = m[6], h = m[7], i = m[8];
+  const float det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+  if(fabsf(det) < 1e-18f) { for(int j = 0; j < 9; j++) inv[j] = 0.0f; return; }
+  const float id = 1.0f / det;
+  inv[0] =  (e * i - f * h) * id;
+  inv[1] = -(b * i - c * h) * id;
+  inv[2] =  (b * f - c * e) * id;
+  inv[3] = -(d * i - f * g) * id;
+  inv[4] =  (a * i - c * g) * id;
+  inv[5] = -(a * f - c * d) * id;
+  inv[6] =  (d * h - e * g) * id;
+  inv[7] = -(a * h - b * g) * id;
+  inv[8] =  (a * e - b * d) * id;
+}
+
+/* Vector wrappers for NLC (operate on all 3 channels) */
+static inline void _ac_nlc_fwd(const float rgb[3], float rgb_a[3])
 {
   for(int c = 0; c < 3; c++)
-  {
-    const float abs_a = fabsf(rgb_a[c]);
-    if(abs_a < 1e-12f)
-    {
-      rgb[c] = 0.0f;
-      continue;
-    }
-    const float sign = (rgb_a[c] >= 0.0f) ? 1.0f : -1.0f;
-    rgb[c] = sign * (100.0f / f_l)
-             * powf((27.13f * abs_a) / (400.0f - abs_a), 1.0f / 0.42f);
-  }
+    rgb_a[c] = _ac_nlc_fwd_single(rgb[c]);
+}
+
+static inline void _ac_nlc_inv(const float rgb_a[3], float rgb[3])
+{
+  for(int c = 0; c < 3; c++)
+    rgb[c] = _ac_nlc_inv_single(rgb_a[c]);
 }
 
 /* ====================================================================
@@ -527,7 +580,8 @@ static inline void _ac_nlc_inv(const float rgb_a[3], float rgb[3], float f_l)
  * ==================================================================== */
 
 static inline void _ac_hellwig_precompute(const float white_xyz[3],
-    float *f_l, float *n, float *z, float *a_w)
+    float *f_l, float *n, float *z, float *cz, float *inv_cz,
+    float *f_l_n, float *a_w, float *a_w_j, float d_rgb[3])
 {
   const float y_w = white_xyz[1];
 
@@ -535,7 +589,7 @@ static inline void _ac_hellwig_precompute(const float white_xyz[3],
   float rgb_w[3];
   _mat_apply(rgb_w, dt_ac_m16, white_xyz);
 
-  /* k, k4, F_L */
+  /* F_L (luminance-level adaptation factor) — same as before */
   const float k = 1.0f / (5.0f * DT_AC_LA + 1.0f);
   const float k4 = k * k * k * k;
   *f_l = 0.2f * k4 * (5.0f * DT_AC_LA)
@@ -543,21 +597,26 @@ static inline void _ac_hellwig_precompute(const float white_xyz[3],
 
   *n = DT_AC_YB / y_w;
   *z = 1.48f + sqrtf(*n);
+  *cz = DT_AC_SURR_C * (*z);
+  *inv_cz = 1.0f / (*cz);
 
-  /* D = 1.0 (complete adaptation) */
-  const float d = 1.0f;
-  float d_rgb[3], rgb_wc[3];
-  for(int c = 0; c < 3; c++)
-    d_rgb[c] = d * y_w / fmaxf(rgb_w[c], 1e-12f) + 1.0f - d;
-  for(int c = 0; c < 3; c++)
-    rgb_wc[c] = d_rgb[c] * rgb_w[c];
+  /* F_L_n = F_L / ref_lum (used in D_RGB and Y↔J) */
+  *f_l_n = *f_l / DT_AC_REF_LUM;
 
-  /* Non-linear compression of white */
+  /* D_RGB = F_L_n * Y_w / RGB_w[c] (includes F_L adaptation) */
+  for(int c = 0; c < 3; c++)
+    d_rgb[c] = (*f_l_n) * y_w / fmaxf(rgb_w[c], 1e-12f);
+
+  /* Adapted white: rgb_wc = D_RGB * rgb_w → each channel = F_L_n * Y_w = F_L */
   float rgb_aw[3];
-  _ac_nlc_fwd(rgb_wc, rgb_aw, *f_l);
+  for(int c = 0; c < 3; c++)
+    rgb_aw[c] = _ac_nlc_fwd_single(d_rgb[c] * rgb_w[c]);
 
-  /* A_w = 2*R_aw + G_aw + 0.05*B_aw */
+  /* A_w = 2*R_aw + G_aw + (1/20)*B_aw  (standard CAM16 formula) */
   *a_w = DT_AC_RA * rgb_aw[0] + rgb_aw[1] + DT_AC_BA * rgb_aw[2];
+
+  /* A_w_J = NLC(F_L) = NLC(f_l) for Y↔J conversions */
+  *a_w_j = _ac_nlc_fwd_single(*f_l);
 }
 
 /* ====================================================================
@@ -567,36 +626,28 @@ static inline void _ac_hellwig_precompute(const float white_xyz[3],
  * ==================================================================== */
 
 static inline void _ac_xyz_to_jmh(const float xyz[3],
-    const float d_rgb[3], float f_l, float a_w, float z, float jmh[3])
+    const float d_rgb[3], float a_w, float z, float jmh[3])
 {
-  /* RGB = MATRIX_16 × XYZ */
   float rgb[3];
   _mat_apply(rgb, dt_ac_m16, xyz);
 
-  /* Chromatic adaptation */
   float rgb_c[3];
   for(int c = 0; c < 3; c++)
     rgb_c[c] = d_rgb[c] * rgb[c];
 
-  /* Non-linear response */
   float rgb_a[3];
-  _ac_nlc_fwd(rgb_c, rgb_a, f_l);
+  _ac_nlc_fwd(rgb_c, rgb_a);
 
-  /* Opponent dimensions a, b */
   const float a = rgb_a[0] - 12.0f * rgb_a[1] / 11.0f + rgb_a[2] / 11.0f;
   const float b = (rgb_a[0] + rgb_a[1] - 2.0f * rgb_a[2]) / 9.0f;
 
-  /* Hue h in degrees [0, 360) */
   float h = atan2f(b, a) * (180.0f / (float)M_PI);
   if(h < 0.0f) h += 360.0f;
 
-  /* Achromatic response A */
   const float A = DT_AC_RA * rgb_a[0] + rgb_a[1] + DT_AC_BA * rgb_a[2];
 
-  /* Lightness J */
   const float j = 100.0f * powf(fmaxf(A, 0.0f) / a_w, DT_AC_SURR_C * z);
 
-  /* Colourfulness M */
   const float m = 43.0f * DT_AC_SURR_NC * sqrtf(a * a + b * b);
 
   jmh[0] = (j > 0.0f) ? j : 0.0f;
@@ -611,37 +662,31 @@ static inline void _ac_xyz_to_jmh(const float xyz[3],
  * ==================================================================== */
 
 static inline void _ac_jmh_to_xyz(const float jmh[3],
-    const float d_rgb[3], float f_l, float a_w, float z, float xyz[3])
+    const float d_rgb[3], float a_w, float z, float xyz[3])
 {
   const float j = fmaxf(jmh[0], 0.0f);
   const float m = jmh[1];
   const float hr = jmh[2] * ((float)M_PI / 180.0f);
 
-  /* Achromatic response A */
   const float A = a_w * powf(fmaxf(j, 1e-12f) / 100.0f, 1.0f / (DT_AC_SURR_C * z));
 
-  /* Opponent dimensions */
   const float gamma_v = m / (43.0f * DT_AC_SURR_NC);
   const float a_op = gamma_v * cosf(hr);
   const float b_op = gamma_v * sinf(hr);
 
-  /* RGB_a from opponent */
   float p_in[3] = { A, a_op, b_op };
   float rgb_a[3];
   _mat_apply(rgb_a, dt_ac_panlrcm, p_in);
   for(int c = 0; c < 3; c++)
     rgb_a[c] /= 1403.0f;
 
-  /* Inverse non-linear compression */
   float rgb_c[3];
-  _ac_nlc_inv(rgb_a, rgb_c, f_l);
+  _ac_nlc_inv(rgb_a, rgb_c);
 
-  /* Inverse chromatic adaptation */
   float rgb[3];
   for(int c = 0; c < 3; c++)
     rgb[c] = rgb_c[c] / fmaxf(d_rgb[c], 1e-12f);
 
-  /* XYZ = MATRIX_16_INV × RGB */
   _mat_apply(xyz, dt_ac_m16_inv, rgb);
 }
 
@@ -649,22 +694,20 @@ static inline void _ac_jmh_to_xyz(const float jmh[3],
  * Hellwig 2022 — Lightness J ↔ Luminance Y
  * ==================================================================== */
 
-static inline float _ac_y_to_j(float y, float f_l, float a_w, float z)
+static inline float _ac_y_to_j(float y, float f_l_n, float a_w_j, float cz)
 {
   if(y <= 0.0f) return 0.0f;
-  const float fl_y = powf(f_l * fabsf(y) / 100.0f, 0.42f);
-  const float a_y = (400.0f * fl_y) / (27.13f + fl_y);
-  return 100.0f * powf(fmaxf(a_y, 0.0f) / a_w, DT_AC_SURR_C * z);
+  const float ra = _ac_nlc_fwd_single(fabsf(y) * f_l_n);
+  const float a = ra / a_w_j;
+  return 100.0f * powf(fmaxf(a, 0.0f), cz);
 }
 
-static inline float _ac_j_to_y(float j, float f_l, float a_w, float z)
+static inline float _ac_j_to_y(float j, float f_l_n, float a_w_j, float inv_cz)
 {
   if(j <= 0.0f) return 0.0f;
-  const float A = a_w * powf(j / 100.0f, 1.0f / (DT_AC_SURR_C * z));
-  const float abs_a = fabsf(A);
-  if(abs_a < 1e-12f) return 0.0f;
-  return (100.0f / f_l) * powf((27.13f * abs_a) / (400.0f - fminf(abs_a, 399.9f)),
-                                1.0f / 0.42f);
+  const float a = powf(j / 100.0f, inv_cz);
+  const float ra = a_w_j * a;
+  return _ac_nlc_inv_single(fminf(ra, 0.99f)) / f_l_n;
 }
 
 /* ====================================================================
@@ -673,9 +716,14 @@ static inline float _ac_j_to_y(float j, float f_l, float a_w, float z)
  * Compresses colorfulness M as a function of tone-mapped J and hue.
  * Includes expansion of low-saturation colors and compression of
  * high-saturation colors with different per-hue limits.
+ *
+ * Parameters come from the precomputed context (ctx) which are
+ * computed dynamically per peak_luminance following the official
+ * ACES 2.0 specification (aces-core Lib.Academy.OutputTransform.ctl).
  * ==================================================================== */
 
-static inline void _ac_chroma_compress(float jmh[3], float orig_j)
+static inline void _ac_chroma_compress(float jmh[3], float orig_j,
+                                        const dt_ac_context_t *ctx)
 {
   const float j = fmaxf(jmh[0], 1e-12f);
   float m = jmh[1];
@@ -684,27 +732,27 @@ static inline void _ac_chroma_compress(float jmh[3], float orig_j)
   if(m <= 0.0f) return;
 
   /* Rescale M by tone-mapped J ratio (chromaticity preservation in JMh) */
-  m *= powf(j / fmaxf(orig_j, 1e-12f), DT_AC_MODEL_GAMMA);
+  m *= powf(j / fmaxf(orig_j, 1e-12f), ctx->model_gamma_inv);
 
-  /* Hue-dependent normalisation */
-  const float m_norm = _ac_chroma_norm(h);
+  /* Hue-dependent normalisation with dynamic scale */
+  const float m_norm = _ac_chroma_norm(h) * ctx->chroma_compress_scale;
   m /= m_norm;
 
   /* Compute limit from AP1 reach */
-  const float n_j = j / DT_AC_LIMIT_JMAX;
+  const float n_j = j / ctx->limit_j_max;
   const float sn_j = fmaxf(0.0f, 1.0f - n_j);
-  const float limit = powf(n_j, DT_AC_MODEL_GAMMA)
+  const float limit = powf(n_j, ctx->model_gamma_inv)
                       * _ac_reach_from_table(h) / m_norm;
 
   if(limit <= 0.0f) return;
 
   /* Expand low-saturation (reverse toe) */
   m = limit - _ac_toe(limit - m, limit - 0.001f,
-                       sn_j * DT_AC_SAT,
-                       sqrtf(n_j * n_j + DT_AC_SAT_THR), 0);
+                       sn_j * ctx->cc_sat,
+                       sqrtf(n_j * n_j + ctx->cc_sat_thr), 0);
 
   /* Compress high-saturation (forward toe) */
-  m = _ac_toe(m, limit, n_j * DT_AC_COMPR, sn_j, 0);
+  m = _ac_toe(m, limit, n_j * ctx->cc_compr, sn_j, 0);
 
   /* Denormalize */
   m *= m_norm;
@@ -810,34 +858,87 @@ static void dt_ac_compute_context(const dt_iop_aces20_params_t *p,
     for(int i = 0; i < 9; i++) ctx->inv_matrix[i] = t3[i];
   }
 
-  /* SSTS init */
+  /* SSTS init (ACES 2.0 official tonescale params) */
   dt_ac_ssts_init(&ctx->ssts, (double)p->peak_luminance, p->surround);
 
   /* Hellwig CAM precomputation */
   {
     float n_unused;
     _ac_hellwig_precompute(dt_ac_aces_white_xyz,
-                           &ctx->f_l, &n_unused, &ctx->z, &ctx->a_w);
-
-    /* Precompute D_RGB for the ACES D60 white point (constant for D=1) */
-    float rgb_w[3];
-    _mat_apply(rgb_w, dt_ac_m16, dt_ac_aces_white_xyz);
-    const float y_w = dt_ac_aces_white_xyz[1];
-    for(int c = 0; c < 3; c++)
-      ctx->d_rgb[c] = y_w / fmaxf(rgb_w[c], 1e-12f);
+                           &ctx->f_l, &n_unused, &ctx->z,
+                           &ctx->cz, &ctx->inv_cz,
+                           &ctx->f_l_n, &ctx->a_w, &ctx->a_w_j,
+                           ctx->d_rgb);
   }
+
+  /* Dynamic chroma compression parameters (ACES 2.0 official) */
+  {
+    const float peak = fmaxf(p->peak_luminance, 1.0f);
+
+    /* model_gamma = surround.c * (1.48 + sqrt(Y_b / ref_lum));
+     * model_gamma_inv = 1 / model_gamma */
+    const float model_gamma = DT_AC_SURR_C * (1.48f + sqrtf(DT_AC_YB / DT_AC_REF_LUM));
+    ctx->model_gamma_inv = 1.0f / model_gamma;
+
+    /* chroma_compress_scale = pow(0.03379 * peak, 0.30596) - 0.45135 */
+    ctx->chroma_compress_scale = powf(0.03379f * peak, 0.30596f) - 0.45135f;
+
+    /* log_peak = log10(peak / 100) */
+    const float log_peak = log10f(peak / DT_AC_REF_LUM);
+
+    /* sat = max(0.2, SAT_BASE - SAT_BASE * SAT_FACT * log_peak) */
+    ctx->cc_sat = fmaxf(0.2f, DT_AC_SAT_BASE - DT_AC_SAT_BASE * DT_AC_SAT_FACT * log_peak);
+
+    /* sat_thr = EXPAND_THR / peak */
+    ctx->cc_sat_thr = DT_AC_EXPAND_THR / peak;
+
+    /* compr = COMPR_BASE + COMPR_BASE * COMPR_FACT * log_peak */
+    ctx->cc_compr = DT_AC_COMPR_BASE + DT_AC_COMPR_BASE * DT_AC_COMPR_FACT * log_peak;
+
+    /* limit_j_max = J(peak_luminance) via Y_to_J */
+    ctx->limit_j_max = _ac_y_to_j(peak, ctx->f_l_n, ctx->a_w_j, ctx->cz);
+  }
+}
+
+/* ====================================================================
+ * Forward Tonemap & Compress (inside JMh space)
+ *
+ * Matches ACES 2.0 official tonemap_and_compress_fwd:
+ *   J → Y → tonescale(Y/ref_lum) → J_ts (display J)
+ *   M ← chroma_compress(M, J_ts, orig_J) via ctx parameters
+ *
+ * The SSTS (tonescale) is applied on the achromatic J-derived Y,
+ * NOT per-channel on AP1 before the CAM.
+ * ==================================================================== */
+
+static inline void _ac_tonemap_and_compress_fwd(float jmh[3],
+    const dt_ac_context_t *ctx)
+{
+  const float orig_j = jmh[0];
+
+  /* J → Y (nits) → scene-linear normalized */
+  const float linear = _ac_j_to_y(orig_j, ctx->f_l_n, ctx->a_w_j, ctx->inv_cz)
+                       / DT_AC_REF_LUM;
+
+  /* Apply SSTS on luminance Y */
+  const float tonemapped_y = dt_ac_ssts_fwd(&ctx->ssts, linear);
+
+  /* Y → J' (display J after tone mapping) */
+  jmh[0] = _ac_y_to_j(tonemapped_y, ctx->f_l_n, ctx->a_w_j, ctx->cz);
+
+  /* Chroma compression with original J reference */
+  _ac_chroma_compress(jmh, orig_j, ctx);
 }
 
 /* ====================================================================
  * ACES 2.0 CAM DRT Pipeline Evaluation (per-pixel)
  *
- *   pipe_RGB  --[fwd_matrix]→  AP1 D60
- *     → SSTS per-channel on AP1 → display-referred AP1
- *     → XYZ abs nits (×100) → Hellwig JMh
- *     → Chroma compression (J unchanged by tone mapping)
- *     → XYZ(D60) → AP1 (÷100 to display-referred)
- *     → Gamut compression in AP1
- *     --[inv_matrix]→ pipe_RGB
+ *   pipe_RGB  →  AP1 (D60)  →  XYZ (D60)
+ *     →  ×100 to absolute nits
+ *     →  Hellwig JMh
+ *     →  _ac_tonemap_and_compress_fwd  (SSTS on Y + chroma compress)
+ *     →  JMh  →  XYZ  →  /100
+ *     →  AP1 (D60)  →  Gamut compress  →  pipe_RGB
  * ==================================================================== */
 
 static void dt_ac_pipeline_eval(const float rgb_in[3], float rgb_out[3],
@@ -857,28 +958,26 @@ static void dt_ac_pipeline_eval(const float rgb_in[3], float rgb_out[3],
 
   for(int c = 0; c < 3; c++) ap1[c] = fmaxf(ap1[c], 0.0f);
 
-  /* Step 2: Per-channel SSTS tone mapping on AP1 (ACES 2.0 reference) */
-  float ap1_disp[3];
-  for(int c = 0; c < 3; c++)
-    ap1_disp[c] = dt_ac_ssts_fwd(&ctx->ssts, fmaxf(ap1[c], 0.0f) * ctx->exposure_factor)
-                  / DT_AC_REF_LUM;
+  /* Apply exposure */
+  for(int c = 0; c < 3; c++) ap1[c] *= ctx->exposure_factor;
 
-  /* Step 3: Display AP1 → XYZ D60 (absolute nits for CAM) */
-  float xyz_abs[3];
-  _mat_apply(xyz_abs, dt_ac_ap1_to_xyz, ap1_disp);
-  for(int c = 0; c < 3; c++)
-    xyz_abs[c] *= DT_AC_REF_LUM;
+  /* Step 2: AP1 → XYZ D60 (scene linear, not display-referred) */
+  float xyz[3];
+  _mat_apply(xyz, dt_ac_ap1_to_xyz, ap1);
+
+  /* Step 3: ×100 to absolute nits for CAM */
+  for(int c = 0; c < 3; c++) xyz[c] *= DT_AC_REF_LUM;
 
   /* Step 4: XYZ D60 → Hellwig JMh */
   float jmh[3];
-  _ac_xyz_to_jmh(xyz_abs, ctx->d_rgb, ctx->f_l, ctx->a_w, ctx->z, jmh);
+  _ac_xyz_to_jmh(xyz, ctx->d_rgb, ctx->a_w, ctx->z, jmh);
 
-  /* Step 5: Chroma compression in JMh (J unchanged by tone mapping) */
-  _ac_chroma_compress(jmh, jmh[0]);
+  /* Step 5: Tonemap & compress inside JMh */
+  _ac_tonemap_and_compress_fwd(jmh, ctx);
 
   /* Step 6: JMh → XYZ D60 (in nits) */
   float xyz_out[3];
-  _ac_jmh_to_xyz(jmh, ctx->d_rgb, ctx->f_l, ctx->a_w, ctx->z, xyz_out);
+  _ac_jmh_to_xyz(jmh, ctx->d_rgb, ctx->a_w, ctx->z, xyz_out);
 
   /* Step 7: XYZ D60 → AP1 (back to display-referred) */
   float ap1_out[3];
@@ -1057,6 +1156,13 @@ static void dt_ac_fill_cl_params(const dt_iop_aces20_data_t *d,
   clp->ssts_t_1 = (float)ctx->ssts.t_1;
   clp->ssts_n_r = (float)ctx->ssts.n_r;
   clp->ssts_n   = (float)ctx->ssts.n;
+
+  clp->model_gamma_inv       = ctx->model_gamma_inv;
+  clp->chroma_compress_scale = ctx->chroma_compress_scale;
+  clp->cc_sat                = ctx->cc_sat;
+  clp->cc_sat_thr            = ctx->cc_sat_thr;
+  clp->cc_compr              = ctx->cc_compr;
+  clp->limit_j_max           = ctx->limit_j_max;
 }
 
 int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
