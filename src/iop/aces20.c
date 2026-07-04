@@ -273,10 +273,13 @@ typedef struct dt_ac_cl_params_t
   float exposure_factor;
   float gamut_strength;
   float gamut_knee;
-  float f_l;
-  float a_w;
-  float z;
-  float d_rgb[3];
+  float f_l_n;                    /* F_L_n = F_L / ref_lum */
+  float a_w;                      /* A_w — white achromatic signal (JMh) */
+  float z;                        /* 1.48 + sqrt(Y_b/Y_w) */
+  float cz;                       /* model_gamma = surround_c * z */
+  float inv_cz;                   /* 1 / cz */
+  float d_rgb[3];                 /* D_RGB = F_L_n * Y_w / RGB_w[c] */
+  float a_w_j;                    /* A_w_J = NLC(F_L) for Y↔J */
   float ssts_s_2;
   float ssts_m_2;
   float ssts_g;
@@ -289,7 +292,7 @@ typedef struct dt_ac_cl_params_t
   float cc_sat_thr;
   float cc_compr;
   float limit_j_max;
-  int   _pad[9];
+  int   _pad[6];                  /* was 9; 12 bytes freed for new fields */
 } dt_ac_cl_params_t;
 
 /* OpenCL global data */
@@ -1145,10 +1148,13 @@ static void dt_ac_fill_cl_params(const dt_iop_aces20_data_t *d,
   clp->exposure_factor  = ctx->exposure_factor;
   clp->gamut_strength   = ctx->gamut_strength;
   clp->gamut_knee       = ctx->gamut_knee;
-  clp->f_l              = ctx->f_l;
+  clp->f_l_n            = ctx->f_l_n;
   clp->a_w              = ctx->a_w;
   clp->z                = ctx->z;
+  clp->cz               = ctx->cz;
+  clp->inv_cz           = ctx->inv_cz;
   for(int i = 0; i < 3; i++) clp->d_rgb[i] = ctx->d_rgb[i];
+  clp->a_w_j            = ctx->a_w_j;
 
   clp->ssts_s_2 = (float)ctx->ssts.s_2;
   clp->ssts_m_2 = (float)ctx->ssts.m_2;

@@ -26,6 +26,9 @@
           M ← chroma_compress(M, J', orig_J)
       → XYZ(D60) → /100 → AP1 (D60)
       → Gamut compression → pipe_RGB
+
+    Must match src/iop/aces20.c exactly (byte-for-byte CL params struct,
+    and numerically identical per-pixel math).
     ---------------------------------------------------------------------------
 */
 
@@ -78,6 +81,7 @@ __constant float dt_ac_panlrcm[9] =
 #define DT_AC_SURR_NC     0.9f
 
 #define DT_AC_REF_LUM    100.0f
+#define DT_AC_CAM_NL_OFFSET  27.13f
 
 /* AP1 reach table (360 entries) */
 __constant float dt_ac_gamut_reach[360] =
@@ -137,7 +141,7 @@ __constant float dt_ac_gamut_reach[360] =
 };
 
 /* ====================================================================
- * CL Params Struct
+ * CL Params Struct — byte-for-byte match with dt_ac_cl_params_t in C
  * ==================================================================== */
 
 typedef struct
@@ -147,10 +151,13 @@ typedef struct
   float exposure_factor;
   float gamut_strength;
   float gamut_knee;
-  float f_l;
-  float a_w;
-  float z;
-  float d_rgb[3];
+  float f_l_n;                    /* F_L_n = F_L / ref_lum */
+  float a_w;                      /* A_w — white achromatic signal (JMh) */
+  float z;                        /* 1.48 + sqrt(Y_b/Y_w) */
+  float cz;                       /* model_gamma = surround_c * z */
+  float inv_cz;                   /* 1 / cz */
+  float d_rgb[3];                 /* D_RGB = F_L_n * Y_w / RGB_w[c] */
+  float a_w_j;                    /* A_w_J = NLC(F_L) for Y↔J */
   float ssts_s_2;
   float ssts_m_2;
   float ssts_g;
@@ -163,7 +170,7 @@ typedef struct
   float cc_sat_thr;
   float cc_compr;
   float limit_j_max;
-  int   _pad[9];
+  int   _pad[6];
 } dt_ac_cl_params_t;
 
 /* ====================================================================
@@ -237,41 +244,43 @@ static inline float chroma_norm(float h)
 }
 
 /* ====================================================================
- * Hellwig 2022 CAM — Forward NLC
+ * Post-Adaptation Cone Response Compression (NLC)
+ *
+ * Matches aces-core Lib.Academy.OutputTransform.ctl:
+ *   fwd: Ra = pow(|v|, 0.42) / (27.13 + pow(|v|, 0.42))
+ *   inv: Rc = pow(27.13 * |Ra| / (1 - |Ra|), 1/0.42)
+ *
+ * F_L and ref_lum scalings are baked into d_rgb / f_l_n.
  * ==================================================================== */
 
+static inline float nlc_fwd_single(float v)
+{
+  const float abs_v = fabs(v);
+  if(abs_v < 1e-12f) return 0.0f;
+  const float fl = pow(abs_v, 0.42f);
+  return (v >= 0.0f ? 1.0f : -1.0f) * fl / (DT_AC_CAM_NL_OFFSET + fl);
+}
+
+static inline float nlc_inv_single(float v)
+{
+  const float abs_v = min(fabs(v), 0.99f);
+  if(abs_v < 1e-12f) return 0.0f;
+  const float fl = (DT_AC_CAM_NL_OFFSET * abs_v) / (1.0f - abs_v);
+  return (v >= 0.0f ? 1.0f : -1.0f) * pow(fl, 1.0f / 0.42f);
+}
+
 static inline void nlc_fwd(__private const float rgb[3],
-                            __private float rgb_a[3], float f_l)
+                            __private float rgb_a[3])
 {
   for(int c = 0; c < 3; c++)
-  {
-    const float abs_rgb = fabs(rgb[c]);
-    if(abs_rgb < 1e-12f)
-    {
-      rgb_a[c] = 0.0f;
-      continue;
-    }
-    const float fl_lms = pow(f_l * abs_rgb / 100.0f, 0.42f);
-    const float sign = (rgb[c] >= 0.0f) ? 1.0f : -1.0f;
-    rgb_a[c] = sign * (400.0f * fl_lms) / (27.13f + fl_lms);
-  }
+    rgb_a[c] = nlc_fwd_single(rgb[c]);
 }
 
 static inline void nlc_inv(__private const float rgb_a[3],
-                            __private float rgb[3], float f_l)
+                            __private float rgb[3])
 {
   for(int c = 0; c < 3; c++)
-  {
-    const float abs_a = fabs(rgb_a[c]);
-    if(abs_a < 1e-12f)
-    {
-      rgb[c] = 0.0f;
-      continue;
-    }
-    const float sign = (rgb_a[c] >= 0.0f) ? 1.0f : -1.0f;
-    rgb[c] = sign * (100.0f / f_l)
-             * pow((27.13f * abs_a) / (400.0f - abs_a), 1.0f / 0.42f);
-  }
+    rgb[c] = nlc_inv_single(rgb_a[c]);
 }
 
 /* ====================================================================
@@ -280,7 +289,7 @@ static inline void nlc_inv(__private const float rgb_a[3],
 
 static inline void xyz_to_jmh(__private const float xyz[3],
                                __private const float d_rgb[3],
-                               float f_l, float a_w, float z,
+                               float a_w, float z,
                                __private float jmh[3])
 {
   float rgb[3], rgb_c[3], rgb_a[3];
@@ -289,7 +298,7 @@ static inline void xyz_to_jmh(__private const float xyz[3],
   for(int c = 0; c < 3; c++)
     rgb_c[c] = d_rgb[c] * rgb[c];
 
-  nlc_fwd(rgb_c, rgb_a, f_l);
+  nlc_fwd(rgb_c, rgb_a);
 
   const float a_op = rgb_a[0] - 12.0f * rgb_a[1] / 11.0f + rgb_a[2] / 11.0f;
   const float b_op = (rgb_a[0] + rgb_a[1] - 2.0f * rgb_a[2]) / 9.0f;
@@ -312,7 +321,7 @@ static inline void xyz_to_jmh(__private const float xyz[3],
 
 static inline void jmh_to_xyz(__private const float jmh[3],
                                __private const float d_rgb[3],
-                               float f_l, float a_w, float z,
+                               float a_w, float z,
                                __private float xyz[3])
 {
   const float j = fmax(jmh[0], 0.0f);
@@ -332,7 +341,7 @@ static inline void jmh_to_xyz(__private const float jmh[3],
     rgb_a[c] /= 1403.0f;
 
   float rgb_c[3];
-  nlc_inv(rgb_a, rgb_c, f_l);
+  nlc_inv(rgb_a, rgb_c);
 
   float rgb[3];
   for(int c = 0; c < 3; c++)
@@ -342,30 +351,32 @@ static inline void jmh_to_xyz(__private const float jmh[3],
 }
 
 /* ====================================================================
- * Chroma Compression
- * ==================================================================== */
-
-/* ====================================================================
  * Hellwig CAM — Lightness J ↔ Luminance Y
+ *
+ * Reference path:
+ *   Y_to_J: Ra = NLC(Y * F_L_n), A = Ra / A_w_J, J = 100 * A^cz
+ *   J_to_Y: A = (J/100)^(1/cz), Ra = A_w_J * A, Y = NLC_inv(Ra) / F_L_n
  * ==================================================================== */
 
-static inline float y_to_j(float y, float f_l, float a_w, float z)
+static inline float y_to_j(float y, float f_l_n, float a_w_j, float cz)
 {
   if(y <= 0.0f) return 0.0f;
-  const float fl_y = pow(f_l * fabs(y) / 100.0f, 0.42f);
-  const float a_y = (400.0f * fl_y) / (27.13f + fl_y);
-  return 100.0f * pow(fmax(a_y, 0.0f) / a_w, DT_AC_SURR_C * z);
+  const float ra = nlc_fwd_single(fabs(y) * f_l_n);
+  const float a = ra / a_w_j;
+  return 100.0f * pow(fmax(a, 0.0f), cz);
 }
 
-static inline float j_to_y(float j, float f_l, float a_w, float z)
+static inline float j_to_y(float j, float f_l_n, float a_w_j, float inv_cz)
 {
   if(j <= 0.0f) return 0.0f;
-  const float A = a_w * pow(j / 100.0f, 1.0f / (DT_AC_SURR_C * z));
-  const float abs_a = fabs(A);
-  if(abs_a < 1e-12f) return 0.0f;
-  return (100.0f / f_l) * pow((27.13f * abs_a) / (400.0f - min(abs_a, 399.9f)),
-                               1.0f / 0.42f);
+  const float a = pow(j / 100.0f, inv_cz);
+  const float ra = a_w_j * a;
+  return nlc_inv_single(min(ra, 0.99f)) / f_l_n;
 }
+
+/* ====================================================================
+ * Chroma Compression
+ * ==================================================================== */
 
 static inline void chroma_compress(__private float jmh[3], float orig_j,
                                     __private const dt_ac_cl_params_t *p)
@@ -406,7 +417,7 @@ static inline void tonemap_and_compress_fwd(__private float jmh[3],
   const float orig_j = jmh[0];
 
   /* J → Y (nits) → scene-linear normalized */
-  const float linear = j_to_y(orig_j, p->f_l, p->a_w, p->z)
+  const float linear = j_to_y(orig_j, p->f_l_n, p->a_w_j, p->inv_cz)
                        / DT_AC_REF_LUM;
 
   /* Apply SSTS on luminance Y */
@@ -414,7 +425,7 @@ static inline void tonemap_and_compress_fwd(__private float jmh[3],
                                        p->ssts_g, p->ssts_t_1, p->ssts_n_r);
 
   /* Y → J' (display J after tone mapping) */
-  jmh[0] = y_to_j(tonemapped_y, p->f_l, p->a_w, p->z);
+  jmh[0] = y_to_j(tonemapped_y, p->f_l_n, p->a_w_j, p->cz);
 
   /* Chroma compression with original J reference */
   chroma_compress(jmh, orig_j, p);
@@ -454,14 +465,14 @@ static inline void pipeline_eval(__private const float rgb_in[3],
 
   /* Step 4: XYZ → JMh */
   float jmh[3];
-  xyz_to_jmh(xyz, p->d_rgb, p->f_l, p->a_w, p->z, jmh);
+  xyz_to_jmh(xyz, p->d_rgb, p->a_w, p->z, jmh);
 
   /* Step 5: Tonemap & compress inside JMh */
   tonemap_and_compress_fwd(jmh, p);
 
   /* Step 6: JMh → XYZ (in nits) */
   float xyz_out[3];
-  jmh_to_xyz(jmh, p->d_rgb, p->f_l, p->a_w, p->z, xyz_out);
+  jmh_to_xyz(jmh, p->d_rgb, p->a_w, p->z, xyz_out);
 
   /* Step 7: XYZ → AP1 (back to display-referred) */
   float ap1_out[3];
