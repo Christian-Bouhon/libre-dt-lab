@@ -148,14 +148,11 @@ typedef struct
  * Helpers
  * ==================================================================== */
 
-static inline void apply_mat(__private float out[3],
-                              __private const float M[9],
-                              __private const float in[3])
-{
-  out[0] = M[0] * in[0] + M[1] * in[1] + M[2] * in[2];
-  out[1] = M[3] * in[0] + M[4] * in[1] + M[5] * in[2];
-  out[2] = M[6] * in[0] + M[7] * in[1] + M[8] * in[2];
-}
+#define _mat_apply(out, M, in) do { \
+  (out)[0] = (M)[0] * (in)[0] + (M)[1] * (in)[1] + (M)[2] * (in)[2]; \
+  (out)[1] = (M)[3] * (in)[0] + (M)[4] * (in)[1] + (M)[5] * (in)[2]; \
+  (out)[2] = (M)[6] * (in)[0] + (M)[7] * (in)[1] + (M)[8] * (in)[2]; \
+} while(0)
 
 static inline float ssts_fwd(float x, float s_2, float m_2,
                               float g, float t_1, float n_r)
@@ -239,7 +236,7 @@ static inline void xyz_to_jmh(__private const float xyz[3],
                                __private float jmh[3])
 {
   float rgb[3], rgb_c[3], rgb_a[3];
-  apply_mat(rgb, dt_ac_m16, xyz);
+  _mat_apply(rgb, dt_ac_m16, xyz);
 
   for(int c = 0; c < 3; c++)
     rgb_c[c] = d_rgb[c] * rgb[c];
@@ -282,7 +279,7 @@ static inline void jmh_to_xyz(__private const float jmh[3],
 
   float p_in[3] = { A, a_op, b_op };
   float rgb_a[3];
-  apply_mat(rgb_a, dt_ac_panlrcm, p_in);
+  _mat_apply(rgb_a, dt_ac_panlrcm, p_in);
   for(int c = 0; c < 3; c++)
     rgb_a[c] /= 1403.0f;
 
@@ -293,7 +290,7 @@ static inline void jmh_to_xyz(__private const float jmh[3],
   for(int c = 0; c < 3; c++)
     rgb[c] = rgb_c[c] / fmax(d_rgb[c], 1e-12f);
 
-  apply_mat(xyz, dt_ac_m16_inv, rgb);
+  _mat_apply(xyz, dt_ac_m16_inv, rgb);
 }
 
 /* ====================================================================
@@ -318,14 +315,14 @@ static inline float j_to_y(float j, float f_l_n, float a_w_j, float inv_cz)
 
 /* Forward declaration (defined in gamut compression section) */
 static inline float reach_m_from_table(float h,
-    __private const dt_ac_cl_params_t *p);
+    __constant const dt_ac_cl_params_t * restrict p);
 
 /* ====================================================================
  * Chroma Compression
  * ==================================================================== */
 
 static inline void chroma_compress(__private float jmh[3], float orig_j,
-                                    __private const dt_ac_cl_params_t *p)
+                                    __constant const dt_ac_cl_params_t * restrict p)
 {
   const float j = fmax(jmh[0], 1e-12f);
   float m = jmh[1];
@@ -358,7 +355,7 @@ static inline void chroma_compress(__private float jmh[3], float orig_j,
  * ==================================================================== */
 
 static inline void tonemap_and_compress_fwd(__private float jmh[3],
-    __private const dt_ac_cl_params_t *p)
+    __constant const dt_ac_cl_params_t * restrict p)
 {
   const float orig_j = jmh[0];
 
@@ -393,7 +390,7 @@ static inline float smin(float a, float b, float k)
 }
 
 static inline float reach_m_from_table(float h,
-    __private const dt_ac_cl_params_t *p)
+    __constant const dt_ac_cl_params_t * restrict p)
 {
   const float hw = wrap_hue(h);
   int lo = 0, hi = 1;
@@ -411,7 +408,7 @@ static inline float reach_m_from_table(float h,
 }
 
 static inline void cusp_from_table(__private float cusp_out[2], float h,
-    __private const dt_ac_cl_params_t *p)
+    __constant const dt_ac_cl_params_t * restrict p)
 {
   const float hw = wrap_hue(h);
   int lo = 0, hi = 1;
@@ -430,7 +427,7 @@ static inline void cusp_from_table(__private float cusp_out[2], float h,
 }
 
 static inline float hue_upper_hull_gamma(float h,
-    __private const dt_ac_cl_params_t *p)
+    __constant const dt_ac_cl_params_t * restrict p)
 {
   const float hw = wrap_hue(h);
   int lo = 0, hi = 1;
@@ -559,7 +556,7 @@ static inline float remap_M(float m, float gamut_boundary_m,
 }
 
 static inline void compress_gamut(__private float jmh[3], float jx,
-    __private const dt_ac_cl_params_t *p)
+    __constant const dt_ac_cl_params_t * restrict p)
 {
   float j = jmh[0], m = jmh[1], h = jmh[2];
   if(!isfinite(j) || !isfinite(m)) return;
@@ -613,7 +610,7 @@ static inline void compress_gamut(__private float jmh[3], float jx,
 }
 
 static inline void gamut_compress_fwd(__private float jmh[3],
-    __private const dt_ac_cl_params_t *p)
+    __constant const dt_ac_cl_params_t * restrict p)
 {
   float j = jmh[0], m = jmh[1];
   if(!isfinite(j + m)) return;
@@ -622,7 +619,7 @@ static inline void gamut_compress_fwd(__private float jmh[3],
 }
 
 static inline void gamut_compress_inv(__private float jmh[3],
-    __private const dt_ac_cl_params_t *p)
+    __constant const dt_ac_cl_params_t * restrict p)
 {
   float j = jmh[0], m = jmh[1];
   const float h = jmh[2];
@@ -658,11 +655,11 @@ static inline void gamut_compress_inv(__private float jmh[3],
 
 static inline void pipeline_eval(__private const float rgb_in[3],
                                   __private float rgb_out[3],
-                                  __private const dt_ac_cl_params_t *p)
+                                  __constant const dt_ac_cl_params_t * restrict p)
 {
   /* Step 1: pipe RGB -> AP1 (D60) */
   float ap1[3];
-  apply_mat(ap1, p->fwd_matrix, rgb_in);
+  _mat_apply(ap1, p->fwd_matrix, rgb_in);
 
   if(!isfinite(ap1[0] + ap1[1] + ap1[2]) || (ap1[0] + ap1[1] + ap1[2]) <= 0.0f)
   {
@@ -677,7 +674,7 @@ static inline void pipeline_eval(__private const float rgb_in[3],
 
   /* Step 2: AP1 -> XYZ (scene linear) */
   float xyz[3];
-  apply_mat(xyz, dt_ac_ap1_to_xyz, ap1);
+  _mat_apply(xyz, dt_ac_ap1_to_xyz, ap1);
 
   /* Step 3: x100 to absolute nits for CAM */
   for(int c = 0; c < 3; c++) xyz[c] *= DT_AC_REF_LUM;
@@ -698,13 +695,13 @@ static inline void pipeline_eval(__private const float rgb_in[3],
 
   /* Step 8: XYZ -> AP1 (back to display-referred) */
   float ap1_out[3];
-  apply_mat(ap1_out, dt_ac_xyz_to_ap1, xyz_out);
+  _mat_apply(ap1_out, dt_ac_xyz_to_ap1, xyz_out);
   for(int c = 0; c < 3; c++)
     ap1_out[c] = fmax(ap1_out[c], 0.0f) / DT_AC_REF_LUM;
 
   /* Step 9: AP1 -> pipe RGB */
   float rgb[3];
-  apply_mat(rgb, p->inv_matrix, ap1_out);
+  _mat_apply(rgb, p->inv_matrix, ap1_out);
 
   /* Step 10: Hard floor (reference: hardClip = fmax(v, 0.0f)) */
   for(int c = 0; c < 3; c++)
@@ -724,7 +721,7 @@ static inline void pipeline_eval(__private const float rgb_in[3],
 __kernel void kernel_aces20(__global const float *restrict in,
                              __global float *restrict out,
                              const int width, const int height,
-                             __private const dt_ac_cl_params_t params)
+                              __constant const dt_ac_cl_params_t params)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
