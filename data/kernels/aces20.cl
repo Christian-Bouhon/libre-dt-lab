@@ -394,13 +394,15 @@ static inline float reach_m_from_table(float h,
 {
   const float hw = wrap_hue(h);
   int lo = 0, hi = 1;
+  int found = 0;
   for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
   {
     if(hw >= p->table_hues[i] && hw < p->table_hues[i + 1])
-    { lo = i; hi = i + 1; break; }
+    { lo = i; hi = i + 1; found = 1; break; }
   }
-  if(hw < p->table_hues[0] || hw >= p->table_hues[DT_AC_GAMUT_TABLE_SIZE - 1])
-  { lo = DT_AC_GAMUT_TABLE_SIZE - 1; hi = 0; }
+  if(!found)
+    if(hw < p->table_hues[0] || hw >= p->table_hues[DT_AC_GAMUT_TABLE_SIZE - 1])
+    { lo = DT_AC_GAMUT_TABLE_SIZE - 1; hi = 0; }
   float dh = p->table_hues[hi] - p->table_hues[lo];
   if(dh < 0.0f) dh += 360.0f;
   const float t = (dh > 0.0f) ? wrap_hue(hw - p->table_hues[lo]) / dh : 0.0f;
@@ -412,13 +414,15 @@ static inline void cusp_from_table(__private float cusp_out[2], float h,
 {
   const float hw = wrap_hue(h);
   int lo = 0, hi = 1;
+  int found = 0;
   for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
   {
     if(hw >= p->table_hues[i] && hw < p->table_hues[i + 1])
-    { lo = i; hi = i + 1; break; }
+    { lo = i; hi = i + 1; found = 1; break; }
   }
-  if(hw < p->table_hues[0] || hw >= p->table_hues[DT_AC_GAMUT_TABLE_SIZE - 1])
-  { lo = DT_AC_GAMUT_TABLE_SIZE - 1; hi = 0; }
+  if(!found)
+    if(hw < p->table_hues[0] || hw >= p->table_hues[DT_AC_GAMUT_TABLE_SIZE - 1])
+    { lo = DT_AC_GAMUT_TABLE_SIZE - 1; hi = 0; }
   float dh = p->table_hues[hi] - p->table_hues[lo];
   if(dh < 0.0f) dh += 360.0f;
   const float t = (dh > 0.0f) ? wrap_hue(hw - p->table_hues[lo]) / dh : 0.0f;
@@ -431,13 +435,15 @@ static inline float hue_upper_hull_gamma(float h,
 {
   const float hw = wrap_hue(h);
   int lo = 0, hi = 1;
+  int found = 0;
   for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
   {
     if(hw >= p->table_hues[i] && hw < p->table_hues[i + 1])
-    { lo = i; hi = i + 1; break; }
+    { lo = i; hi = i + 1; found = 1; break; }
   }
-  if(hw < p->table_hues[0] || hw >= p->table_hues[DT_AC_GAMUT_TABLE_SIZE - 1])
-  { lo = DT_AC_GAMUT_TABLE_SIZE - 1; hi = 0; }
+  if(!found)
+    if(hw < p->table_hues[0] || hw >= p->table_hues[DT_AC_GAMUT_TABLE_SIZE - 1])
+    { lo = DT_AC_GAMUT_TABLE_SIZE - 1; hi = 0; }
   float dh = p->table_hues[hi] - p->table_hues[lo];
   if(dh < 0.0f) dh += 360.0f;
   const float t = (dh > 0.0f) ? wrap_hue(hw - p->table_hues[lo]) / dh : 0.0f;
@@ -627,7 +633,10 @@ static inline void gamut_compress_inv(__private float jmh[3],
   if(j <= 0.0f || m <= 0.0f) return;
 
   const float limit_j_max = p->limit_j_max;
-  const float analytical_threshold = 0.9f * limit_j_max;
+  float cusp[2];
+  cusp_from_table(cusp, h, p);
+  const float analytical_threshold = cusp[0]
+    + DT_AC_GAMUT_FOCUS_GAIN_BLEND * (limit_j_max - cusp[0]);
 
   if(j < analytical_threshold)
   {

@@ -140,20 +140,26 @@ static const float dt_ac_xyz_to_ap1[9] =
   0.0117218943f, -0.0082844420f,  0.9883948585f
 };
 
-/* CAT16: XYZ → sharpened LMS (MATRIX_16) */
+/* CAT16: XYZ → sharpened LMS (MATRIX_16 — transposed of CTL's XYZtoRGB(CAM16_PRI))
+ *
+ * Matches the ACES 2.0 CTL (Lib.Academy.OutputTransform.ctl) which computes
+ * this matrix from the CAM16_PRI chromaticities via XYZtoRGB_f33():
+ *   {0.8336, 0.1735}, {2.3854, -1.4659}, {0.087, -0.125}, {0.333, 0.333}
+ * This differs slightly from the published CAT16 standard matrix in the
+ * blue primary, per the ACES 2.0 reference. */
 static const float dt_ac_m16[9] =
 {
-  0.4012880027f,  0.6501730084f, -0.0514610000f,
- -0.2502680123f,  1.2044140100f,  0.0458539985f,
- -0.0020790000f,  0.0489519984f,  0.9531270266f
+  0.3640744836f,  0.5947008157f,  0.0411012735f,
+ -0.2222450987f,  1.0738554823f,  0.1479453361f,
+ -0.0020676190f,  0.0488260454f,  0.9503875570f
 };
 
-/* CAT16: sharpened LMS → XYZ (MATRIX_16 inverse) */
+/* CAT16: sharpened LMS → XYZ (exact inverse of dt_ac_m16) */
 static const float dt_ac_m16_inv[9] =
 {
-  1.8620678205f, -1.0112546159f,  0.1491867671f,
-  0.3875265518f,  0.6214474293f, -0.0089739829f,
- -0.0158414983f, -0.0341229353f,  1.0499644075f
+  2.0512756811f, -1.1400313440f,  0.0887556628f,
+  0.4269389763f,  0.7005835278f, -0.1275225041f,
+ -0.0174712780f, -0.0384725929f,  1.0589468739f
 };
 
 /* Inverse CAM: opponent (P_p_2, a, b) → RGB_a — divided by 1403 after multiply */
@@ -223,16 +229,16 @@ static const float dt_ac_aces_white_xyz[3] = { 95.2646074570f, 100.0f, 100.88251
 #define DT_AC_MAX_SORTED_CORNERS       12   /* 2 * 6 */
 #define DT_AC_DISPLAY_CUSP_TOL          1e-7f
 
-/* Reach primaries (AP0 + AP1 + BT.2020 merged gamut) — standard ACES 2.0 */
+/* Reach primaries — ACES 2.0 reference uses AP1 (D60) as the reach gamut */
 #define DT_AC_REACH_Y             1.0f
-#define DT_AC_REACH_R_X           0.7347f
-#define DT_AC_REACH_R_Y           0.2653f
-#define DT_AC_REACH_G_X           0.1596f
-#define DT_AC_REACH_G_Y           0.8404f
-#define DT_AC_REACH_B_X           0.0668f
-#define DT_AC_REACH_B_Y           0.0453f
-#define DT_AC_REACH_W_X           0.3127f
-#define DT_AC_REACH_W_Y           0.3290f
+#define DT_AC_REACH_R_X           0.7130f
+#define DT_AC_REACH_R_Y           0.2930f
+#define DT_AC_REACH_G_X           0.1650f
+#define DT_AC_REACH_G_Y           0.8300f
+#define DT_AC_REACH_B_X           0.1280f
+#define DT_AC_REACH_B_Y           0.0440f
+#define DT_AC_REACH_W_X           0.32168f
+#define DT_AC_REACH_W_Y           0.33767f
 
 /* ====================================================================
  * Type Definitions
@@ -920,7 +926,7 @@ static inline void _ac_gen_unit_cube_cusp_corner(float rgb[3], int corner)
 /* Matches CTL build_limiting_cusp_corners_tables (lines 1020-1058) */
 static inline void _ac_build_limiting_cusp_corners_tables(
     _ac_corner_tables_t *tbl,
-    int prim_set, const dt_ac_context_t *ctx)
+    int prim_set, float peak_scale, const dt_ac_context_t *ctx)
 {
   float tmp_rgb[DT_AC_CUSP_CORNER_COUNT][3];
   float tmp_jmh[DT_AC_CUSP_CORNER_COUNT][3];
@@ -929,6 +935,7 @@ static inline void _ac_build_limiting_cusp_corners_tables(
   for(int i = 0; i < DT_AC_CUSP_CORNER_COUNT; i++)
   {
     _ac_gen_unit_cube_cusp_corner(tmp_rgb[i], i);
+    for(int c = 0; c < 3; c++) tmp_rgb[i][c] *= peak_scale;
     _ac_rgb_to_jmh_prim(tmp_jmh[i], tmp_rgb[i], prim_set, ctx);
     if(tmp_jmh[i][2] < tmp_jmh[min_idx][2])
       min_idx = i;
@@ -1170,10 +1177,10 @@ static inline void _ac_build_cusp_table(float cusps[DT_AC_GAMUT_TABLE_SIZE][3],
 /* Matches CTL make_uniform_hue_gamut_table (lines 1355-1381) */
 static inline void _ac_make_uniform_hue_table(float hues[DT_AC_GAMUT_TABLE_SIZE],
     float cusps[DT_AC_GAMUT_TABLE_SIZE][3],
-    int prim_set, const dt_ac_context_t *ctx)
+    int prim_set, float peak_scale, const dt_ac_context_t *ctx)
 {
   _ac_corner_tables_t limit_tbl;
-  _ac_build_limiting_cusp_corners_tables(&limit_tbl, prim_set, ctx);
+  _ac_build_limiting_cusp_corners_tables(&limit_tbl, prim_set, peak_scale, ctx);
 
   _ac_corner_tables_t reach_tbl;
   _ac_find_reach_corners_table(&reach_tbl, ctx);
@@ -1288,21 +1295,24 @@ static inline float _ac_reach_m_from_table(float h,
 {
   const float hw = _ac_wrap_hue(h);
   int lo = 0, hi = 1;
-  /* Find the two surrounding table entries */
+  bool found = false;
   for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
   {
     if(hw >= hues[i] && hw < hues[i + 1])
     {
       lo = i;
       hi = i + 1;
+      found = true;
       break;
     }
   }
-  /* Handle wrap-around */
-  if(hw < hues[0] || hw >= hues[DT_AC_GAMUT_TABLE_SIZE - 1])
+  if(!found)
   {
-    lo = DT_AC_GAMUT_TABLE_SIZE - 1;
-    hi = 0;
+    if(hw < hues[0] || hw >= hues[DT_AC_GAMUT_TABLE_SIZE - 1])
+    {
+      lo = DT_AC_GAMUT_TABLE_SIZE - 1;
+      hi = 0;
+    }
   }
   float dh = hues[hi] - hues[lo];
   if(dh < 0.0f) dh += 360.0f;
@@ -1317,6 +1327,7 @@ static inline void _ac_cusp_from_table(float cusp_out[2], float h,
 {
   const float hw = _ac_wrap_hue(h);
   int lo = 0, hi = 1;
+  bool found = false;
 
   for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
   {
@@ -1324,13 +1335,17 @@ static inline void _ac_cusp_from_table(float cusp_out[2], float h,
     {
       lo = i;
       hi = i + 1;
+      found = true;
       break;
     }
   }
-  if(hw < hues[0] || hw >= hues[DT_AC_GAMUT_TABLE_SIZE - 1])
+  if(!found)
   {
-    lo = DT_AC_GAMUT_TABLE_SIZE - 1;
-    hi = 0;
+    if(hw < hues[0] || hw >= hues[DT_AC_GAMUT_TABLE_SIZE - 1])
+    {
+      lo = DT_AC_GAMUT_TABLE_SIZE - 1;
+      hi = 0;
+    }
   }
   float dh = hues[hi] - hues[lo];
   if(dh < 0.0f) dh += 360.0f;
@@ -1347,19 +1362,24 @@ static inline float _ac_hue_upper_hull_gamma(float h,
 {
   const float hw = _ac_wrap_hue(h);
   int lo = 0, hi = 1;
+  bool found = false;
   for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
   {
     if(hw >= hues[i] && hw < hues[i + 1])
     {
       lo = i;
       hi = i + 1;
+      found = true;
       break;
     }
   }
-  if(hw < hues[0] || hw >= hues[DT_AC_GAMUT_TABLE_SIZE - 1])
+  if(!found)
   {
-    lo = DT_AC_GAMUT_TABLE_SIZE - 1;
-    hi = 0;
+    if(hw < hues[0] || hw >= hues[DT_AC_GAMUT_TABLE_SIZE - 1])
+    {
+      lo = DT_AC_GAMUT_TABLE_SIZE - 1;
+      hi = 0;
+    }
   }
   float dh = hues[hi] - hues[lo];
   if(dh < 0.0f) dh += 360.0f;
@@ -1764,17 +1784,17 @@ static inline void _ac_gamut_compress_inv(float jmh[3],
   if(j <= 0.0f || m <= 0.0f) return;
 
   const float limit_j_max = ctx->limit_j_max;
-  const float analytical_threshold = 0.9f * limit_j_max;
+  float cusp[2];
+  _ac_cusp_from_table(cusp, h, ctx->table_gamut_cusps, ctx->table_hues);
+  const float analytical_threshold = cusp[0]
+    + DT_AC_GAMUT_FOCUS_GAIN_BLEND * (limit_j_max - cusp[0]);
 
   if(j < analytical_threshold)
   {
-    /* Below threshold: single application of compress_gamut */
     _ac_compress_gamut(jmh, j, ctx);
   }
   else
   {
-    /* Above threshold: apply compression twice with different Jx
-     * to approximate the inverse */
     float jmh_temp[3] = { j, m, h };
     float jx = j;
 
@@ -1948,7 +1968,8 @@ static void dt_ac_compute_context(const dt_iop_aces20_params_t *p,
      * corrupted the whole blue-hue region of the cusp table. */
 
     /* Hue table + cusp table */
-    _ac_make_uniform_hue_table(ctx->table_hues, ctx->table_gamut_cusps, 1, ctx);
+    const float peak_scale = peak / DT_AC_REF_LUM;
+    _ac_make_uniform_hue_table(ctx->table_hues, ctx->table_gamut_cusps, 1, peak_scale, ctx);
 
     /* Reach M table at limit_J_max */
     _ac_make_reach_m_table(ctx->table_reach_m, ctx->table_hues, ctx);
