@@ -403,18 +403,14 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
   /* Step 8: Film-print highlight desaturation toward white */
   {
     const float y_exposed = y_abs * p->exposure_factor;
-    const float w = st_desat_weight(y_exposed, p->hl_desat, p->hl_desat_threshold);
-    if(w > 0.0f && isfinite(w))
-    {
-      const float maxc_pre = fmax(fmax(rgb.x, rgb.y), rgb.z);
-      const float minc_pre = fmin(fmin(rgb.x, rgb.y), rgb.z);
-      const float sat_pre = (maxc_pre > 0.0f) ? (maxc_pre - minc_pre) / maxc_pre : 0.0f;
-      const float ss_pre = (sat_pre * sat_pre) / (sat_pre * sat_pre + (1.0f - sat_pre) * (1.0f - sat_pre) + 1e-6f);
 
-      /* Progressive Abney hue rotation — weight independent of hl_desat */
-      if(p->hl_rotation != 0.0f)
+    /* Progressive Abney hue rotation — independent of hl_desat, only on
+     * highlight luminance exceeding the threshold. */
+    if(p->hl_rotation != 0.0f && isfinite(y_exposed))
+    {
+      const float wr = fmin(st_desat_weight(y_exposed, 1.0f, p->hl_desat_threshold), 1.0f);
+      if(wr > 0.0f)
       {
-        const float wr = fmin(st_desat_weight(y_exposed, 1.0f, p->hl_desat_threshold), 1.0f);
         const float angle = p->hl_rotation * 0.25f * wr; // CB
         const float ca = cos(angle);
         const float sa = sin(angle);
@@ -432,6 +428,15 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
             rgb.y = y - (lc0 / lc1) * ur - (lc2 / lc1) * vr;
         }
       }
+    }
+
+    const float w = st_desat_weight(y_exposed, p->hl_desat, p->hl_desat_threshold);
+    if(w > 0.0f && isfinite(w))
+    {
+      const float maxc_pre = fmax(fmax(rgb.x, rgb.y), rgb.z);
+      const float minc_pre = fmin(fmin(rgb.x, rgb.y), rgb.z);
+      const float sat_pre = (maxc_pre > 0.0f) ? (maxc_pre - minc_pre) / maxc_pre : 0.0f;
+      const float ss_pre = (sat_pre * sat_pre) / (sat_pre * sat_pre + (1.0f - sat_pre) * (1.0f - sat_pre) + 1e-6f);
 
       /* Vibrance négative : désature plus les pixels saturés, activée par hl_desat et hl_hue_shift */
       float w_final = w;
@@ -439,7 +444,7 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
       {
         if(p->hl_desat > 0.0f)
         {
-          const float vib_neg = p->hl_desat * ss_pre * 0.5f;
+          const float vib_neg = p->hl_desat * ss_pre * 0.35f;
           const float w_vib = st_desat_weight(y_exposed, 1.0f, p->hl_desat_threshold) * vib_neg;
           w_final = fmin(w_final + w_vib, 1.0f);
         }
