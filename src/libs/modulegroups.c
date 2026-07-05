@@ -3027,10 +3027,11 @@ static gboolean _funnel_pressed(GtkWidget *widget,
       { "sigmoid",                      2 },
       { "AgX",                          3 },
       { "basecurve",                    4 },
-      { "3DCF",                         5 }
+      { "3DCF",                         5 },
+      { "ACES 2.0",                     6 }
     };
 
-    for(int i = 0; i < 6; i++)
+    for(int i = 0; i < 7; i++)
     {
       GtkWidget *item = gtk_menu_item_new_with_label(items[i].label);
       g_signal_connect(G_OBJECT(item), "activate",
