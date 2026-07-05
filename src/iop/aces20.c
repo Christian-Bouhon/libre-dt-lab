@@ -63,7 +63,7 @@
 #include <stdio.h>
 #include <string.h>
 
-DT_MODULE_INTROSPECTION(1, dt_iop_aces20_params_t)
+DT_MODULE_INTROSPECTION(2, dt_iop_aces20_params_t)
 
 /* ====================================================================
  * ACES 2.0 Constants
@@ -267,6 +267,7 @@ typedef struct
   float luma_coeff[3];      /* AP1 luma */
   float exposure_factor;
   int   surround_idx;
+  int   sdr_output_clip;    /* optional final ceiling at code-value 1.0 */
 
   /* CAT16 CAM precomputed values (constant for ACES D60 white) */
   float f_l;
@@ -303,6 +304,7 @@ typedef struct dt_iop_aces20_params_t
   float peak_luminance;                // $MIN: 100 $MAX: 4000 $DEFAULT: 200 $STEP: 10 $DESCRIPTION: "peak luminance (nits)"
   dt_iop_aces20_surround_t surround;   // $DEFAULT: DT_AC_SURROUND_DIM $DESCRIPTION: "surround"
   float exposure_ev;                   // $MIN: -5 $MAX: 5 $DEFAULT: 0 $STEP: 0.05 $DESCRIPTION: "exposure (EV)"
+  gboolean sdr_output_clip;            // $DEFAULT: FALSE $DESCRIPTION: "clip output to display white (1.0)"
 } dt_iop_aces20_params_t;
 
 /* Per-pipepiece data */
@@ -351,7 +353,8 @@ typedef struct dt_ac_cl_params_t
   float table_upper_hull_gamma[DT_AC_GAMUT_TABLE_SIZE];
   int   hue_search_min;
   int   hue_search_max;
-  int   _pad[2];
+  int   sdr_output_clip;          /* repurposed from _pad[2] — same struct size */
+  int   _pad;
 } dt_ac_cl_params_t;
 
 /* OpenCL global data */
@@ -366,6 +369,7 @@ typedef struct dt_iop_aces20_gui_data_t
   GtkWidget *peak_luminance;
   GtkWidget *surround;
   GtkWidget *exposure;
+  GtkWidget *sdr_output_clip;
 } dt_iop_aces20_gui_data_t;
 
 /* ====================================================================
@@ -1481,7 +1485,7 @@ static inline float _ac_smin_scaled(float a, float b, float scale_ref)
 static inline float _ac_estimate_intersect_M(float j_axis_intersect, float slope,
     float inv_gamma, float j_max, float m_max, float j_intersection_ref)
 {
-  if(m_max <= 0.0f) return m_max;
+  if(slope >= 0.0f || m_max <= 0.0f) return m_max;
 
   /* Project the J-axis intercept through the boundary power law
    * using the reference point for scaling */
@@ -1706,7 +1710,7 @@ static inline void _ac_compress_gamut(float jmh[3], float jx,
   const float slope = _ac_compression_slope(j_intersect_source, focus_j,
       limit_j_max, slope_gain);
 
-  if(!isfinite(slope)) return;
+  if(!isfinite(slope) || slope >= 0.0f) return;
 
   /* Gamut boundary M at the source intersection */
   const float gamut_boundary_m = _ac_find_boundary_M(cusp_j, cusp_m,
@@ -1806,6 +1810,7 @@ static void dt_ac_compute_context(const dt_iop_aces20_params_t *p,
 
   ctx->exposure_factor = exp2f(p->exposure_ev);
   ctx->surround_idx = p->surround;
+  ctx->sdr_output_clip = p->sdr_output_clip ? 1 : 0;
   for(int i = 0; i < 3; i++) ctx->luma_coeff[i] = dt_ac_luma_ap1[i];
 
   /* Get RGB→XYZ(D50) and XYZ(D50)→RGB matrices from the pipe's working profile.
@@ -2052,9 +2057,17 @@ static void dt_ac_pipeline_eval(const float rgb_in[3], float rgb_out[3],
   float rgb[3];
   _mat_apply(rgb, ctx->inv_matrix, ap1_out);
 
-  /* Step 10: Hard clamp (reference: hardClip = fmax(v, 0.0f)) */
+  /* Step 10: Hard floor (reference: hardClip = fmax(v, 0.0f)) */
   for(int c = 0; c < 3; c++)
     rgb_out[c] = isfinite(rgb[c]) ? fmaxf(rgb[c], 0.0f) : 0.0f;
+
+  /* Optional Step 11 (NOT part of the official reference, which never
+   * ceiling-clamps its output): clip to display white (code-value 1.0).
+   * Off by default to preserve HDR/creative headroom above 1.0; enable for
+   * a strict SDR-referred output feeding modules that assume [0,1] input. */
+  if(ctx->sdr_output_clip)
+    for(int c = 0; c < 3; c++)
+      rgb_out[c] = fminf(rgb_out[c], 1.0f);
 }
 
 /* ====================================================================
@@ -2238,6 +2251,7 @@ static void dt_ac_fill_cl_params(const dt_iop_aces20_data_t *d,
   }
   clp->hue_search_min         = ctx->hue_search_range[0];
   clp->hue_search_max         = ctx->hue_search_range[1];
+  clp->sdr_output_clip        = ctx->sdr_output_clip;
 }
 
 int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
@@ -2359,6 +2373,16 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->exposure,
     _("Exposure compensation applied before tone mapping. "
       "Positive values brighten, negative values darken."));
+
+  /* Optional SDR output clip */
+  g->sdr_output_clip = dt_bauhaus_toggle_from_params(self, "sdr_output_clip");
+  gtk_widget_set_tooltip_text(g->sdr_output_clip,
+    _("Clip output to code-value 1.0 (display white). Off by default: the "
+      "official ACES 2.0 transform never ceiling-clamps its output, and "
+      "values above 1.0 are expected (HDR headroom, or highlight detail to "
+      "be handled by a later module). Enable only if you need a strict "
+      "[0,1] SDR-referred output for compatibility with modules downstream "
+      "that assume clipped input."));
 }
 
 // clang-format off

@@ -140,7 +140,8 @@ typedef struct
   float table_upper_hull_gamma[DT_AC_GAMUT_TABLE_SIZE];
   int   hue_search_min;
   int   hue_search_max;
-  int   _pad[2];
+  int   sdr_output_clip;          /* repurposed from _pad[2] — same struct size */
+  int   _pad;
 } dt_ac_cl_params_t;
 
 /* ====================================================================
@@ -507,7 +508,7 @@ static inline float smin_scaled(float a, float b, float scale_ref)
 static inline float estimate_intersect_M(float j_axis_intersect, float slope,
     float inv_gamma, float j_max, float m_max, float j_intersection_ref)
 {
-  if(m_max <= 0.0f) return m_max;
+  if(slope >= 0.0f || m_max <= 0.0f) return m_max;
   const float j_ref = fmax(j_intersection_ref, 1e-12f);
   const float normalised_j = j_axis_intersect / j_ref;
   const float inv_gamma_safe = fmax(inv_gamma, 1e-6f);
@@ -589,7 +590,7 @@ static inline void compress_gamut(__private float jmh[3], float jx,
   if(!isfinite(j_intersect_source) || !isfinite(j_intersect_cusp)) return;
 
   const float slope = compression_slope(j_intersect_source, focus_j, limit_j_max, slope_gain);
-  if(!isfinite(slope)) return;
+  if(!isfinite(slope) || slope >= 0.0f) return;
 
   const float gamut_boundary_m = find_boundary_M(cusp_j, cusp_m,
       limit_j_max, gamma_top_inv, gamma_bottom_inv,
@@ -705,9 +706,15 @@ static inline void pipeline_eval(__private const float rgb_in[3],
   float rgb[3];
   apply_mat(rgb, p->inv_matrix, ap1_out);
 
-  /* Step 10: Hard clamp (reference: hardClip = fmax(v, 0.0f)) */
+  /* Step 10: Hard floor (reference: hardClip = fmax(v, 0.0f)) */
   for(int c = 0; c < 3; c++)
     rgb_out[c] = max(rgb[c], 0.0f);
+
+  /* Optional Step 11 (NOT part of the official reference): clip to display
+   * white (code-value 1.0). Off by default — see aces20.c for rationale. */
+  if(p->sdr_output_clip)
+    for(int c = 0; c < 3; c++)
+      rgb_out[c] = min(rgb_out[c], 1.0f);
 }
 
 /* ====================================================================
