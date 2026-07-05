@@ -2271,10 +2271,15 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   dt_ac_cl_params_t clp;
   dt_ac_fill_cl_params(d, &clp);
 
+  cl_mem dev_clp = dt_opencl_copy_host_to_device_constant(devid, sizeof(clp), &clp);
+  if(!dev_clp) return DT_OPENCL_PROCESS_CL;
+
   cl_int err = CL_SUCCESS;
   err = dt_opencl_enqueue_kernel_2d_args(
     devid, gd->kernel_aces20, width, height,
-    CLARG(dev_in), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(clp));
+    CLARG(dev_in), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(dev_clp));
+
+  dt_opencl_release_mem_object(dev_clp);
 
   return err;
 }

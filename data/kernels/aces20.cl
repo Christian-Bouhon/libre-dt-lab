@@ -721,7 +721,7 @@ static inline void pipeline_eval(__private const float rgb_in[3],
 __kernel void kernel_aces20(__global const float *restrict in,
                              __global float *restrict out,
                              const int width, const int height,
-                              __constant const dt_ac_cl_params_t params)
+                              __constant const dt_ac_cl_params_t * restrict params)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -737,7 +737,7 @@ __kernel void kernel_aces20(__global const float *restrict in,
     rgb_in[c] = isfinite(rgb_in[c]) ? fmax(rgb_in[c], 0.0f) : 0.0f;
 
   float rgb_out[3];
-  pipeline_eval(rgb_in, rgb_out, &params);
+  pipeline_eval(rgb_in, rgb_out, params);
 
   out[pix]     = rgb_out[0];
   out[pix + 1] = rgb_out[1];
