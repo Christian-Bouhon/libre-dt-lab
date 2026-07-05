@@ -179,7 +179,7 @@ static inline float3 st_output_gamut_protect(float3 rgb, const float fwd[9], con
  * Mirrors the CPU definitions in 3dcf.c 1:1.
  * ==================================================================== */
 
-static const float st_gamut_reach[360] =
+static __constant const float st_gamut_reach[360] =
 {
    215.33465f,    216.65399f,    217.88428f,    219.05153f,    220.14357f,    221.16588f,
    222.12170f,    223.01161f,    223.83662f,    224.59834f,    225.29921f,    225.93167f,
