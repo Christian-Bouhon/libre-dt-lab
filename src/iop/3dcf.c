@@ -419,6 +419,42 @@ float dt_st_ssts_fwd(const dt_st_ssts_params_t *p, float x)
   return h * n_r;
 }
 
+/* BT.1886-encoded (gamma 2.4) tone-mapped output of scene value x through a
+ * given SSTS instance, with no exposure applied. Used only to define/compare
+ * anchor points below — this is exactly the y_tm computation performed later
+ * in dt_st_compute_y_tm() up to (but excluding) the contrast/shoulder stage. */
+static inline float dt_st_ssts_encoded(const dt_st_ssts_params_t *p, float x)
+{
+  if(p->n <= 0.0) return 0.0f;
+  const float y = dt_st_ssts_fwd(p, x) / (float)p->n;
+  return powf(fmaxf(y, 0.0f), 1.0f / 2.4f);
+}
+
+/* Solve, by bisection, the exposure (in EV) that makes 18% grey reproduce the
+ * same BT.1886-encoded output through `ssts` as it does through the peak=100
+ * nits reference SSTS with no exposure applied. This replaces a fixed linear
+ * "auto_ev = k * spectral_brilliance" approximation (which measurably over-
+ * exposes, increasingly so at high brilliance — verified: grey drifts from
+ * 0.383 to 0.512 across the slider range with the old k=0.061 formula) with
+ * an exact, self-consistent solve that holds regardless of the SSTS constants
+ * in use. dt_st_ssts_fwd() is monotonically increasing in x for x > 0, so the
+ * root is unique and bisection is safe. */
+static float dt_st_solve_grey_lock_ev(const dt_st_ssts_params_t *ssts)
+{
+  dt_st_ssts_params_t ref;
+  dt_st_ssts_init(&ref, 100.0);
+  const float target = dt_st_ssts_encoded(&ref, 0.18f);
+
+  float lo = -2.0f, hi = 10.0f;
+  for(int i = 0; i < 30; i++)
+  {
+    const float mid = 0.5f * (lo + hi);
+    const float val = dt_st_ssts_encoded(ssts, 0.18f * exp2f(mid));
+    if(val < target) lo = mid; else hi = mid;
+  }
+  return 0.5f * (lo + hi);
+}
+
 float dt_st_compute_y_tm(float y_scene, const dt_st_context_t *ctx)
 {
   if(ctx->ssts.n <= 0.0) return 0.0f;
@@ -963,14 +999,22 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
 static void st_compute_context(dt_iop_3dcf_params_t *p,
                                 dt_st_context_t *ctx)
 {
+  /* Initialize ACES 2.0 SSTS for the target roll-off character. Must happen
+   * BEFORE exposure_factor below, since the grey-lock solve needs ctx->ssts
+   * already set up for the current peak (spectral_brilliance) setting. */
+  const double rolloff_t = fmin(fmax((double)p->spectral_brilliance / 100.0, 0.0), 1.0);
+  const double peak = 100.0 * pow(100.0, rolloff_t);
+  dt_st_ssts_init(&ctx->ssts, peak);
+
   /* Auto-exposure compensation: single slider controls both SSTS tone curve
-   * character and brightness. Higher spectral brilliance makes SSTS less
-   * compressive, requiring positive exposure to maintain consistent perceived
-   * brightness. Formula auto_ev = 0.061 × spectral_brilliance ensures 18% gray
-   * and diffuse white map to the same BT.1886 output at any brilliance value. */
+   * character (via peak, above) and brightness. Higher spectral brilliance
+   * makes SSTS less compressive, so exposure is raised to compensate and
+   * keep 18% grey visually anchored. Solved exactly by bisection against the
+   * peak=100 reference (see dt_st_solve_grey_lock_ev) rather than via a fixed
+   * linear approximation, which measurably over-exposed at high brilliance. */
   {
-    const double auto_ev = 0.061 * (double)p->spectral_brilliance;
-    ctx->exposure_factor = exp2f((float)auto_ev);
+    const float auto_ev = dt_st_solve_grey_lock_ev(&ctx->ssts);
+    ctx->exposure_factor = exp2f(auto_ev);
   }
 
   /* === Combined input matrix: D50-adapted Rec.2020 RGB → D50 XYZ === */
@@ -1074,11 +1118,6 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
   ctx->gamma_power = exp2f(ctx->gamma);
 
   ctx->vibrance = fmaxf(p->vibrance, 0.0f);
-
-  /* Initialize ACES 2.0 SSTS for the target roll-off character */
-  const double rolloff_t = fmin(fmax((double)p->spectral_brilliance / 100.0, 0.0), 1.0);
-  const double peak = 100.0 * pow(100.0, rolloff_t);
-  dt_st_ssts_init(&ctx->ssts, peak);
 }
 
 /* Begin framework functions */

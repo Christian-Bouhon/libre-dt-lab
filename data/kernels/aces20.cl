@@ -18,14 +18,15 @@
     ---------------------------------------------------------------------------
     ACES 2.0 CAM DRT Reference Rendering — OpenCL Kernel
 
-    Full ACES 2.0 CAM DRT pipeline (Hellwig 2022):
-      pipe_RGB → AP1 → XYZ (D60)
-      → ×100 to absolute nits → Hellwig JMh
-      → Tonemap & compress in JMh:
-          J → Y → tonescale(Y) → J' (display J)
-          M ← chroma_compress(M, J', orig_J)
-      → XYZ(D60) → /100 → AP1 (D60)
-      → Gamut compression → pipe_RGB
+    Full ACES 2.0 CAM DRT pipeline:
+      pipe_RGB -> AP1 -> XYZ (D60)
+      -> x100 to absolute nits -> CAT16 JMh
+      -> Tonemap & compress in JMh:
+          J -> Y -> tonescale(Y) -> J' (display J)
+          M <- chroma_compress(M, J', orig_J)
+      -> Gamut compression (JMh space)
+      -> XYZ(D60) -> /100 -> AP1 (D60)
+      -> pipe_RGB
 
     Must match src/iop/aces20.c exactly (byte-for-byte CL params struct,
     and numerically identical per-pixel math).
@@ -33,7 +34,7 @@
 */
 
 /* ====================================================================
- * Hellwig 2022 CAM — Constant Matrices
+ * CAT16 CAM — Constant Matrices
  * ==================================================================== */
 
 __constant float dt_ac_ap1_to_xyz[9] =
@@ -71,7 +72,7 @@ __constant float dt_ac_panlrcm[9] =
   460.0f, -220.0f, -6300.0f
 };
 
-/* Hellwig CAM viewing-condition parameters */
+/* CAT16 CAM viewing-condition parameters */
 #define DT_AC_LA        100.0f
 #define DT_AC_YB         20.0f
 #define DT_AC_RA          2.0f
@@ -82,66 +83,23 @@ __constant float dt_ac_panlrcm[9] =
 
 #define DT_AC_REF_LUM    100.0f
 #define DT_AC_CAM_NL_OFFSET  27.13f
+#define DT_AC_CAM_NL_SCALE   400.0f
 
-/* AP1 reach table (360 entries) */
-__constant float dt_ac_gamut_reach[360] =
-{
-  166.785f, 168.475f, 170.129f, 171.753f, 173.340f, 174.878f, 176.367f,
-  177.802f, 179.181f, 180.505f, 181.763f, 182.965f, 184.106f, 185.187f,
-  186.212f, 187.177f, 188.086f, 188.947f, 189.758f, 190.527f, 191.254f,
-  191.949f, 192.615f, 193.250f, 193.872f, 194.360f, 187.091f, 180.402f,
-  174.237f, 168.524f, 163.226f, 158.301f, 153.711f, 149.426f, 145.416f,
-  141.663f, 138.135f, 134.821f, 131.702f, 128.766f, 125.995f, 123.376f,
-  120.898f, 118.555f, 116.339f, 114.233f, 112.244f, 110.345f, 108.551f,
-  106.842f, 105.219f, 103.680f, 102.209f, 100.818f,  99.487f,  98.224f,
-   97.021f,  95.874f,  94.781f,  93.744f,  92.761f,  91.821f,  90.930f,
-   90.082f,  89.276f,  88.513f,  87.787f,  87.103f,  86.450f,  85.840f,
-   85.260f,  84.711f,  84.198f,  83.716f,  83.264f,  82.843f,  82.452f,
-   82.086f,  81.750f,  81.445f,  81.165f,  80.908f,  80.682f,  80.481f,
-   80.304f,  80.151f,  80.023f,  79.919f,  79.840f,  79.791f,  79.761f,
-   79.755f,  79.773f,  79.816f,  79.889f,  79.980f,  80.096f,  80.243f,
-   80.408f,  80.603f,  80.817f,  81.061f,  81.335f,  81.635f,  81.958f,
-   82.312f,  82.690f,  83.099f,  83.539f,  84.009f,  84.509f,  85.046f,
-   85.614f,  86.212f,  86.847f,  87.518f,  88.226f,  88.977f,  89.764f,
-   90.601f,  91.473f,  92.395f,  93.359f,  94.379f,  95.447f,  96.570f,
-   97.748f,  98.993f, 100.293f, 101.660f, 103.101f, 104.614f, 106.201f,
-  107.880f, 109.637f, 111.493f, 113.446f, 115.503f, 117.670f, 119.965f,
-  122.382f, 124.939f, 127.649f, 130.518f, 133.563f, 136.792f, 140.222f,
-  143.878f, 141.687f, 138.110f, 134.729f, 131.525f, 128.491f, 125.616f,
-  122.888f, 120.300f, 117.841f, 115.497f, 113.269f, 111.151f, 109.131f,
-  107.202f, 105.371f, 103.619f, 101.947f, 100.354f,  98.828f,  97.375f,
-   95.984f,  94.659f,  93.390f,  92.175f,  91.016f,  89.911f,  88.849f,
-   87.836f,  86.871f,  85.950f,  85.065f,  84.222f,  83.417f,  82.654f,
-   81.921f,  81.226f,  80.560f,  79.926f,  79.327f,  78.754f,  78.217f,
-   77.698f,  77.216f,  76.758f,  76.324f,  75.916f,  75.537f,  75.177f,
-   74.847f,  74.536f,  74.249f,  73.987f,  73.743f,  73.523f,  73.328f,
-   73.151f,  72.992f,  72.858f,  72.742f,  72.650f,  72.577f,  72.522f,
-   72.491f,  72.479f,  72.485f,  72.516f,  72.565f,  72.632f,  72.717f,
-   72.827f,  72.961f,  73.108f,  73.279f,  73.474f,  73.688f,  73.926f,
-   74.182f,  74.463f,  74.768f,  75.092f,  75.446f,  75.818f,  76.215f,
-   76.642f,  77.094f,  77.570f,  78.070f,  78.601f,  79.163f,  79.749f,
-   80.371f,  81.024f,  81.708f,  82.422f,  83.173f,  83.960f,  84.784f,
-   85.645f,  86.548f,  87.488f,  88.477f,  89.508f,  90.588f,  91.711f,
-   92.889f,  94.122f,  95.404f,  96.747f,  98.157f,  99.622f, 101.154f,
-  102.759f, 104.437f, 106.195f, 108.032f, 109.949f, 111.963f, 114.069f,
-  116.272f, 118.585f, 121.002f, 120.929f, 119.934f, 118.988f, 118.085f,
-  117.230f, 116.418f, 115.643f, 114.911f, 114.221f, 113.568f, 112.952f,
-  112.372f, 111.823f, 111.316f, 110.840f, 110.394f, 109.985f, 109.607f,
-  109.265f, 108.948f, 108.661f, 108.411f, 108.185f, 107.990f, 107.825f,
-  107.684f, 107.581f, 107.501f, 107.446f, 107.422f, 107.428f, 107.458f,
-  107.520f, 107.611f, 107.727f, 107.874f, 108.044f, 108.246f, 108.472f,
-  108.728f, 109.015f, 109.332f, 109.674f, 110.046f, 110.449f, 110.883f,
-  111.346f, 111.841f, 112.366f, 112.921f, 113.507f, 114.124f, 114.777f,
-  115.460f, 116.180f, 116.931f, 117.719f, 118.536f, 119.397f, 120.288f,
-  121.216f, 122.186f, 123.187f, 124.225f, 125.305f, 126.422f, 127.582f,
-  128.772f, 130.005f, 131.281f, 132.593f, 133.942f, 135.327f, 136.755f,
-  138.220f, 139.722f, 141.254f, 142.822f, 144.421f, 146.057f, 147.711f,
-  149.396f, 151.099f, 152.826f, 154.565f, 156.317f, 158.075f, 159.833f,
-  161.584f, 163.336f, 165.070f
-};
+/* M (colorfulness) scale factor */
+#define DT_AC_M_SCALE  (DT_AC_CAM_NL_SCALE * 43.0f * DT_AC_SURR_NC)
+
+/* Gamut compression constants */
+#define DT_AC_GAMUT_SMOOTH_CUSPS       0.12f
+#define DT_AC_GAMUT_SMOOTH_M           0.27f
+#define DT_AC_GAMUT_CUSP_MID_BLEND     1.3f
+#define DT_AC_GAMUT_FOCUS_GAIN_BLEND   0.3f
+#define DT_AC_GAMUT_FOCUS_DISTANCE     1.35f
+#define DT_AC_GAMUT_FOCUS_DIST_SCALING 1.75f
+#define DT_AC_GAMUT_COMPRESSION_THR    0.75f
+#define DT_AC_GAMUT_TABLE_SIZE         362
 
 /* ====================================================================
- * CL Params Struct — byte-for-byte match with dt_ac_cl_params_t in C
+ * CL Params Struct
  * ==================================================================== */
 
 typedef struct
@@ -149,15 +107,15 @@ typedef struct
   float fwd_matrix[9];
   float inv_matrix[9];
   float exposure_factor;
-  float gamut_strength;
-  float gamut_knee;
-  float f_l_n;                    /* F_L_n = F_L / ref_lum */
-  float a_w;                      /* A_w — white achromatic signal (JMh) */
-  float z;                        /* 1.48 + sqrt(Y_b/Y_w) */
-  float cz;                       /* model_gamma = surround_c * z */
-  float inv_cz;                   /* 1 / cz */
-  float d_rgb[3];                 /* D_RGB = F_L_n * Y_w / RGB_w[c] */
-  float a_w_j;                    /* A_w_J = NLC(F_L) for Y↔J */
+  float _pad_gamut_strength;
+  float _pad_gamut_knee;
+  float f_l_n;
+  float a_w;
+  float z;
+  float cz;
+  float inv_cz;
+  float d_rgb[3];
+  float a_w_j;
   float ssts_s_2;
   float ssts_m_2;
   float ssts_g;
@@ -170,7 +128,19 @@ typedef struct
   float cc_sat_thr;
   float cc_compr;
   float limit_j_max;
-  int   _pad[6];
+
+  /* Gamut compression */
+  float mid_J;
+  float focus_dist;
+  float lower_hull_gamma_inv;
+  float table_reach_m[DT_AC_GAMUT_TABLE_SIZE];
+  float table_hues[DT_AC_GAMUT_TABLE_SIZE];
+  float table_cusp_j[DT_AC_GAMUT_TABLE_SIZE];
+  float table_cusp_m[DT_AC_GAMUT_TABLE_SIZE];
+  float table_upper_hull_gamma[DT_AC_GAMUT_TABLE_SIZE];
+  int   hue_search_min;
+  int   hue_search_max;
+  int   _pad[2];
 } dt_ac_cl_params_t;
 
 /* ====================================================================
@@ -195,16 +165,6 @@ static inline float ssts_fwd(float x, float s_2, float m_2,
   return h * n_r;
 }
 
-static inline float gamut_compress_max(float maxc, float strength, float knee)
-{
-  if(maxc <= 0.0f) return maxc;
-  const float excess = fmax(maxc - 1.0f, 0.0f);
-  if(excess <= 0.0f) return maxc;
-  const float k = fmax(knee, 0.01f);
-  const float compressed = (excess * excess) / (excess + k * strength);
-  return maxc - excess + compressed;
-}
-
 static inline float gamma_toe(float x, float limit, float k1, float k2,
                                int inverse)
 {
@@ -217,15 +177,6 @@ static inline float gamma_toe(float x, float limit, float k1, float k2,
                                        + 4.0f * k2 * k3 * x));
   else
     return (x * x + k1 * x) / (k3 * (x + k2));
-}
-
-static inline float reach_from_table(float h)
-{
-  const float hw = h - 360.0f * floor(h / 360.0f);
-  const int lo = (int)hw;
-  const int hi = (lo < 359) ? lo + 1 : 0;
-  const float t = hw - (float)lo;
-  return dt_ac_gamut_reach[lo] + t * (dt_ac_gamut_reach[hi] - dt_ac_gamut_reach[lo]);
 }
 
 static inline float chroma_norm(float h)
@@ -245,12 +196,6 @@ static inline float chroma_norm(float h)
 
 /* ====================================================================
  * Post-Adaptation Cone Response Compression (NLC)
- *
- * Matches aces-core Lib.Academy.OutputTransform.ctl:
- *   fwd: Ra = pow(|v|, 0.42) / (27.13 + pow(|v|, 0.42))
- *   inv: Rc = pow(27.13 * |Ra| / (1 - |Ra|), 1/0.42)
- *
- * F_L and ref_lum scalings are baked into d_rgb / f_l_n.
  * ==================================================================== */
 
 static inline float nlc_fwd_single(float v)
@@ -284,7 +229,7 @@ static inline void nlc_inv(__private const float rgb_a[3],
 }
 
 /* ====================================================================
- * Hellwig 2022 CAM — XYZ → JMh
+ * CAT16 CAM — XYZ -> JMh
  * ==================================================================== */
 
 static inline void xyz_to_jmh(__private const float xyz[3],
@@ -308,7 +253,7 @@ static inline void xyz_to_jmh(__private const float xyz[3],
 
   const float A = DT_AC_RA * rgb_a[0] + rgb_a[1] + DT_AC_BA * rgb_a[2];
   const float j = 100.0f * pow(fmax(A, 0.0f) / a_w, DT_AC_SURR_C * z);
-  const float m = 43.0f * DT_AC_SURR_NC * sqrt(a_op * a_op + b_op * b_op);
+  const float m = DT_AC_M_SCALE * sqrt(a_op * a_op + b_op * b_op);
 
   jmh[0] = (j > 0.0f) ? j : 0.0f;
   jmh[1] = m;
@@ -316,7 +261,7 @@ static inline void xyz_to_jmh(__private const float xyz[3],
 }
 
 /* ====================================================================
- * Hellwig 2022 CAM — JMh → XYZ
+ * CAT16 CAM — JMh -> XYZ
  * ==================================================================== */
 
 static inline void jmh_to_xyz(__private const float jmh[3],
@@ -330,7 +275,7 @@ static inline void jmh_to_xyz(__private const float jmh[3],
 
   const float A = a_w * pow(fmax(j, 1e-12f) / 100.0f,
                              1.0f / (DT_AC_SURR_C * z));
-  const float gamma_v = m / (43.0f * DT_AC_SURR_NC);
+  const float gamma_v = m / DT_AC_M_SCALE;
   const float a_op = gamma_v * cos(hr);
   const float b_op = gamma_v * sin(hr);
 
@@ -351,11 +296,7 @@ static inline void jmh_to_xyz(__private const float jmh[3],
 }
 
 /* ====================================================================
- * Hellwig CAM — Lightness J ↔ Luminance Y
- *
- * Reference path:
- *   Y_to_J: Ra = NLC(Y * F_L_n), A = Ra / A_w_J, J = 100 * A^cz
- *   J_to_Y: A = (J/100)^(1/cz), Ra = A_w_J * A, Y = NLC_inv(Ra) / F_L_n
+ * CAT16 CAM — Lightness J <-> Luminance Y
  * ==================================================================== */
 
 static inline float y_to_j(float y, float f_l_n, float a_w_j, float cz)
@@ -373,6 +314,10 @@ static inline float j_to_y(float j, float f_l_n, float a_w_j, float inv_cz)
   const float ra = a_w_j * a;
   return nlc_inv_single(min(ra, 0.99f)) / f_l_n;
 }
+
+/* Forward declaration (defined in gamut compression section) */
+static inline float reach_m_from_table(float h,
+    __private const dt_ac_cl_params_t *p);
 
 /* ====================================================================
  * Chroma Compression
@@ -395,7 +340,7 @@ static inline void chroma_compress(__private float jmh[3], float orig_j,
   const float n_j = j / p->limit_j_max;
   const float sn_j = fmax(0.0f, 1.0f - n_j);
   const float limit = pow(n_j, p->model_gamma_inv)
-                      * reach_from_table(h) / m_norm;
+                      * reach_m_from_table(h, p) / m_norm;
 
   if(limit <= 0.0f) return;
 
@@ -416,19 +361,294 @@ static inline void tonemap_and_compress_fwd(__private float jmh[3],
 {
   const float orig_j = jmh[0];
 
-  /* J → Y (nits) → scene-linear normalized */
   const float linear = j_to_y(orig_j, p->f_l_n, p->a_w_j, p->inv_cz)
                        / DT_AC_REF_LUM;
 
-  /* Apply SSTS on luminance Y */
   const float tonemapped_y = ssts_fwd(linear, p->ssts_s_2, p->ssts_m_2,
                                        p->ssts_g, p->ssts_t_1, p->ssts_n_r);
 
-  /* Y → J' (display J after tone mapping) */
   jmh[0] = y_to_j(tonemapped_y, p->f_l_n, p->a_w_j, p->cz);
 
-  /* Chroma compression with original J reference */
   chroma_compress(jmh, orig_j, p);
+}
+
+/* ====================================================================
+ * GAMUT COMPRESSION — Per-Pixel Functions (CL)
+ *
+ * Mirror of src/iop/aces20.c gamut compression functions.
+ * ==================================================================== */
+
+static inline float wrap_hue(float h)
+{
+  const float hw = h - 360.0f * floor(h / 360.0f);
+  return (hw < 0.0f) ? hw + 360.0f : hw;
+}
+
+static inline float smin(float a, float b, float k)
+{
+  if(k <= 0.0f) return fmin(a, b);
+  const float h = fmax(k - fabs(a - b), 0.0f) / k;
+  return fmin(a, b) - h * h * h * k * (1.0f / 6.0f);
+}
+
+static inline float reach_m_from_table(float h,
+    __private const dt_ac_cl_params_t *p)
+{
+  const float hw = wrap_hue(h);
+  int lo = 0, hi = 1;
+  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
+  {
+    if(hw >= p->table_hues[i] && hw < p->table_hues[i + 1])
+    { lo = i; hi = i + 1; break; }
+  }
+  if(hw < p->table_hues[0] || hw >= p->table_hues[DT_AC_GAMUT_TABLE_SIZE - 1])
+  { lo = DT_AC_GAMUT_TABLE_SIZE - 1; hi = 0; }
+  float dh = p->table_hues[hi] - p->table_hues[lo];
+  if(dh < 0.0f) dh += 360.0f;
+  const float t = (dh > 0.0f) ? wrap_hue(hw - p->table_hues[lo]) / dh : 0.0f;
+  return p->table_reach_m[lo] + t * (p->table_reach_m[hi] - p->table_reach_m[lo]);
+}
+
+static inline void cusp_from_table(__private float cusp_out[2], float h,
+    __private const dt_ac_cl_params_t *p)
+{
+  const float hw = wrap_hue(h);
+  int lo = 0, hi = 1;
+  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
+  {
+    if(hw >= p->table_hues[i] && hw < p->table_hues[i + 1])
+    { lo = i; hi = i + 1; break; }
+  }
+  if(hw < p->table_hues[0] || hw >= p->table_hues[DT_AC_GAMUT_TABLE_SIZE - 1])
+  { lo = DT_AC_GAMUT_TABLE_SIZE - 1; hi = 0; }
+  float dh = p->table_hues[hi] - p->table_hues[lo];
+  if(dh < 0.0f) dh += 360.0f;
+  const float t = (dh > 0.0f) ? wrap_hue(hw - p->table_hues[lo]) / dh : 0.0f;
+  cusp_out[0] = p->table_cusp_j[lo] + t * (p->table_cusp_j[hi] - p->table_cusp_j[lo]);
+  cusp_out[1] = p->table_cusp_m[lo] + t * (p->table_cusp_m[hi] - p->table_cusp_m[lo]);
+}
+
+static inline float hue_upper_hull_gamma(float h,
+    __private const dt_ac_cl_params_t *p)
+{
+  const float hw = wrap_hue(h);
+  int lo = 0, hi = 1;
+  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
+  {
+    if(hw >= p->table_hues[i] && hw < p->table_hues[i + 1])
+    { lo = i; hi = i + 1; break; }
+  }
+  if(hw < p->table_hues[0] || hw >= p->table_hues[DT_AC_GAMUT_TABLE_SIZE - 1])
+  { lo = DT_AC_GAMUT_TABLE_SIZE - 1; hi = 0; }
+  float dh = p->table_hues[hi] - p->table_hues[lo];
+  if(dh < 0.0f) dh += 360.0f;
+  const float t = (dh > 0.0f) ? wrap_hue(hw - p->table_hues[lo]) / dh : 0.0f;
+  return p->table_upper_hull_gamma[lo] + t * (p->table_upper_hull_gamma[hi] - p->table_upper_hull_gamma[lo]);
+}
+
+static inline float get_focus_gain(float j, float analytical_threshold,
+    float limit_j_max, float focus_dist)
+{
+  float gain = limit_j_max * focus_dist;
+
+  if(j > analytical_threshold)
+  {
+    const float denom = fmax(limit_j_max - j, 1e-4f);
+    const float ratio = (limit_j_max - analytical_threshold) / denom;
+    const float gain_adj = log(ratio) * log(ratio) * (0.43429448190325182765f * 0.43429448190325182765f) + 1.0f;
+    gain *= gain_adj;
+  }
+
+  return gain;
+}
+
+static inline float solve_J_intersect(float j, float m,
+    float focus_j, float limit_j_max, float slope_gain)
+{
+  if(m <= 0.0f) return j;
+
+  const float m_scaled = m / slope_gain;
+  const float a = m_scaled / focus_j;
+
+  if(j < focus_j)
+  {
+    const float b = 1.0f - m_scaled;
+    const float c = -j;
+    const float disc = fmax(b * b - 4.0f * a * c, 0.0f);
+    const float root = sqrt(disc);
+    return -2.0f * c / (b + root);
+  }
+  else
+  {
+    const float b = -(1.0f + m_scaled + limit_j_max * a);
+    const float c = limit_j_max * m_scaled + j;
+    const float disc = fmax(b * b - 4.0f * a * c, 0.0f);
+    const float root = sqrt(disc);
+    return -2.0f * c / (b - root);
+  }
+}
+
+static inline float compression_slope(float intersect_j, float focus_j,
+    float limit_j_max, float slope_gain)
+{
+  float direction_scalar;
+  if(intersect_j < focus_j)
+    direction_scalar = intersect_j;
+  else
+    direction_scalar = limit_j_max - intersect_j;
+  return direction_scalar * (intersect_j - focus_j) / (focus_j * slope_gain);
+}
+
+static inline float smin_scaled(float a, float b, float scale_ref)
+{
+  return smin(a, b, DT_AC_GAMUT_SMOOTH_CUSPS * scale_ref);
+}
+
+static inline float estimate_intersect_M(float j_axis_intersect, float slope,
+    float inv_gamma, float j_max, float m_max, float j_intersection_ref)
+{
+  if(m_max <= 0.0f) return m_max;
+  const float j_ref = fmax(j_intersection_ref, 1e-12f);
+  const float normalised_j = j_axis_intersect / j_ref;
+  const float inv_gamma_safe = fmax(inv_gamma, 1e-6f);
+  const float shifted_intersection = j_ref * pow(fmax(normalised_j, 1e-12f), inv_gamma_safe);
+  const float denom = j_max - slope * m_max;
+  if(denom <= 0.0f) return m_max;
+  const float m_est = shifted_intersection * m_max / denom;
+  return fmin(fmax(m_est, 0.0f), m_max);
+}
+
+static inline float find_boundary_M(float cusp_j, float cusp_m,
+    float limit_j_max, float gamma_top_inv, float gamma_bottom_inv,
+    float j_intersect_source, float slope, float j_intersect_cusp)
+{
+  if(cusp_m <= 0.0f || cusp_j <= 0.0f) return 0.0f;
+
+  const float lower_m = estimate_intersect_M(j_intersect_source, slope,
+      gamma_bottom_inv, cusp_j, cusp_m, j_intersect_cusp);
+
+  const float f_intersect_cusp = limit_j_max - j_intersect_cusp;
+  const float f_intersect_source = limit_j_max - j_intersect_source;
+  const float f_cusp_j = limit_j_max - cusp_j;
+  const float upper_m = estimate_intersect_M(f_intersect_source, -slope,
+      gamma_top_inv, f_cusp_j, cusp_m, f_intersect_cusp);
+
+  const float m_blend = smin(lower_m, upper_m, DT_AC_GAMUT_SMOOTH_CUSPS * cusp_m);
+  return m_blend;
+}
+
+static inline float remap_M(float m, float gamut_boundary_m,
+    float reach_boundary_m)
+{
+  if(m <= 0.0f || gamut_boundary_m <= 0.0f || reach_boundary_m <= gamut_boundary_m) return m;
+
+  const float boundary_ratio = gamut_boundary_m / reach_boundary_m;
+  const float proportion = fmax(boundary_ratio, DT_AC_GAMUT_COMPRESSION_THR);
+  const float threshold = proportion * gamut_boundary_m;
+
+  if(m <= threshold || proportion >= 1.0f) return m;
+
+  const float m_offset = m - threshold;
+  const float gamut_offset = gamut_boundary_m - threshold;
+  const float reach_offset = reach_boundary_m - threshold;
+  const float scale = reach_offset / ((reach_offset / gamut_offset) - 1.0f);
+  const float nd = m_offset / scale;
+
+  return threshold + scale * nd / (1.0f + nd);
+}
+
+static inline void compress_gamut(__private float jmh[3], float jx,
+    __private const dt_ac_cl_params_t *p)
+{
+  float j = jmh[0], m = jmh[1], h = jmh[2];
+  if(!isfinite(j) || !isfinite(m)) return;
+  if(m <= 0.0f || j <= 0.0f) return;
+
+  const float limit_j_max = p->limit_j_max;
+  if(limit_j_max <= 0.0f) return;
+
+  float cusp[2];
+  cusp_from_table(cusp, h, p);
+  const float cusp_j = cusp[0], cusp_m = cusp[1];
+  if(!isfinite(cusp_j) || !isfinite(cusp_m) || cusp_m <= 0.0f || cusp_j <= 0.0f) return;
+
+  const float blend_weight = fmin(1.0f, DT_AC_GAMUT_CUSP_MID_BLEND - cusp_j / limit_j_max);
+  const float focus_j = cusp_j + blend_weight * (p->mid_J - cusp_j);
+  if(!isfinite(focus_j) || focus_j <= 0.0f) return;
+
+  const float analytical_threshold = cusp_j + DT_AC_GAMUT_FOCUS_GAIN_BLEND
+                                     * (limit_j_max - cusp_j);
+
+  const float gamma_top_inv = 1.0f / fmax(hue_upper_hull_gamma(h, p), 1e-6f);
+  const float gamma_bottom_inv = p->lower_hull_gamma_inv;
+  const float slope_gain = get_focus_gain(jx, analytical_threshold, limit_j_max, p->focus_dist);
+  if(!isfinite(slope_gain) || slope_gain <= 0.0f) return;
+
+  const float j_intersect_source = solve_J_intersect(j, m, focus_j, limit_j_max, slope_gain);
+  const float j_intersect_cusp = solve_J_intersect(cusp_j, cusp_m, focus_j, limit_j_max, slope_gain);
+  if(!isfinite(j_intersect_source) || !isfinite(j_intersect_cusp)) return;
+
+  const float slope = compression_slope(j_intersect_source, focus_j, limit_j_max, slope_gain);
+  if(!isfinite(slope)) return;
+
+  const float gamut_boundary_m = find_boundary_M(cusp_j, cusp_m,
+      limit_j_max, gamma_top_inv, gamma_bottom_inv,
+      j_intersect_source, slope, j_intersect_cusp);
+  if(!isfinite(gamut_boundary_m) || gamut_boundary_m <= 0.0f) return;
+
+  const float reach_max_m = reach_m_from_table(h, p);
+  if(!isfinite(reach_max_m) || reach_max_m <= 0.0f) return;
+
+  const float reach_boundary_m = estimate_intersect_M(
+      j_intersect_source, slope, p->model_gamma_inv,
+      limit_j_max, reach_max_m, limit_j_max);
+  if(!isfinite(reach_boundary_m)) return;
+
+  const float new_m = remap_M(m, gamut_boundary_m, reach_boundary_m);
+  if(!isfinite(new_m)) return;
+
+  jmh[0] = j_intersect_source + new_m * slope;
+  jmh[1] = fmax(new_m, 0.0f);
+}
+
+static inline void gamut_compress_fwd(__private float jmh[3],
+    __private const dt_ac_cl_params_t *p)
+{
+  float j = jmh[0], m = jmh[1];
+  if(!isfinite(j + m)) return;
+  if(j <= 0.0f || m <= 0.0f) return;
+  compress_gamut(jmh, j, p);
+}
+
+static inline void gamut_compress_inv(__private float jmh[3],
+    __private const dt_ac_cl_params_t *p)
+{
+  float j = jmh[0], m = jmh[1];
+  const float h = jmh[2];
+  if(!isfinite(j + m)) return;
+  if(j <= 0.0f || m <= 0.0f) return;
+
+  const float limit_j_max = p->limit_j_max;
+  const float analytical_threshold = 0.9f * limit_j_max;
+
+  if(j < analytical_threshold)
+  {
+    compress_gamut(jmh, j, p);
+  }
+  else
+  {
+    float jmh_tmp[3] = { j, m, h };
+    float jx = j;
+    compress_gamut(jmh_tmp, jx, p);
+    jx = jmh_tmp[0];
+    m = jmh_tmp[1];
+    jmh_tmp[0] = jx;
+    jmh_tmp[1] = m;
+    compress_gamut(jmh_tmp, jx, p);
+    jmh[0] = jmh_tmp[0];
+    jmh[1] = jmh_tmp[1];
+    jmh[2] = h;
+  }
 }
 
 /* ====================================================================
@@ -439,7 +659,7 @@ static inline void pipeline_eval(__private const float rgb_in[3],
                                   __private float rgb_out[3],
                                   __private const dt_ac_cl_params_t *p)
 {
-  /* Step 1: pipe RGB → AP1 (D60) */
+  /* Step 1: pipe RGB -> AP1 (D60) */
   float ap1[3];
   apply_mat(ap1, p->fwd_matrix, rgb_in);
 
@@ -452,49 +672,40 @@ static inline void pipeline_eval(__private const float rgb_in[3],
   }
 
   for(int c = 0; c < 3; c++) ap1[c] = fmax(ap1[c], 0.0f);
-
-  /* Apply exposure */
   for(int c = 0; c < 3; c++) ap1[c] *= p->exposure_factor;
 
-  /* Step 2: AP1 → XYZ (scene linear) */
+  /* Step 2: AP1 -> XYZ (scene linear) */
   float xyz[3];
   apply_mat(xyz, dt_ac_ap1_to_xyz, ap1);
 
-  /* Step 3: ×100 to absolute nits for CAM */
+  /* Step 3: x100 to absolute nits for CAM */
   for(int c = 0; c < 3; c++) xyz[c] *= DT_AC_REF_LUM;
 
-  /* Step 4: XYZ → JMh */
+  /* Step 4: XYZ -> JMh */
   float jmh[3];
   xyz_to_jmh(xyz, p->d_rgb, p->a_w, p->z, jmh);
 
   /* Step 5: Tonemap & compress inside JMh */
   tonemap_and_compress_fwd(jmh, p);
 
-  /* Step 6: JMh → XYZ (in nits) */
+  /* Step 6: Gamut compression */
+  gamut_compress_fwd(jmh, p);
+
+  /* Step 7: JMh -> XYZ (in nits) */
   float xyz_out[3];
   jmh_to_xyz(jmh, p->d_rgb, p->a_w, p->z, xyz_out);
 
-  /* Step 7: XYZ → AP1 (back to display-referred) */
+  /* Step 8: XYZ -> AP1 (back to display-referred) */
   float ap1_out[3];
   apply_mat(ap1_out, dt_ac_xyz_to_ap1, xyz_out);
   for(int c = 0; c < 3; c++)
     ap1_out[c] = fmax(ap1_out[c], 0.0f) / DT_AC_REF_LUM;
 
-  /* Step 8: Gamut compression */
-  const float maxc = fmax(ap1_out[0], fmax(ap1_out[1], ap1_out[2]));
-  const float new_max = gamut_compress_max(maxc, p->gamut_strength, p->gamut_knee);
-  if(maxc > 0.0f && new_max != maxc)
-  {
-    const float s = new_max / maxc;
-    ap1_out[0] *= s;
-    ap1_out[1] *= s;
-    ap1_out[2] *= s;
-  }
-
-  /* Step 9: AP1 → pipe RGB */
+  /* Step 9: AP1 -> pipe RGB */
   float rgb[3];
   apply_mat(rgb, p->inv_matrix, ap1_out);
 
+  /* Step 10: Hard clamp (reference: hardClip = fmax(v, 0.0f)) */
   for(int c = 0; c < 3; c++)
     rgb_out[c] = max(rgb[c], 0.0f);
 }

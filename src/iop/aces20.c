@@ -20,11 +20,11 @@
     ACES 2.0 CAM DRT Reference Rendering Module
 
     Implements the Academy Color Encoding System (ACES) 2.0 reference rendering
-    pipeline using the Hellwig 2022 CAM DRT (colour appearance model display
-    rendering transform):
+    pipeline using the CAT16-based CAM DRT (colour appearance model display
+    rendering transform) aligning with ACES 2.0 reference:
 
       pipe_RGB → AP1 (D60) → XYZ (D60)
-        → ×100 to absolute nits → Hellwig JMh
+        → ×100 to absolute nits → CAT16 JMh
         → Tonemap & compress in JMh:
             J → Y → tonescale(Y) → J' (display J)
             M ← chroma_compress(M, J', orig_J)
@@ -121,7 +121,7 @@ static const float dt_ac_cat_d60_to_d50[9] =
 static const float dt_ac_luma_ap1[3] = { 0.272228f, 0.674082f, 0.053690f };
 
 /* ====================================================================
- * Hellwig 2022 CAM (ACES 2.0) Constants
+ * CAT16 / ACES 2.0 CAM Constants
  * ==================================================================== */
 
 /* AP1 D60 → XYZ D60 — from ACES 2.0 reference */
@@ -140,20 +140,20 @@ static const float dt_ac_xyz_to_ap1[9] =
   0.0117218943f, -0.0082844420f,  0.9883948585f
 };
 
-/* Hellwig CAM: XYZ → sharpened LMS (MATRIX_16) */
+/* CAT16: XYZ → sharpened LMS (MATRIX_16) */
 static const float dt_ac_m16[9] =
 {
-  0.3640744836f,  0.5947008157f,  0.0411012735f,
- -0.2222450987f,  1.0738554823f,  0.1479453361f,
- -0.0020676190f,  0.0488260454f,  0.9503875570f
+  0.4012880027f,  0.6501730084f, -0.0514610000f,
+ -0.2502680123f,  1.2044140100f,  0.0458539985f,
+ -0.0020790000f,  0.0489519984f,  0.9531270266f
 };
 
-/* Hellwig CAM: sharpened LMS → XYZ (MATRIX_16 inverse) */
+/* CAT16: sharpened LMS → XYZ (MATRIX_16 inverse) */
 static const float dt_ac_m16_inv[9] =
 {
-  2.0512756811f, -1.1400313440f,  0.0887556628f,
-  0.4269389763f,  0.7005835278f, -0.1275225041f,
- -0.0174712780f, -0.0384725929f,  1.0589468739f
+  1.8620678205f, -1.0112546159f,  0.1491867671f,
+  0.3875265518f,  0.6214474293f, -0.0089739829f,
+ -0.0158414983f, -0.0341229353f,  1.0499644075f
 };
 
 /* Inverse CAM: opponent (P_p_2, a, b) → RGB_a — divided by 1403 after multiply */
@@ -164,7 +164,7 @@ static const float dt_ac_panlrcm[9] =
   460.0f, -220.0f, -6300.0f
 };
 
-/* Hellwig CAM viewing-condition parameters */
+/* CAT16 CAM viewing-condition parameters */
 #define DT_AC_LA         100.0f
 #define DT_AC_YB          20.0f
 #define DT_AC_RA           2.0f
@@ -175,7 +175,23 @@ static const float dt_ac_panlrcm[9] =
 
 /* ACES 2.0 CAM non-linear compression constants */
 #define DT_AC_CAM_NL_OFFSET  27.13f   /* = 0.2713 * ref_lum */
-#define DT_AC_CAM_NL_SCALE  400.0f    /* = 4.0 * ref_lum */
+#define DT_AC_CAM_NL_SCALE  400.0f    /* = 4.0 * ref_lum — unused in NLC itself (matches
+                                          official CTL, where it is also dead there), but
+                                          required in the Aab chromatic (a,b) scaling below */
+
+/* M (colorfulness) scale factor.
+ *
+ * Reference: Lib.Academy.OutputTransform.ctl / init_JMhParams():
+ *   cone_response_to_Aab = cam_nl_scale * base_cone_response_to_Aab
+ *   MATRIX_cone_response_to_Aab column 0 (A)   is further divided by A_w
+ *     -> cam_nl_scale cancels out in the A/J ratio (hence Y<->J needs no scale)
+ *   MATRIX_cone_response_to_Aab columns 1,2 (a,b) are NOT divided by A_w
+ *     -> cam_nl_scale (400) does NOT cancel and must be applied to M
+ *
+ * M = |Aab.a, Aab.b| = cam_nl_scale * 43 * surround[2] * sqrt(raw_a^2 + raw_b^2)
+ *                    = DT_AC_M_SCALE * sqrt(raw_a^2 + raw_b^2)
+ */
+#define DT_AC_M_SCALE  (DT_AC_CAM_NL_SCALE * 43.0f * DT_AC_SURR_NC)   /* = 400*43*0.9 = 15480 */
 
 /* ACES D60 white point in XYZ (Y=100) */
 static const float dt_ac_aces_white_xyz[3] = { 95.2646074570f, 100.0f, 100.8825184352f };
@@ -192,6 +208,31 @@ static const float dt_ac_aces_white_xyz[3] = { 95.2646074570f, 100.0f, 100.88251
 #define DT_AC_SAT_BASE        1.3f
 #define DT_AC_SAT_FACT        0.69f
 #define DT_AC_EXPAND_THR      0.5f
+
+/* Gamut compression constants (ACES 2.0 reference) */
+#define DT_AC_GAMUT_SMOOTH_CUSPS       0.12f
+#define DT_AC_GAMUT_SMOOTH_M           0.27f
+#define DT_AC_GAMUT_CUSP_MID_BLEND     1.3f
+#define DT_AC_GAMUT_FOCUS_GAIN_BLEND   0.3f
+#define DT_AC_GAMUT_FOCUS_DISTANCE     1.35f
+#define DT_AC_GAMUT_FOCUS_DIST_SCALING 1.75f
+#define DT_AC_GAMUT_COMPRESSION_THR    0.75f
+#define DT_AC_GAMUT_TABLE_SIZE         362
+#define DT_AC_CUSP_CORNER_COUNT         6
+#define DT_AC_TOTAL_CORNER_COUNT        8   /* 6 + 2 wrap-around */
+#define DT_AC_MAX_SORTED_CORNERS       12   /* 2 * 6 */
+#define DT_AC_DISPLAY_CUSP_TOL          1e-7f
+
+/* Reach primaries (AP0 + AP1 + BT.2020 merged gamut) — standard ACES 2.0 */
+#define DT_AC_REACH_Y             1.0f
+#define DT_AC_REACH_R_X           0.7347f
+#define DT_AC_REACH_R_Y           0.2653f
+#define DT_AC_REACH_G_X           0.1596f
+#define DT_AC_REACH_G_Y           0.8404f
+#define DT_AC_REACH_B_X           0.0668f
+#define DT_AC_REACH_B_Y           0.0453f
+#define DT_AC_REACH_W_X           0.3127f
+#define DT_AC_REACH_W_Y           0.3290f
 
 /* ====================================================================
  * Type Definitions
@@ -225,11 +266,9 @@ typedef struct
 
   float luma_coeff[3];      /* AP1 luma */
   float exposure_factor;
-  float gamut_strength;
-  float gamut_knee;
   int   surround_idx;
 
-  /* Hellwig CAM precomputed values (constant for ACES D60 white) */
+  /* CAT16 CAM precomputed values (constant for ACES D60 white) */
   float f_l;
   float a_w;                /* A_w — white achromatic signal for J = 100*(A/A_w)^cz */
   float z;
@@ -246,6 +285,16 @@ typedef struct
   float cc_sat_thr;
   float cc_compr;
   float limit_j_max;
+
+  /* Gamut compression parameters (ACES 2.0 reference, computed at init) */
+  float mid_J;
+  float focus_dist;
+  float lower_hull_gamma_inv;
+  float table_reach_m[DT_AC_GAMUT_TABLE_SIZE];
+  float table_hues[DT_AC_GAMUT_TABLE_SIZE];
+  float table_gamut_cusps[DT_AC_GAMUT_TABLE_SIZE][3];   /* J, M, h */
+  float table_upper_hull_gamma[DT_AC_GAMUT_TABLE_SIZE];
+  int   hue_search_range[2];
 } dt_ac_context_t;
 
 /* Module parameters */
@@ -254,8 +303,6 @@ typedef struct dt_iop_aces20_params_t
   float peak_luminance;                // $MIN: 100 $MAX: 4000 $DEFAULT: 200 $STEP: 10 $DESCRIPTION: "peak luminance (nits)"
   dt_iop_aces20_surround_t surround;   // $DEFAULT: DT_AC_SURROUND_DIM $DESCRIPTION: "surround"
   float exposure_ev;                   // $MIN: -5 $MAX: 5 $DEFAULT: 0 $STEP: 0.05 $DESCRIPTION: "exposure (EV)"
-  float gamut_strength;                // $MIN: 0 $MAX: 1 $DEFAULT: 0.85 $STEP: 0.01 $DESCRIPTION: "gamut compression"
-  float gamut_knee;                    // $MIN: 0 $MAX: 1 $DEFAULT: 0.30 $STEP: 0.01 $DESCRIPTION: "gamut knee"
 } dt_iop_aces20_params_t;
 
 /* Per-pipepiece data */
@@ -271,8 +318,8 @@ typedef struct dt_ac_cl_params_t
   float fwd_matrix[9];
   float inv_matrix[9];
   float exposure_factor;
-  float gamut_strength;
-  float gamut_knee;
+  float _pad_gamut_strength;      /* kept for CL struct alignment */
+  float _pad_gamut_knee;          /* kept for CL struct alignment */
   float f_l_n;                    /* F_L_n = F_L / ref_lum */
   float a_w;                      /* A_w — white achromatic signal (JMh) */
   float z;                        /* 1.48 + sqrt(Y_b/Y_w) */
@@ -292,7 +339,19 @@ typedef struct dt_ac_cl_params_t
   float cc_sat_thr;
   float cc_compr;
   float limit_j_max;
-  int   _pad[6];                  /* was 9; 12 bytes freed for new fields */
+
+  /* Gamut compression (ACES 2.0 reference) */
+  float mid_J;
+  float focus_dist;
+  float lower_hull_gamma_inv;
+  float table_reach_m[DT_AC_GAMUT_TABLE_SIZE];
+  float table_hues[DT_AC_GAMUT_TABLE_SIZE];
+  float table_cusp_j[DT_AC_GAMUT_TABLE_SIZE];
+  float table_cusp_m[DT_AC_GAMUT_TABLE_SIZE];
+  float table_upper_hull_gamma[DT_AC_GAMUT_TABLE_SIZE];
+  int   hue_search_min;
+  int   hue_search_max;
+  int   _pad[2];
 } dt_ac_cl_params_t;
 
 /* OpenCL global data */
@@ -307,8 +366,6 @@ typedef struct dt_iop_aces20_gui_data_t
   GtkWidget *peak_luminance;
   GtkWidget *surround;
   GtkWidget *exposure;
-  GtkWidget *gamut_strength;
-  GtkWidget *gamut_knee;
 } dt_iop_aces20_gui_data_t;
 
 /* ====================================================================
@@ -419,79 +476,6 @@ static inline float _ac_toe(float x, float limit, float k1, float k2,
 }
 
 /* ====================================================================
- * AP1 Reach Table (360-entry, hue in degrees)
- *
- * Maximum M (colorfulness) that AP1 can hold at each hue in Hellwig JMh.
- * Used by chroma compression to normalise per-hue gamut extent.
- * ==================================================================== */
-
-static const float dt_ac_gamut_reach[360] =
-{
-  166.785f, 168.475f, 170.129f, 171.753f, 173.340f, 174.878f, 176.367f,
-  177.802f, 179.181f, 180.505f, 181.763f, 182.965f, 184.106f, 185.187f,
-  186.212f, 187.177f, 188.086f, 188.947f, 189.758f, 190.527f, 191.254f,
-  191.949f, 192.615f, 193.250f, 193.872f, 194.360f, 187.091f, 180.402f,
-  174.237f, 168.524f, 163.226f, 158.301f, 153.711f, 149.426f, 145.416f,
-  141.663f, 138.135f, 134.821f, 131.702f, 128.766f, 125.995f, 123.376f,
-  120.898f, 118.555f, 116.339f, 114.233f, 112.244f, 110.345f, 108.551f,
-  106.842f, 105.219f, 103.680f, 102.209f, 100.818f,  99.487f,  98.224f,
-   97.021f,  95.874f,  94.781f,  93.744f,  92.761f,  91.821f,  90.930f,
-   90.082f,  89.276f,  88.513f,  87.787f,  87.103f,  86.450f,  85.840f,
-   85.260f,  84.711f,  84.198f,  83.716f,  83.264f,  82.843f,  82.452f,
-   82.086f,  81.750f,  81.445f,  81.165f,  80.908f,  80.682f,  80.481f,
-   80.304f,  80.151f,  80.023f,  79.919f,  79.840f,  79.791f,  79.761f,
-   79.755f,  79.773f,  79.816f,  79.889f,  79.980f,  80.096f,  80.243f,
-   80.408f,  80.603f,  80.817f,  81.061f,  81.335f,  81.635f,  81.958f,
-   82.312f,  82.690f,  83.099f,  83.539f,  84.009f,  84.509f,  85.046f,
-   85.614f,  86.212f,  86.847f,  87.518f,  88.226f,  88.977f,  89.764f,
-   90.601f,  91.473f,  92.395f,  93.359f,  94.379f,  95.447f,  96.570f,
-   97.748f,  98.993f, 100.293f, 101.660f, 103.101f, 104.614f, 106.201f,
-  107.880f, 109.637f, 111.493f, 113.446f, 115.503f, 117.670f, 119.965f,
-  122.382f, 124.939f, 127.649f, 130.518f, 133.563f, 136.792f, 140.222f,
-  143.878f, 141.687f, 138.110f, 134.729f, 131.525f, 128.491f, 125.616f,
-  122.888f, 120.300f, 117.841f, 115.497f, 113.269f, 111.151f, 109.131f,
-  107.202f, 105.371f, 103.619f, 101.947f, 100.354f,  98.828f,  97.375f,
-   95.984f,  94.659f,  93.390f,  92.175f,  91.016f,  89.911f,  88.849f,
-   87.836f,  86.871f,  85.950f,  85.065f,  84.222f,  83.417f,  82.654f,
-   81.921f,  81.226f,  80.560f,  79.926f,  79.327f,  78.754f,  78.217f,
-   77.698f,  77.216f,  76.758f,  76.324f,  75.916f,  75.537f,  75.177f,
-   74.847f,  74.536f,  74.249f,  73.987f,  73.743f,  73.523f,  73.328f,
-   73.151f,  72.992f,  72.858f,  72.742f,  72.650f,  72.577f,  72.522f,
-   72.491f,  72.479f,  72.485f,  72.516f,  72.565f,  72.632f,  72.717f,
-   72.827f,  72.961f,  73.108f,  73.279f,  73.474f,  73.688f,  73.926f,
-   74.182f,  74.463f,  74.768f,  75.092f,  75.446f,  75.818f,  76.215f,
-   76.642f,  77.094f,  77.570f,  78.070f,  78.601f,  79.163f,  79.749f,
-   80.371f,  81.024f,  81.708f,  82.422f,  83.173f,  83.960f,  84.784f,
-   85.645f,  86.548f,  87.488f,  88.477f,  89.508f,  90.588f,  91.711f,
-   92.889f,  94.122f,  95.404f,  96.747f,  98.157f,  99.622f, 101.154f,
-  102.759f, 104.437f, 106.195f, 108.032f, 109.949f, 111.963f, 114.069f,
-  116.272f, 118.585f, 121.002f, 120.929f, 119.934f, 118.988f, 118.085f,
-  117.230f, 116.418f, 115.643f, 114.911f, 114.221f, 113.568f, 112.952f,
-  112.372f, 111.823f, 111.316f, 110.840f, 110.394f, 109.985f, 109.607f,
-  109.265f, 108.948f, 108.661f, 108.411f, 108.185f, 107.990f, 107.825f,
-  107.684f, 107.581f, 107.501f, 107.446f, 107.422f, 107.428f, 107.458f,
-  107.520f, 107.611f, 107.727f, 107.874f, 108.044f, 108.246f, 108.472f,
-  108.728f, 109.015f, 109.332f, 109.674f, 110.046f, 110.449f, 110.883f,
-  111.346f, 111.841f, 112.366f, 112.921f, 113.507f, 114.124f, 114.777f,
-  115.460f, 116.180f, 116.931f, 117.719f, 118.536f, 119.397f, 120.288f,
-  121.216f, 122.186f, 123.187f, 124.225f, 125.305f, 126.422f, 127.582f,
-  128.772f, 130.005f, 131.281f, 132.593f, 133.942f, 135.327f, 136.755f,
-  138.220f, 139.722f, 141.254f, 142.822f, 144.421f, 146.057f, 147.711f,
-  149.396f, 151.099f, 152.826f, 154.565f, 156.317f, 158.075f, 159.833f,
-  161.584f, 163.336f, 165.070f
-};
-
-static inline float _ac_reach_from_table(float h)
-{
-  /* wrap hue to [0, 360) */
-  const float hw = h - 360.0f * floorf(h / 360.0f);
-  const int lo = (int)hw;
-  const int hi = (lo < 359) ? lo + 1 : 0;
-  const float t = hw - (float)lo;
-  return dt_ac_gamut_reach[lo] + t * (dt_ac_gamut_reach[hi] - dt_ac_gamut_reach[lo]);
-}
-
-/* ====================================================================
  * Chroma Compression Normalisation
  *
  * Trigonometric approximation of the AP1 gamut's M (colorfulness) cusp
@@ -576,7 +560,7 @@ static inline void _ac_nlc_inv(const float rgb_a[3], float rgb[3])
 }
 
 /* ====================================================================
- * Hellwig 2022 CAM — Viewing Condition Precomputation
+ * CAT16 CAM — Viewing Condition Precomputation
  *
  * Precomputes F_L, n, z, and A_w from the (fixed) ACES viewing
  * conditions and the white point.
@@ -623,9 +607,9 @@ static inline void _ac_hellwig_precompute(const float white_xyz[3],
 }
 
 /* ====================================================================
- * Hellwig 2022 CAM — XYZ D60 → JMh
+ * CAT16 CAM — XYZ D60 → JMh
  *
- * Converts CIE XYZ (D60) to Hellwig lightness J, colorfulness M, hue h.
+ * Converts CIE XYZ (D60) to lightness J, colorfulness M, hue h.
  * ==================================================================== */
 
 static inline void _ac_xyz_to_jmh(const float xyz[3],
@@ -651,7 +635,7 @@ static inline void _ac_xyz_to_jmh(const float xyz[3],
 
   const float j = 100.0f * powf(fmaxf(A, 0.0f) / a_w, DT_AC_SURR_C * z);
 
-  const float m = 43.0f * DT_AC_SURR_NC * sqrtf(a * a + b * b);
+  const float m = DT_AC_M_SCALE * sqrtf(a * a + b * b);
 
   jmh[0] = (j > 0.0f) ? j : 0.0f;
   jmh[1] = m;
@@ -659,9 +643,9 @@ static inline void _ac_xyz_to_jmh(const float xyz[3],
 }
 
 /* ====================================================================
- * Hellwig 2022 CAM — JMh → XYZ D60
+ * CAT16 CAM — JMh → XYZ D60
  *
- * Converts Hellwig lightness J, colorfulness M, hue h back to XYZ (D60).
+ * Converts lightness J, colorfulness M, hue h back to XYZ (D60).
  * ==================================================================== */
 
 static inline void _ac_jmh_to_xyz(const float jmh[3],
@@ -673,7 +657,7 @@ static inline void _ac_jmh_to_xyz(const float jmh[3],
 
   const float A = a_w * powf(fmaxf(j, 1e-12f) / 100.0f, 1.0f / (DT_AC_SURR_C * z));
 
-  const float gamma_v = m / (43.0f * DT_AC_SURR_NC);
+  const float gamma_v = m / DT_AC_M_SCALE;
   const float a_op = gamma_v * cosf(hr);
   const float b_op = gamma_v * sinf(hr);
 
@@ -694,7 +678,7 @@ static inline void _ac_jmh_to_xyz(const float jmh[3],
 }
 
 /* ====================================================================
- * Hellwig 2022 — Lightness J ↔ Luminance Y
+ * CAT16 — Lightness J ↔ Luminance Y
  * ==================================================================== */
 
 static inline float _ac_y_to_j(float y, float f_l_n, float a_w_j, float cz)
@@ -714,7 +698,7 @@ static inline float _ac_j_to_y(float j, float f_l_n, float a_w_j, float inv_cz)
 }
 
 /* ====================================================================
- * Chroma Compression (Hellwig JMh Space)
+ * Chroma Compression (CAT16 JMh Space)
  *
  * Compresses colorfulness M as a function of tone-mapped J and hue.
  * Includes expansion of low-saturation colors and compression of
@@ -724,6 +708,11 @@ static inline float _ac_j_to_y(float j, float f_l_n, float a_w_j, float inv_cz)
  * computed dynamically per peak_luminance following the official
  * ACES 2.0 specification (aces-core Lib.Academy.OutputTransform.ctl).
  * ==================================================================== */
+
+/* Forward declaration (defined in gamut compression section) */
+static inline float _ac_reach_m_from_table(float h,
+    const float reach_m[DT_AC_GAMUT_TABLE_SIZE],
+    const float hues[DT_AC_GAMUT_TABLE_SIZE]);
 
 static inline void _ac_chroma_compress(float jmh[3], float orig_j,
                                         const dt_ac_context_t *ctx)
@@ -741,11 +730,11 @@ static inline void _ac_chroma_compress(float jmh[3], float orig_j,
   const float m_norm = _ac_chroma_norm(h) * ctx->chroma_compress_scale;
   m /= m_norm;
 
-  /* Compute limit from AP1 reach */
+  /* Compute limit from AP1 reach (dynamic table) */
   const float n_j = j / ctx->limit_j_max;
   const float sn_j = fmaxf(0.0f, 1.0f - n_j);
   const float limit = powf(n_j, ctx->model_gamma_inv)
-                      * _ac_reach_from_table(h) / m_norm;
+                      * _ac_reach_m_from_table(h, ctx->table_reach_m, ctx->table_hues) / m_norm;
 
   if(limit <= 0.0f) return;
 
@@ -764,22 +753,1041 @@ static inline void _ac_chroma_compress(float jmh[3], float orig_j,
 }
 
 /* ====================================================================
- * ACES 2.0 Gamut Compression — soft knee toward AP1 gamut boundary
+ * Chromaticity → XYZ Matrix Construction
+ *
+ * Builds the 3×3 matrix that converts linear RGB to CIE XYZ for a given
+ * set of primaries (specified as CIE 1931 xy chromaticities and white point).
+ *
+ *   RGB = [R, G, B] in [0,1]
+ *   X = M[0]*R + M[1]*G + M[2]*B
+ *   Y = M[3]*R + M[4]*G + M[5]*B
+ *   Z = M[6]*R + M[7]*G + M[8]*B
+ *
+ * Primary sets:
+ *   0 = AP0 (ACES AP0 primaries)
+ *   1 = AP1 (ACES AP1 primaries)
+ *   2 = Reach (AP0 + AP1 + BT.2020 merged)
  * ==================================================================== */
 
-static inline void dt_ac_gamut_compress(float rgb[3], float strength,
-                                         float knee)
+/* AP0 primaries in CIE 1931 xyY */
+#define DT_AC_AP0_R_X  0.7347f
+#define DT_AC_AP0_R_Y  0.2653f
+#define DT_AC_AP0_G_X  0.0000f
+#define DT_AC_AP0_G_Y  1.0000f
+#define DT_AC_AP0_B_X  0.0001f
+#define DT_AC_AP0_B_Y -0.0770f
+#define DT_AC_AP0_W_X  0.32168f
+#define DT_AC_AP0_W_Y  0.33767f
+
+/* AP1 primaries in CIE 1931 xyY */
+#define DT_AC_AP1_R_X  0.7130f
+#define DT_AC_AP1_R_Y  0.2930f
+#define DT_AC_AP1_G_X  0.1650f
+#define DT_AC_AP1_G_Y  0.8300f
+#define DT_AC_AP1_B_X  0.1280f
+#define DT_AC_AP1_B_Y  0.0440f
+#define DT_AC_AP1_W_X  0.32168f
+#define DT_AC_AP1_W_Y  0.33767f
+
+/* Build RGB→XYZ matrix from primaries xy + white xy (Y=1 for white) */
+static inline void _ac_xyy_to_xyz_matrix(float m[9],
+    float rx, float ry, float gx, float gy, float bx, float by,
+    float wx, float wy)
 {
-  float maxc = fmaxf(fmaxf(rgb[0], rgb[1]), rgb[2]);
-  if(maxc <= 0.0f) return;
-  const float excess = fmaxf(maxc - 1.0f, 0.0f);
-  if(excess <= 0.0f) return;
-  const float k = fmaxf(knee, 0.01f);
-  const float compressed = (excess * excess) / (excess + k * strength);
-  const float scale = (maxc - excess + compressed) / maxc;
-  rgb[0] *= scale;
-  rgb[1] *= scale;
-  rgb[2] *= scale;
+  /* Build the primaries matrix (RGB of [1,0,0], [0,1,0], [0,0,1]) */
+  float prim[9];
+  prim[0] = rx / ry;  prim[1] = gx / gy;  prim[2] = bx / by;
+  prim[3] = 1.0f;     prim[4] = 1.0f;     prim[5] = 1.0f;
+  prim[6] = (1.0f - rx - ry) / ry;
+  prim[7] = (1.0f - gx - gy) / gy;
+  prim[8] = (1.0f - bx - by) / by;
+
+  /* Invert to solve for scale factors S = prim⁻¹ × white_XYZ */
+  float inv[9];
+  _mat_inv_3x3(inv, prim);
+
+  const float white_xyz[3] = { wx / wy, 1.0f, (1.0f - wx - wy) / wy };
+  float s[3];
+  _mat_apply(s, inv, white_xyz);
+
+  /* Scale primaries columns by s */
+  for(int c = 0; c < 3; c++)
+  {
+    m[c]     = prim[c]     * s[c];
+    m[3 + c] = prim[3 + c] * s[c];
+    m[6 + c] = prim[6 + c] * s[c];
+  }
+}
+
+/* Return RGB→XYZ for the specified primary set:
+ *   0 = AP0, 1 = AP1, 2 = Reach primaries */
+static inline void _ac_get_rgb_to_xyz(float m[9], int prim_set)
+{
+  if(prim_set == 0)
+    _ac_xyy_to_xyz_matrix(m,
+      DT_AC_AP0_R_X, DT_AC_AP0_R_Y,
+      DT_AC_AP0_G_X, DT_AC_AP0_G_Y,
+      DT_AC_AP0_B_X, DT_AC_AP0_B_Y,
+      DT_AC_AP0_W_X, DT_AC_AP0_W_Y);
+  else if(prim_set == 1)
+    _ac_xyy_to_xyz_matrix(m,
+      DT_AC_AP1_R_X, DT_AC_AP1_R_Y,
+      DT_AC_AP1_G_X, DT_AC_AP1_G_Y,
+      DT_AC_AP1_B_X, DT_AC_AP1_B_Y,
+      DT_AC_AP1_W_X, DT_AC_AP1_W_Y);
+  else
+    _ac_xyy_to_xyz_matrix(m,
+      DT_AC_REACH_R_X, DT_AC_REACH_R_Y,
+      DT_AC_REACH_G_X, DT_AC_REACH_G_Y,
+      DT_AC_REACH_B_X, DT_AC_REACH_B_Y,
+      DT_AC_REACH_W_X, DT_AC_REACH_W_Y);
+}
+
+/* ====================================================================
+ * RGB → CAT16 JMh (via arbitrary primaries)
+ *
+ * Convert linear RGB in a given primary space to CAT16 JMh.
+ *   prim_set: 0=AP0, 1=AP1, 2=Reach
+ * ==================================================================== */
+static inline void _ac_rgb_to_jmh_prim(float jmh[3], const float rgb[3],
+    int prim_set, const dt_ac_context_t *ctx)
+{
+  float rgb_to_xyz[9];
+  _ac_get_rgb_to_xyz(rgb_to_xyz, prim_set);
+  float xyz[3];
+  _mat_apply(xyz, rgb_to_xyz, rgb);
+  for(int c = 0; c < 3; c++) xyz[c] *= DT_AC_REF_LUM;
+  _ac_xyz_to_jmh(xyz, ctx->d_rgb, ctx->a_w, ctx->z, jmh);
+}
+
+/* JMh→RGB(prim) is not used — the reach cusp search fw-converts RGB→JMh
+ * via _ac_rgb_to_jmh_prim in a binary search along RGB edges instead. */
+
+/* ====================================================================
+ * Utility: Hue wrapping
+ * ==================================================================== */
+static inline float _ac_wrap_hue(float h)
+{
+  const float hw = h - 360.0f * floorf(h / 360.0f);
+  return (hw < 0.0f) ? hw + 360.0f : hw;
+}
+
+/* ====================================================================
+ * Utility: smin (smooth minimum) — matches ACES 2.0 reference
+ * ==================================================================== */
+static inline float _ac_smin(float a, float b, float k)
+{
+  if(k <= 0.0f) return fminf(a, b);
+  const float h = fmaxf(k - fabsf(a - b), 0.0f) / k;
+  return fminf(a, b) - h * h * h * k * (1.0f / 6.0f);
+}
+
+/* ====================================================================
+ * GAMUT COMPRESSION — TABLE GENERATION
+ *
+ * These functions build the hue-dependent tables used by the per-pixel
+ * gamut compression at runtime. They are called once per context init
+ * from dt_ac_compute_context().
+ *
+ * Translation of ACES 2.0 reference:
+ *   aces-core/lib/Lib.Academy.OutputTransform.ctl
+ *   lines 999–1628
+ * ==================================================================== */
+
+/* ---- Struct: pre-built 8-element corner tables (limiting or reach) ---- */
+/* Entries [1..6] are the 6 corners rotated so lowest hue is at [1];
+ * entries [0] and [7] are wrap-around copies for monotonic hue interpolation. */
+typedef struct
+{
+  float rgb[DT_AC_TOTAL_CORNER_COUNT][3];
+  float jmh[DT_AC_TOTAL_CORNER_COUNT][3];
+} _ac_corner_tables_t;
+
+/* ---- Generate one unit-cube cusp corner (R,Y,G,C,B,M order) ---- */
+/* Matches CTL generate_unit_cube_cusp_corners (lines 999-1018) */
+static inline void _ac_gen_unit_cube_cusp_corner(float rgb[3], int corner)
+{
+  rgb[0] = ((corner + 1) % DT_AC_CUSP_CORNER_COUNT < 3) ? 1.0f : 0.0f;
+  rgb[1] = ((corner + 5) % DT_AC_CUSP_CORNER_COUNT < 3) ? 1.0f : 0.0f;
+  rgb[2] = ((corner + 3) % DT_AC_CUSP_CORNER_COUNT < 3) ? 1.0f : 0.0f;
+}
+
+/* ---- Build limiting cusp corner tables (rotated, 8-element) ---- */
+/* Matches CTL build_limiting_cusp_corners_tables (lines 1020-1058) */
+static inline void _ac_build_limiting_cusp_corners_tables(
+    _ac_corner_tables_t *tbl,
+    int prim_set, const dt_ac_context_t *ctx)
+{
+  float tmp_rgb[DT_AC_CUSP_CORNER_COUNT][3];
+  float tmp_jmh[DT_AC_CUSP_CORNER_COUNT][3];
+
+  int min_idx = 0;
+  for(int i = 0; i < DT_AC_CUSP_CORNER_COUNT; i++)
+  {
+    _ac_gen_unit_cube_cusp_corner(tmp_rgb[i], i);
+    _ac_rgb_to_jmh_prim(tmp_jmh[i], tmp_rgb[i], prim_set, ctx);
+    if(tmp_jmh[i][2] < tmp_jmh[min_idx][2])
+      min_idx = i;
+  }
+
+  /* Rotate so lowest hue is at index 1 */
+  for(int i = 0; i < DT_AC_CUSP_CORNER_COUNT; i++)
+  {
+    const int src = (i + min_idx) % DT_AC_CUSP_CORNER_COUNT;
+    for(int c = 0; c < 3; c++)
+    {
+      tbl->rgb[i + 1][c] = tmp_rgb[src][c];
+      tbl->jmh[i + 1][c] = tmp_jmh[src][c];
+    }
+  }
+
+  /* Wrap-around copies for monotonic hue interpolation */
+  for(int c = 0; c < 3; c++)
+  {
+    tbl->rgb[0][c] = tbl->rgb[DT_AC_CUSP_CORNER_COUNT][c];
+    tbl->jmh[0][c] = tbl->jmh[DT_AC_CUSP_CORNER_COUNT][c];
+    tbl->rgb[DT_AC_CUSP_CORNER_COUNT + 1][c] = tbl->rgb[1][c];
+    tbl->jmh[DT_AC_CUSP_CORNER_COUNT + 1][c] = tbl->jmh[1][c];
+  }
+
+  /* Wrap hues to maintain monotonicity across 0/360 boundary */
+  tbl->jmh[0][2] -= 360.0f;
+  tbl->jmh[DT_AC_CUSP_CORNER_COUNT + 1][2] += 360.0f;
+}
+
+/* ---- Find reach corners table ---- */
+/* Matches CTL find_reach_corners_table (lines 1060-1121) */
+static inline void _ac_find_reach_corners_table(
+    _ac_corner_tables_t *tbl,
+    const dt_ac_context_t *ctx)
+{
+  float tmp_jmh[DT_AC_CUSP_CORNER_COUNT][3];
+
+  int min_idx = 0;
+  for(int i = 0; i < DT_AC_CUSP_CORNER_COUNT; i++)
+  {
+    float corner_rgb[3];
+    _ac_gen_unit_cube_cusp_corner(corner_rgb, i);
+
+    /* Binary search for scale factor where J == limit_J_max in reach */
+    float lo = 0.0f, hi = 10.0f;
+    for(int iter = 0; iter < 32; iter++)
+    {
+      const float t = 0.5f * (lo + hi);
+      float rgb[3];
+      for(int c = 0; c < 3; c++)
+        rgb[c] = corner_rgb[c] * t;
+      float jmh[3];
+      _ac_rgb_to_jmh_prim(jmh, rgb, 2, ctx);
+      if(jmh[0] >= ctx->limit_j_max)
+        hi = t;
+      else
+        lo = t;
+    }
+
+    /* Final JMh at the found scale factor */
+    float rgb[3];
+    for(int c = 0; c < 3; c++)
+      rgb[c] = corner_rgb[c] * hi;
+    _ac_rgb_to_jmh_prim(tmp_jmh[i], rgb, 2, ctx);
+
+    if(tmp_jmh[i][2] < tmp_jmh[min_idx][2])
+      min_idx = i;
+  }
+
+  /* Rotate so lowest hue is at index 1 */
+  for(int i = 0; i < DT_AC_CUSP_CORNER_COUNT; i++)
+  {
+    const int src = (i + min_idx) % DT_AC_CUSP_CORNER_COUNT;
+    for(int c = 0; c < 3; c++)
+      tbl->jmh[i + 1][c] = tmp_jmh[src][c];
+  }
+
+  /* Wrap-around copies */
+  for(int c = 0; c < 3; c++)
+  {
+    tbl->jmh[0][c] = tbl->jmh[DT_AC_CUSP_CORNER_COUNT][c];
+    tbl->jmh[DT_AC_CUSP_CORNER_COUNT + 1][c] = tbl->jmh[1][c];
+  }
+
+  /* Wrap hues */
+  tbl->jmh[0][2] -= 360.0f;
+  tbl->jmh[DT_AC_CUSP_CORNER_COUNT + 1][2] += 360.0f;
+}
+
+/* ---- Extract sorted cube hues (merge 2 sorted 6-element arrays) ---- */
+/* Matches CTL extract_sorted_cube_hues (lines 1123-1159) */
+static inline int _ac_extract_sorted_cube_hues(float sorted_hues[DT_AC_MAX_SORTED_CORNERS],
+    const _ac_corner_tables_t *reach,
+    const _ac_corner_tables_t *limit)
+{
+  int idx = 0, ri = 1, li = 1;
+  while(ri < DT_AC_CUSP_CORNER_COUNT + 1
+     || li < DT_AC_CUSP_CORNER_COUNT + 1)
+  {
+    const float rh = reach->jmh[ri][2];
+    const float lh = limit->jmh[li][2];
+    if(rh == lh)
+    {
+      sorted_hues[idx++] = rh;
+      ri++;
+      li++;
+    }
+    else if(rh < lh)
+    {
+      sorted_hues[idx++] = rh;
+      ri++;
+    }
+    else
+    {
+      sorted_hues[idx++] = lh;
+      li++;
+    }
+  }
+  return idx;
+}
+
+/* ---- Step 5: Build hue table (distribute 362 samples between corners) ---- */
+static inline void _ac_build_hue_table(float hues[DT_AC_GAMUT_TABLE_SIZE],
+    const float sorted_corners[12], int n_corners)
+{
+  const int intervals = n_corners;
+  const int samples_per = (DT_AC_GAMUT_TABLE_SIZE - intervals) / intervals;
+  int idx = 0;
+
+  for(int i = 0; i < intervals; i++)
+  {
+    const float h0 = sorted_corners[i];
+    const float h1 = sorted_corners[(i + 1) % intervals];
+    float dh = h1 - h0;
+    if(dh < 0.0f) dh += 360.0f;
+    if(dh <= 0.0f) dh = 360.0f / (float)intervals;
+
+    if(idx < DT_AC_GAMUT_TABLE_SIZE)
+      hues[idx++] = h0;
+
+    const int n = (i < intervals - 1) ? samples_per
+                 : (DT_AC_GAMUT_TABLE_SIZE - 1 - idx);
+    for(int j = 1; j <= n && idx < DT_AC_GAMUT_TABLE_SIZE; j++)
+    {
+      const float t = (float)j / (float)(n + 1);
+      hues[idx++] = _ac_wrap_hue(h0 + t * dh);
+    }
+  }
+
+  while(idx < DT_AC_GAMUT_TABLE_SIZE)
+  {
+    hues[idx] = hues[idx - 1];
+    idx++;
+  }
+}
+
+/* ---- Find display cusp for a given hue (interval + binary search) ---- */
+/* Matches CTL find_display_cusp_for_hue (lines 1239-1323) */
+static inline void _ac_find_display_cusp_for_hue(float jmh_out[2], float hue,
+    const _ac_corner_tables_t *limit,
+    const dt_ac_context_t *ctx)
+{
+  /* Find the correct edge: first corner whose hue exceeds the target */
+  int upper = 1;
+  for(int i = upper; i < DT_AC_TOTAL_CORNER_COUNT; i++)
+  {
+    if(limit->jmh[i][2] > hue)
+    {
+      upper = i;
+      break;
+    }
+  }
+  const int lower = upper - 1;
+
+  /* Exact match at a corner */
+  if(limit->jmh[lower][2] == hue)
+  {
+    jmh_out[0] = limit->jmh[lower][0];
+    jmh_out[1] = limit->jmh[lower][1];
+    return;
+  }
+
+  const float *cusp_lower = limit->rgb[lower];
+  const float *cusp_upper = limit->rgb[upper];
+
+  float lo_t = 0.0f, hi_t = 1.0f;
+  while(hi_t - lo_t > DT_AC_DISPLAY_CUSP_TOL)
+  {
+    const float t = 0.5f * (lo_t + hi_t);
+    float rgb[3];
+    for(int c = 0; c < 3; c++)
+      rgb[c] = cusp_lower[c] + t * (cusp_upper[c] - cusp_lower[c]);
+    float jmh[3];
+    _ac_rgb_to_jmh_prim(jmh, rgb, 1, ctx);
+
+    if(jmh[2] < limit->jmh[lower][2])
+      hi_t = t;
+    else if(jmh[2] >= limit->jmh[upper][2])
+      lo_t = t;
+    else if(jmh[2] > hue)
+      hi_t = t;
+    else
+      lo_t = t;
+  }
+
+  const float t = 0.5f * (lo_t + hi_t);
+  float rgb[3];
+  for(int c = 0; c < 3; c++)
+    rgb[c] = cusp_lower[c] + t * (cusp_upper[c] - cusp_lower[c]);
+  float jmh[3];
+  _ac_rgb_to_jmh_prim(jmh, rgb, 1, ctx);
+
+  jmh_out[0] = jmh[0];
+  jmh_out[1] = jmh[1];
+}
+
+/* ---- Build full cusp table ---- */
+/* Matches CTL build_cusp_table (lines 1325-1353) */
+static inline void _ac_build_cusp_table(float cusps[DT_AC_GAMUT_TABLE_SIZE][3],
+    const float hues[DT_AC_GAMUT_TABLE_SIZE],
+    const _ac_corner_tables_t *limit,
+    const dt_ac_context_t *ctx)
+{
+  const float smooth_factor = 1.0f
+    + DT_AC_GAMUT_SMOOTH_M * DT_AC_GAMUT_SMOOTH_CUSPS;
+
+  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE; i++)
+  {
+    float jm[2];
+    _ac_find_display_cusp_for_hue(jm, hues[i], limit, ctx);
+    cusps[i][0] = jm[0];
+    cusps[i][1] = jm[1] * smooth_factor;
+    cusps[i][2] = hues[i];
+  }
+}
+
+/* ---- Make uniform hue gamut table (orchestrator) ---- */
+/* Matches CTL make_uniform_hue_gamut_table (lines 1355-1381) */
+static inline void _ac_make_uniform_hue_table(float hues[DT_AC_GAMUT_TABLE_SIZE],
+    float cusps[DT_AC_GAMUT_TABLE_SIZE][3],
+    int prim_set, const dt_ac_context_t *ctx)
+{
+  _ac_corner_tables_t limit_tbl;
+  _ac_build_limiting_cusp_corners_tables(&limit_tbl, prim_set, ctx);
+
+  _ac_corner_tables_t reach_tbl;
+  _ac_find_reach_corners_table(&reach_tbl, ctx);
+
+  float sorted_hues[DT_AC_MAX_SORTED_CORNERS];
+  const int n_corners = _ac_extract_sorted_cube_hues(sorted_hues,
+      &reach_tbl, &limit_tbl);
+
+  _ac_build_hue_table(hues, sorted_hues, n_corners);
+
+  _ac_build_cusp_table(cusps, hues, &limit_tbl, ctx);
+}
+
+/* ---- Reach M table (binary search reach M at limit_J_max) ---- */
+static inline void _ac_make_reach_m_table(float reach_m[DT_AC_GAMUT_TABLE_SIZE],
+    const float hues[DT_AC_GAMUT_TABLE_SIZE],
+    const dt_ac_context_t *ctx)
+{
+  /* Build XYZ→reach_primaries matrix */
+  float xyz_to_reach[9];
+  float prim_to_xyz[9];
+  _ac_get_rgb_to_xyz(prim_to_xyz, 2);
+  _mat_inv_3x3(xyz_to_reach, prim_to_xyz);
+
+  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE; i++)
+  {
+    const float h = hues[i];
+    const float hr = h * (float)(M_PI / 180.0);
+    float best_m = 0.0f;
+    float lo_m = 0.0f, hi_m = 500.0f;
+
+    for(int iter = 0; iter < 32; iter++)
+    {
+      const float mid_m = 0.5f * (lo_m + hi_m);
+
+      /* JMh → XYZ (nits) */
+      const float A = ctx->a_w * powf(fmaxf(ctx->limit_j_max / 100.0f, 1e-12f), ctx->inv_cz);
+      const float gamma_v = mid_m / DT_AC_M_SCALE;
+      const float a_op = gamma_v * cosf(hr);
+      const float b_op = gamma_v * sinf(hr);
+      float p_in[3] = { A, a_op, b_op };
+      float rgb_a[3], rgb_c[3], xyz[3], rgb_reach[3];
+      _mat_apply(rgb_a, dt_ac_panlrcm, p_in);
+      for(int c = 0; c < 3; c++) rgb_a[c] /= 1403.0f;
+      _ac_nlc_inv(rgb_a, rgb_c);
+      for(int c = 0; c < 3; c++)
+        rgb_c[c] /= fmaxf(ctx->d_rgb[c], 1e-12f);
+      _mat_apply(xyz, dt_ac_m16_inv, rgb_c);
+      /* xyz is in absolute nits (same convention as dt_ac_pipeline_eval);
+       * reach primaries matrix expects normalised XYZ (Y=1 for white) —
+       * same /DT_AC_REF_LUM normalisation as pipeline_eval Step 8. */
+      for(int c = 0; c < 3; c++) xyz[c] /= DT_AC_REF_LUM;
+      /* XYZ to reach primaries */
+      _mat_apply(rgb_reach, xyz_to_reach, xyz);
+
+      /* Reach gamut test — matches official any_below_zero(): only negative
+       * components disqualify a point. There is NO upper-bound (>1) check:
+       * exceeding code-value 1 just means "brighter than reference white",
+       * which is expected (J can exceed 100) and is not a gamut violation. */
+      int in_gamut = 1;
+      for(int c = 0; c < 3; c++)
+        if(rgb_reach[c] < -0.001f)
+          in_gamut = 0;
+
+      if(in_gamut)
+      {
+        best_m = mid_m;
+        lo_m = mid_m;
+      }
+      else
+      {
+        hi_m = mid_m;
+      }
+    }
+    reach_m[i] = best_m;
+  }
+}
+
+/* ---- Determine hue linearity search range ---- */
+static inline void _ac_determine_search_range(int range[2],
+    const float hues[DT_AC_GAMUT_TABLE_SIZE])
+{
+  float min_delta = 360.0f;
+  float max_delta = 0.0f;
+  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
+  {
+    float dh = hues[i + 1] - hues[i];
+    if(dh < 0.0f) dh += 360.0f;
+    if(dh < min_delta) min_delta = dh;
+    if(dh > max_delta) max_delta = dh;
+  }
+  range[0] = (int)(min_delta * 0.9f);
+  range[1] = (int)(max_delta * 1.1f) + 1;
+  if(range[0] < 1) range[0] = 1;
+  if(range[1] > 360) range[1] = 360;
+}
+
+/* ====================================================================
+ * GAMUT COMPRESSION — PER-PIXEL FUNCTIONS
+ *
+ * Translation of ACES 2.0 reference:
+ *   aces-core/lib/Lib.Academy.OutputTransform.ctl
+ *   lines 348–916
+ *
+ * These operate on a single pixel in JMh space.
+ * ==================================================================== */
+
+/* ---- Reach M from table (bilinear lookup) ---- */
+static inline float _ac_reach_m_from_table(float h,
+    const float reach_m[DT_AC_GAMUT_TABLE_SIZE],
+    const float hues[DT_AC_GAMUT_TABLE_SIZE])
+{
+  const float hw = _ac_wrap_hue(h);
+  int lo = 0, hi = 1;
+  /* Find the two surrounding table entries */
+  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
+  {
+    if(hw >= hues[i] && hw < hues[i + 1])
+    {
+      lo = i;
+      hi = i + 1;
+      break;
+    }
+  }
+  /* Handle wrap-around */
+  if(hw < hues[0] || hw >= hues[DT_AC_GAMUT_TABLE_SIZE - 1])
+  {
+    lo = DT_AC_GAMUT_TABLE_SIZE - 1;
+    hi = 0;
+  }
+  float dh = hues[hi] - hues[lo];
+  if(dh < 0.0f) dh += 360.0f;
+  const float t = (dh > 0.0f) ? _ac_wrap_hue(hw - hues[lo]) / dh : 0.0f;
+  return reach_m[lo] + t * (reach_m[hi] - reach_m[lo]);
+}
+
+/* ---- Cusp from table (binary search) ---- */
+static inline void _ac_cusp_from_table(float cusp_out[2], float h,
+    const float cusps[DT_AC_GAMUT_TABLE_SIZE][3],
+    const float hues[DT_AC_GAMUT_TABLE_SIZE])
+{
+  const float hw = _ac_wrap_hue(h);
+  int lo = 0, hi = 1;
+
+  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
+  {
+    if(hw >= hues[i] && hw < hues[i + 1])
+    {
+      lo = i;
+      hi = i + 1;
+      break;
+    }
+  }
+  if(hw < hues[0] || hw >= hues[DT_AC_GAMUT_TABLE_SIZE - 1])
+  {
+    lo = DT_AC_GAMUT_TABLE_SIZE - 1;
+    hi = 0;
+  }
+  float dh = hues[hi] - hues[lo];
+  if(dh < 0.0f) dh += 360.0f;
+  const float t = (dh > 0.0f) ? _ac_wrap_hue(hw - hues[lo]) / dh : 0.0f;
+
+  cusp_out[0] = cusps[lo][0] + t * (cusps[hi][0] - cusps[lo][0]);
+  cusp_out[1] = cusps[lo][1] + t * (cusps[hi][1] - cusps[lo][1]);
+}
+
+/* ---- Upper hull gamma from table (bilinear lookup) ---- */
+static inline float _ac_hue_upper_hull_gamma(float h,
+    const float gamma_table[DT_AC_GAMUT_TABLE_SIZE],
+    const float hues[DT_AC_GAMUT_TABLE_SIZE])
+{
+  const float hw = _ac_wrap_hue(h);
+  int lo = 0, hi = 1;
+  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
+  {
+    if(hw >= hues[i] && hw < hues[i + 1])
+    {
+      lo = i;
+      hi = i + 1;
+      break;
+    }
+  }
+  if(hw < hues[0] || hw >= hues[DT_AC_GAMUT_TABLE_SIZE - 1])
+  {
+    lo = DT_AC_GAMUT_TABLE_SIZE - 1;
+    hi = 0;
+  }
+  float dh = hues[hi] - hues[lo];
+  if(dh < 0.0f) dh += 360.0f;
+  const float t = (dh > 0.0f) ? _ac_wrap_hue(hw - hues[lo]) / dh : 0.0f;
+  return gamma_table[lo] + t * (gamma_table[hi] - gamma_table[lo]);
+}
+
+/* ---- Compute focus gain (slope_gain, reference match) ---- */
+static inline float _ac_get_focus_gain(float j, float analytical_threshold,
+    float limit_j_max, float focus_dist)
+{
+  float gain = limit_j_max * focus_dist;
+
+  if(j > analytical_threshold)
+  {
+    const float denom = fmaxf(limit_j_max - j, 1e-4f);
+    const float ratio = (limit_j_max - analytical_threshold) / denom;
+    const float gain_adj = log10f(ratio) * log10f(ratio) + 1.0f;
+    gain *= gain_adj;
+  }
+
+  return gain;
+}
+
+/* ---- Solve J intersection (quadratic) ---- */
+static inline float _ac_solve_J_intersect(float j, float m,
+    float focus_j, float limit_j_max, float slope_gain)
+{
+  if(m <= 0.0f) return j;
+
+  const float m_scaled = m / slope_gain;
+  const float a = m_scaled / focus_j;
+
+  if(j < focus_j)
+  {
+    /* J_intersect solves: focus_J * (J - intersect) = M * intersect / slope_gain
+     * → a*intersect² + b*intersect + c = 0  with:
+     */
+    const float b = 1.0f - m_scaled;
+    const float c = -j;
+    const float disc = fmaxf(b * b - 4.0f * a * c, 0.0f);
+    const float root = sqrtf(disc);
+    return -2.0f * c / (b + root);
+  }
+  else
+  {
+    /* For J >= focus_J, equation is reflected about limit_J_max */
+    const float b = -(1.0f + m_scaled + limit_j_max * a);
+    const float c = limit_j_max * m_scaled + j;
+    const float disc = fmaxf(b * b - 4.0f * a * c, 0.0f);
+    const float root = sqrtf(disc);
+    return -2.0f * c / (b - root);
+  }
+}
+
+/* ---- Compute compression vector slope ---- */
+static inline float _ac_compression_slope(float intersect_j, float focus_j,
+    float limit_j_max, float slope_gain)
+{
+  float direction_scalar;
+  if(intersect_j < focus_j)
+    direction_scalar = intersect_j;
+  else
+    direction_scalar = limit_j_max - intersect_j;
+
+  return direction_scalar * (intersect_j - focus_j) / (focus_j * slope_gain);
+}
+
+/* ---- Gamma test point (one per test position) ---- */
+typedef struct
+{
+  float test_JMh[3];
+  float J_intersect_source;
+  float slope;
+  float J_intersect_cusp;
+} _ac_gamma_test_point_t;
+
+/* ---- Generate gamma test data (5 test J positions per hue) ---- */
+/* Matches reference generate_gamma_test_data (OutputTransform.ctl lines 1456-1485):
+ *   test positions {0.01, 0.1, 0.5, 0.8, 0.99} between cusp_J and limit_J_max,
+ *   M = cusp_M (constant),
+ *   reuses get_focus_gain / solve_J_intersect / compute_compression_vector_slope
+ *   (the same functions used by compress_gamut itself). */
+static inline void _ac_gamma_test_data(_ac_gamma_test_point_t tests[5],
+    float cusp_j, float cusp_m, float hue,
+    float limit_j_max, float mid_J, float focus_dist)
+{
+  const float test_positions[5] = { 0.01f, 0.10f, 0.50f, 0.80f, 0.99f };
+
+  const float blend_weight = fminf(1.0f, DT_AC_GAMUT_CUSP_MID_BLEND - cusp_j / limit_j_max);
+  const float focus_j = cusp_j + blend_weight * (mid_J - cusp_j);
+  const float analytical_threshold = cusp_j + DT_AC_GAMUT_FOCUS_GAIN_BLEND
+                                     * (limit_j_max - cusp_j);
+
+  for(int i = 0; i < 5; i++)
+  {
+    const float test_j = cusp_j + test_positions[i] * (limit_j_max - cusp_j);
+    const float slope_gain = _ac_get_focus_gain(test_j, analytical_threshold,
+                                                limit_j_max, focus_dist);
+    const float j_intersect = _ac_solve_J_intersect(test_j, cusp_m, focus_j,
+                                                    limit_j_max, slope_gain);
+    const float slope = _ac_compression_slope(j_intersect, focus_j,
+                                              limit_j_max, slope_gain);
+    const float j_cusp = _ac_solve_J_intersect(cusp_j, cusp_m, focus_j,
+                                               limit_j_max, slope_gain);
+
+    tests[i].test_JMh[0] = test_j;
+    tests[i].test_JMh[1] = cusp_m;
+    tests[i].test_JMh[2] = hue;
+    tests[i].J_intersect_source = j_intersect;
+    tests[i].slope = slope;
+    tests[i].J_intersect_cusp = j_cusp;
+  }
+}
+
+/* ---- smin_scaled ---- */
+static inline float _ac_smin_scaled(float a, float b, float scale_ref)
+{
+  return _ac_smin(a, b, DT_AC_GAMUT_SMOOTH_CUSPS * scale_ref);
+}
+
+/* ---- Estimate line and boundary intersection M (reference match) ---- */
+static inline float _ac_estimate_intersect_M(float j_axis_intersect, float slope,
+    float inv_gamma, float j_max, float m_max, float j_intersection_ref)
+{
+  if(m_max <= 0.0f) return m_max;
+
+  /* Project the J-axis intercept through the boundary power law
+   * using the reference point for scaling */
+  const float j_ref = fmaxf(j_intersection_ref, 1e-12f);
+  const float normalised_j = j_axis_intersect / j_ref;
+  const float inv_gamma_safe = fmaxf(inv_gamma, 1e-6f);
+  const float shifted_intersection = j_ref * powf(fmaxf(normalised_j, 1e-12f), inv_gamma_safe);
+
+  /* Find intersection of two lines:
+   *   line from origin to (J_max, M_max):   J = (J_max / M_max) * M
+   *   line from (shifted, 0) with slope:    J = slope * M + shifted
+   * Solve:  slope * M + shifted = (J_max / M_max) * M
+   *         shifted = (J_max/M_max - slope) * M
+   *         M = shifted * M_max / (J_max - slope * M_max)
+   */
+  const float denom = j_max - slope * m_max;
+  if(denom <= 0.0f) return m_max;
+  const float m_est = shifted_intersection * m_max / denom;
+  return fminf(fmaxf(m_est, 0.0f), m_max);
+}
+
+/* ---- Find gamut boundary intersection M (reference match) ---- */
+static inline float _ac_find_boundary_M(float cusp_j, float cusp_m,
+    float limit_j_max, float gamma_top_inv, float gamma_bottom_inv,
+    float j_intersect_source, float slope, float j_intersect_cusp)
+{
+  if(cusp_m <= 0.0f || cusp_j <= 0.0f) return 0.0f;
+
+  /* Lower hull: boundary is power law from (0,0) up to (cusp_J, cusp_M) */
+  const float M_boundary_lower = _ac_estimate_intersect_M(j_intersect_source, slope,
+      gamma_bottom_inv, cusp_j, cusp_m, j_intersect_cusp);
+
+  /* Upper hull: flip about limit_J_max, negate slope, reuse the same estimator */
+  const float f_intersect_cusp = limit_j_max - j_intersect_cusp;
+  const float f_intersect_source = limit_j_max - j_intersect_source;
+  const float f_cusp_j = limit_j_max - cusp_j;
+  const float M_boundary_upper = _ac_estimate_intersect_M(f_intersect_source, -slope,
+      gamma_top_inv, f_cusp_j, cusp_m, f_intersect_cusp);
+
+  /* Smooth min between the two boundary estimates */
+  const float m_blend = _ac_smin(M_boundary_lower, M_boundary_upper,
+      DT_AC_GAMUT_SMOOTH_CUSPS * cusp_m);
+  return m_blend;
+}
+
+/* ---- Evaluate gamma fit (reference match) ---- */
+/* Matches reference evaluate_gamma_fit (OutputTransform.ctl lines 1487-1524):
+ *   projects each test point through find_gamut_boundary_intersection,
+ *   converts to limiting RGB, and checks outside_hull(rgb, peak/ref_lum). */
+static inline int _ac_eval_gamma_fit(
+    const _ac_gamma_test_point_t tests[5],
+    float cusp_j, float cusp_m,
+    float top_gamma_inv, float peak_luminance,
+    float limit_j_max, float lower_hull_gamma_inv,
+    const dt_ac_context_t *ctx)
+{
+  const float luminance_limit = peak_luminance / DT_AC_REF_LUM;
+  float xyz_to_limit[9];
+  float prim_to_xyz[9];
+  _ac_get_rgb_to_xyz(prim_to_xyz, 1);
+  _mat_inv_3x3(xyz_to_limit, prim_to_xyz);
+
+  for(int i = 0; i < 5; i++)
+  {
+    const float approx_limit_M = _ac_find_boundary_M(cusp_j, cusp_m,
+        limit_j_max, top_gamma_inv, lower_hull_gamma_inv,
+        tests[i].J_intersect_source, tests[i].slope, tests[i].J_intersect_cusp);
+
+    if(approx_limit_M <= 0.0f) return 0;
+
+    const float approx_limit_J = tests[i].J_intersect_source + tests[i].slope * approx_limit_M;
+
+    float approx_jmh[3] = { approx_limit_J, approx_limit_M, tests[i].test_JMh[2] };
+    float xyz[3];
+    _ac_jmh_to_xyz(approx_jmh, ctx->d_rgb, ctx->a_w, ctx->z, xyz);
+
+    for(int c = 0; c < 3; c++) xyz[c] /= DT_AC_REF_LUM;
+
+    float rgb_limit[3];
+    _mat_apply(rgb_limit, xyz_to_limit, xyz);
+
+    int outside = 0;
+    for(int c = 0; c < 3; c++)
+      if(rgb_limit[c] > luminance_limit)
+        outside = 1;
+
+    if(!outside) return 0;
+  }
+  return 1;
+}
+
+/* ---- Make upper hull gamma table (reference match) ---- */
+/* Matches reference make_upper_hull_gamma_table (OutputTransform.ctl lines 1526-1604):
+ *   step search gamma 0→5 step 0.4, then binary search to 1e-5 accuracy,
+ *   stores 1/hi (i.e. gamma_inv) in the table. */
+static inline void _ac_make_upper_hull_gamma_table(
+    float gamma_table[DT_AC_GAMUT_TABLE_SIZE],
+    const float cusps[DT_AC_GAMUT_TABLE_SIZE][3],
+    float limit_j_max, float lower_hull_gamma_inv,
+    float peak_luminance, float mid_J, float focus_dist,
+    const dt_ac_context_t *ctx)
+{
+  const float gamma_minimum = 0.0f;
+  const float gamma_maximum = 5.0f;
+  const float gamma_search_step = 0.4f;
+  const float gamma_accuracy = 1e-5f;
+
+  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE; i++)
+  {
+    const float cusp_j = cusps[i][0];
+    const float cusp_m = cusps[i][1];
+    const float hue = cusps[i][2];
+
+    if(cusp_m <= 0.0f || cusp_j <= 0.0f)
+    {
+      gamma_table[i] = 0.0f;
+      continue;
+    }
+
+    _ac_gamma_test_point_t tests[5];
+    _ac_gamma_test_data(tests, cusp_j, cusp_m, hue,
+                        limit_j_max, mid_J, focus_dist);
+
+    float lo = gamma_minimum;
+    float hi = lo + gamma_search_step;
+    int found = 0;
+    while(!found && hi < gamma_maximum)
+    {
+      if(_ac_eval_gamma_fit(tests, cusp_j, cusp_m,
+          1.0f / hi, peak_luminance, limit_j_max, lower_hull_gamma_inv, ctx))
+      {
+        found = 1;
+      }
+      else
+      {
+        lo = hi;
+        hi = hi + gamma_search_step;
+      }
+    }
+
+    while((hi - lo) > gamma_accuracy)
+    {
+      const float mid = 0.5f * (hi + lo);
+      if(_ac_eval_gamma_fit(tests, cusp_j, cusp_m,
+          1.0f / mid, peak_luminance, limit_j_max, lower_hull_gamma_inv, ctx))
+        hi = mid;
+      else
+        lo = mid;
+    }
+
+    gamma_table[i] = 1.0f / hi;
+  }
+}
+
+/* ---- Remap M (adaptive Reinhard, reference match) ---- */
+static inline float _ac_remap_M(float m, float gamut_boundary_m,
+    float reach_boundary_m)
+{
+  if(m <= 0.0f || gamut_boundary_m <= 0.0f || reach_boundary_m <= gamut_boundary_m) return m;
+
+  const float boundary_ratio = gamut_boundary_m / reach_boundary_m;
+  const float proportion = fmaxf(boundary_ratio, DT_AC_GAMUT_COMPRESSION_THR);
+  const float threshold = proportion * gamut_boundary_m;
+
+  if(m <= threshold || proportion >= 1.0f) return m;
+
+  const float m_offset = m - threshold;
+  const float gamut_offset = gamut_boundary_m - threshold;
+  const float reach_offset = reach_boundary_m - threshold;
+  const float scale = reach_offset / ((reach_offset / gamut_offset) - 1.0f);
+  const float nd = m_offset / scale;
+
+  /* Reinhard: scale * nd / (1 + nd) */
+  return threshold + scale * nd / (1.0f + nd);
+}
+
+/* ---- Core compress_gamut function ---- */
+static inline void _ac_compress_gamut(float jmh[3], float jx,
+    const dt_ac_context_t *ctx)
+{
+  float j = jmh[0], m = jmh[1], h = jmh[2];
+  if(!isfinite(j) || !isfinite(m)) return;
+  if(m <= 0.0f || j <= 0.0f) return;
+
+  const float limit_j_max = ctx->limit_j_max;
+  if(limit_j_max <= 0.0f) return;
+
+  /* Get hue-dependent params */
+  float cusp[2];
+  _ac_cusp_from_table(cusp, h, ctx->table_gamut_cusps, ctx->table_hues);
+  const float cusp_j = cusp[0], cusp_m = cusp[1];
+
+  if(!isfinite(cusp_j) || !isfinite(cusp_m) || cusp_m <= 0.0f || cusp_j <= 0.0f)
+    return;
+
+  /* Focus J: lerp(cusp_J, mid_J, min(1, cusp_mid_blend - cusp_J/limit_J_max)) */
+  const float blend_weight = fminf(1.0f, DT_AC_GAMUT_CUSP_MID_BLEND - cusp_j / limit_j_max);
+  const float focus_j = cusp_j + blend_weight * (ctx->mid_J - cusp_j);
+  if(!isfinite(focus_j) || focus_j <= 0.0f) return;
+
+  /* Analytical threshold: lerp(cusp_J, limit_J_max, FOCUS_GAIN_BLEND) */
+  const float analytical_threshold = cusp_j + DT_AC_GAMUT_FOCUS_GAIN_BLEND
+                                     * (limit_j_max - cusp_j);
+
+  const float gamma_top_inv = fmaxf(
+      _ac_hue_upper_hull_gamma(h, ctx->table_upper_hull_gamma, ctx->table_hues), 1e-6f);
+  const float gamma_bottom_inv = ctx->lower_hull_gamma_inv;
+
+  const float slope_gain = _ac_get_focus_gain(jx, analytical_threshold,
+      limit_j_max, ctx->focus_dist);
+  if(!isfinite(slope_gain) || slope_gain <= 0.0f) return;
+
+  /* Solve intersections */
+  const float j_intersect_source = _ac_solve_J_intersect(j, m, focus_j,
+      limit_j_max, slope_gain);
+  const float j_intersect_cusp = _ac_solve_J_intersect(cusp_j, cusp_m, focus_j,
+      limit_j_max, slope_gain);
+
+  if(!isfinite(j_intersect_source) || !isfinite(j_intersect_cusp)) return;
+
+  /* Compute compression vector slope */
+  const float slope = _ac_compression_slope(j_intersect_source, focus_j,
+      limit_j_max, slope_gain);
+
+  if(!isfinite(slope)) return;
+
+  /* Gamut boundary M at the source intersection */
+  const float gamut_boundary_m = _ac_find_boundary_M(cusp_j, cusp_m,
+      limit_j_max, gamma_top_inv, gamma_bottom_inv,
+      j_intersect_source, slope, j_intersect_cusp);
+
+  if(!isfinite(gamut_boundary_m) || gamut_boundary_m <= 0.0f) return;
+
+  /* Reach maximum M from table */
+  const float reach_max_m = _ac_reach_m_from_table(h,
+      ctx->table_reach_m, ctx->table_hues);
+  if(!isfinite(reach_max_m) || reach_max_m <= 0.0f) return;
+
+  /* Reach boundary M — uses model_gamma_inv and limit_J_max as ref (reference match) */
+  const float reach_boundary_m = _ac_estimate_intersect_M(
+      j_intersect_source, slope, ctx->model_gamma_inv,
+      limit_j_max, reach_max_m, limit_j_max);
+  if(!isfinite(reach_boundary_m)) return;
+
+  /* Remap M (adaptive threshold, reference match) */
+  const float new_m = _ac_remap_M(m, gamut_boundary_m, reach_boundary_m);
+  if(!isfinite(new_m)) return;
+
+  jmh[0] = j_intersect_source + new_m * slope;
+  jmh[1] = fmaxf(new_m, 0.0f);
+}
+
+/* ---- gamut_compress_fwd ---- */
+static inline void _ac_gamut_compress_fwd(float jmh[3],
+    const dt_ac_context_t *ctx)
+{
+  float j = jmh[0], m = jmh[1];
+
+  if(!isfinite(j + m)) return;
+  if(j <= 0.0f || m <= 0.0f) return;
+
+  const float jx = j;
+
+  /* Apply compression using J as the reference Jx */
+  _ac_compress_gamut(jmh, jx, ctx);
+}
+
+/* ---- gamut_compress_inv ---- */
+static inline void _ac_gamut_compress_inv(float jmh[3],
+    const dt_ac_context_t *ctx)
+{
+  float j = jmh[0], m = jmh[1];
+  const float h = jmh[2];
+
+  if(!isfinite(j + m)) return;
+  if(j <= 0.0f || m <= 0.0f) return;
+
+  const float limit_j_max = ctx->limit_j_max;
+  const float analytical_threshold = 0.9f * limit_j_max;
+
+  if(j < analytical_threshold)
+  {
+    /* Below threshold: single application of compress_gamut */
+    _ac_compress_gamut(jmh, j, ctx);
+  }
+  else
+  {
+    /* Above threshold: apply compression twice with different Jx
+     * to approximate the inverse */
+    float jmh_temp[3] = { j, m, h };
+    float jx = j;
+
+    /* First pass: compress with Jx = J */
+    _ac_compress_gamut(jmh_temp, jx, ctx);
+    jx = jmh_temp[0];
+    m = jmh_temp[1];
+
+    /* Second pass: compress with Jx = compressed J */
+    jmh_temp[0] = jx;
+    jmh_temp[1] = m;
+    _ac_compress_gamut(jmh_temp, jx, ctx);
+
+    jmh[0] = jmh_temp[0];
+    jmh[1] = jmh_temp[1];
+    jmh[2] = h;
+  }
 }
 
 /* ====================================================================
@@ -797,8 +1805,6 @@ static void dt_ac_compute_context(const dt_iop_aces20_params_t *p,
   memset(ctx, 0, sizeof(*ctx));
 
   ctx->exposure_factor = exp2f(p->exposure_ev);
-  ctx->gamut_strength = fmaxf(p->gamut_strength, 0.0f);
-  ctx->gamut_knee = fmaxf(p->gamut_knee, 0.01f);
   ctx->surround_idx = p->surround;
   for(int i = 0; i < 3; i++) ctx->luma_coeff[i] = dt_ac_luma_ap1[i];
 
@@ -864,7 +1870,7 @@ static void dt_ac_compute_context(const dt_iop_aces20_params_t *p,
   /* SSTS init (ACES 2.0 official tonescale params) */
   dt_ac_ssts_init(&ctx->ssts, (double)p->peak_luminance, p->surround);
 
-  /* Hellwig CAM precomputation */
+  /* CAT16 CAM precomputation */
   {
     float n_unused;
     _ac_hellwig_precompute(dt_ac_aces_white_xyz,
@@ -900,6 +1906,55 @@ static void dt_ac_compute_context(const dt_iop_aces20_params_t *p,
 
     /* limit_j_max = J(peak_luminance) via Y_to_J */
     ctx->limit_j_max = _ac_y_to_j(peak, ctx->f_l_n, ctx->a_w_j, ctx->cz);
+  }
+
+  /* Gamut compression parameters and tables (ACES 2.0 reference) */
+  {
+    const float peak = fmaxf(p->peak_luminance, 1.0f);
+    const float log_peak = log10f(peak / DT_AC_REF_LUM);
+
+    /* mid_J = Y_to_J(c_t * ref_lum, ...) from SSTS grey anchor (reference match) */
+    {
+      const double w_i = log((double)peak / (double)DT_AC_REF_LUM) / log(2.0);
+      const double w_g = 0.14;
+      const double c_d = 10.013;
+      const double n_r = 100.0;
+      const double c_t = (c_d / n_r) * (1.0 + w_i * w_g);
+      ctx->mid_J = _ac_y_to_j((float)(c_t * (double)DT_AC_REF_LUM),
+                               ctx->f_l_n, ctx->a_w_j, ctx->cz);
+    }
+
+    /* focus_dist = 1.35 + 1.35 * 1.75 * log10(peak / ref_lum) (reference match) */
+    ctx->focus_dist = DT_AC_GAMUT_FOCUS_DISTANCE
+                      + DT_AC_GAMUT_FOCUS_DISTANCE * DT_AC_GAMUT_FOCUS_DIST_SCALING
+                        * log10f(peak / DT_AC_REF_LUM);
+
+    /* lower_hull_gamma_inv = 1.0 / (1.14 + 0.07 * log10(peak / ref_lum)) */
+    const float lower_hull_gamma = 1.14f + 0.07f * log_peak;
+    ctx->lower_hull_gamma_inv = 1.0f / fmaxf(lower_hull_gamma, 0.5f);
+
+    /* Build all gamut compression tables.
+     * Limiting (display) primaries = AP1 (1) — matches the fixed AP1 output
+     * gamut used throughout the rest of the pipeline (Step 1/9 of
+     * dt_ac_pipeline_eval). AP0 must NOT be used here: it is the reach
+     * primaries (already handled separately inside _ac_find_reach_corners_table /
+     * _ac_make_reach_m_table). AP0's blue primary sits at the edge of the
+     * spectral locus and yields a degenerate (J=0) CAM response, which
+     * corrupted the whole blue-hue region of the cusp table. */
+
+    /* Hue table + cusp table */
+    _ac_make_uniform_hue_table(ctx->table_hues, ctx->table_gamut_cusps, 1, ctx);
+
+    /* Reach M table at limit_J_max */
+    _ac_make_reach_m_table(ctx->table_reach_m, ctx->table_hues, ctx);
+
+    /* Upper hull gamma table */
+    _ac_make_upper_hull_gamma_table(ctx->table_upper_hull_gamma,
+        ctx->table_gamut_cusps, ctx->limit_j_max,
+        ctx->lower_hull_gamma_inv, peak, ctx->mid_J, ctx->focus_dist, ctx);
+
+    /* Hue linearity search range */
+    _ac_determine_search_range(ctx->hue_search_range, ctx->table_hues);
   }
 }
 
@@ -938,10 +1993,12 @@ static inline void _ac_tonemap_and_compress_fwd(float jmh[3],
  *
  *   pipe_RGB  →  AP1 (D60)  →  XYZ (D60)
  *     →  ×100 to absolute nits
- *     →  Hellwig JMh
+ *     →  CAT16 JMh
  *     →  _ac_tonemap_and_compress_fwd  (SSTS on Y + chroma compress)
+ *     →  gamut_compress_fwd  (gamut boundary compression)
  *     →  JMh  →  XYZ  →  /100
- *     →  AP1 (D60)  →  Gamut compress  →  pipe_RGB
+ *     →  AP1 (D60)
+ *     →  pipe_RGB
  * ==================================================================== */
 
 static void dt_ac_pipeline_eval(const float rgb_in[3], float rgb_out[3],
@@ -971,32 +2028,31 @@ static void dt_ac_pipeline_eval(const float rgb_in[3], float rgb_out[3],
   /* Step 3: ×100 to absolute nits for CAM */
   for(int c = 0; c < 3; c++) xyz[c] *= DT_AC_REF_LUM;
 
-  /* Step 4: XYZ D60 → Hellwig JMh */
+  /* Step 4: XYZ D60 → CAT16 JMh */
   float jmh[3];
   _ac_xyz_to_jmh(xyz, ctx->d_rgb, ctx->a_w, ctx->z, jmh);
 
   /* Step 5: Tonemap & compress inside JMh */
   _ac_tonemap_and_compress_fwd(jmh, ctx);
 
-  /* Step 6: JMh → XYZ D60 (in nits) */
+  /* Step 6: Gamut compression (ACES 2.0 reference, after tonemap+chroma comp) */
+  _ac_gamut_compress_fwd(jmh, ctx);
+
+  /* Step 7: JMh → XYZ D60 (in nits) */
   float xyz_out[3];
   _ac_jmh_to_xyz(jmh, ctx->d_rgb, ctx->a_w, ctx->z, xyz_out);
 
-  /* Step 7: XYZ D60 → AP1 (back to display-referred) */
+  /* Step 8: XYZ D60 → AP1 (back to display-referred) */
   float ap1_out[3];
   _mat_apply(ap1_out, dt_ac_xyz_to_ap1, xyz_out);
   for(int c = 0; c < 3; c++)
     ap1_out[c] = fmaxf(ap1_out[c], 0.0f) / DT_AC_REF_LUM;
 
-  /* Step 8: Gamut compression in AP1 */
-  for(int c = 0; c < 3; c++)
-    ap1_out[c] = fmaxf(ap1_out[c], 0.0f);
-  dt_ac_gamut_compress(ap1_out, ctx->gamut_strength, ctx->gamut_knee);
-
   /* Step 9: AP1 → pipe RGB */
   float rgb[3];
   _mat_apply(rgb, ctx->inv_matrix, ap1_out);
 
+  /* Step 10: Hard clamp (reference: hardClip = fmax(v, 0.0f)) */
   for(int c = 0; c < 3; c++)
     rgb_out[c] = isfinite(rgb[c]) ? fmaxf(rgb[c], 0.0f) : 0.0f;
 }
@@ -1146,8 +2202,6 @@ static void dt_ac_fill_cl_params(const dt_iop_aces20_data_t *d,
   for(int i = 0; i < 9; i++) clp->inv_matrix[i]  = ctx->inv_matrix[i];
 
   clp->exposure_factor  = ctx->exposure_factor;
-  clp->gamut_strength   = ctx->gamut_strength;
-  clp->gamut_knee       = ctx->gamut_knee;
   clp->f_l_n            = ctx->f_l_n;
   clp->a_w              = ctx->a_w;
   clp->z                = ctx->z;
@@ -1169,6 +2223,21 @@ static void dt_ac_fill_cl_params(const dt_iop_aces20_data_t *d,
   clp->cc_sat_thr            = ctx->cc_sat_thr;
   clp->cc_compr              = ctx->cc_compr;
   clp->limit_j_max           = ctx->limit_j_max;
+
+  /* Gamut compression fields */
+  clp->mid_J                  = ctx->mid_J;
+  clp->focus_dist             = ctx->focus_dist;
+  clp->lower_hull_gamma_inv   = ctx->lower_hull_gamma_inv;
+  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE; i++)
+  {
+    clp->table_reach_m[i]     = ctx->table_reach_m[i];
+    clp->table_hues[i]        = ctx->table_hues[i];
+    clp->table_cusp_j[i]      = ctx->table_gamut_cusps[i][0];
+    clp->table_cusp_m[i]      = ctx->table_gamut_cusps[i][1];
+    clp->table_upper_hull_gamma[i] = ctx->table_upper_hull_gamma[i];
+  }
+  clp->hue_search_min         = ctx->hue_search_range[0];
+  clp->hue_search_max         = ctx->hue_search_range[1];
 }
 
 int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
@@ -1229,8 +2298,6 @@ void init_presets(dt_iop_module_so_t *self)
   p.peak_luminance = 200.0f;
   p.surround = DT_AC_SURROUND_DIM;
   p.exposure_ev = 0.0f;
-  p.gamut_strength = 0.85f;
-  p.gamut_knee = 0.30f;
 
   if(auto_apply_st)
   {
@@ -1263,8 +2330,6 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->peak_luminance, p->peak_luminance);
   dt_bauhaus_combobox_set(g->surround, p->surround);
   dt_bauhaus_slider_set(g->exposure, p->exposure_ev);
-  dt_bauhaus_slider_set(g->gamut_strength, p->gamut_strength);
-  dt_bauhaus_slider_set(g->gamut_knee, p->gamut_knee);
 }
 
 void gui_init(dt_iop_module_t *self)
@@ -1272,7 +2337,6 @@ void gui_init(dt_iop_module_t *self)
   dt_iop_aces20_gui_data_t *g = IOP_GUI_ALLOC(aces20);
 
   self->widget = gtk_box_new(GTK_ORIENTATION_VERTICAL, DT_BAUHAUS_SPACE);
-  GtkWidget *main_vbox = self->widget;
 
   /* Peak luminance */
   g->peak_luminance = dt_bauhaus_slider_from_params(self, "peak_luminance");
@@ -1295,28 +2359,6 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->exposure,
     _("Exposure compensation applied before tone mapping. "
       "Positive values brighten, negative values darken."));
-
-  /* Gamut compression section */
-  dt_gui_box_add(GTK_BOX(main_vbox),
-    dt_ui_section_label_new(C_("section", "gamut compression")));
-
-  g->gamut_strength = dt_bauhaus_slider_from_params(self, "gamut_strength");
-  dt_bauhaus_slider_set_factor(g->gamut_strength, 100.0f);
-  dt_bauhaus_slider_set_format(g->gamut_strength, " %");
-  dt_bauhaus_slider_set_digits(g->gamut_strength, 0);
-  gtk_widget_set_tooltip_text(g->gamut_strength,
-    _("Strength of the ACES 2.0 gamut compression. "
-      "Higher values compress out-of-gamut colours more aggressively "
-      "toward the AP1 gamut boundary."));
-
-  g->gamut_knee = dt_bauhaus_slider_from_params(self, "gamut_knee");
-  dt_bauhaus_slider_set_factor(g->gamut_knee, 100.0f);
-  dt_bauhaus_slider_set_format(g->gamut_knee, " %");
-  dt_bauhaus_slider_set_digits(g->gamut_knee, 0);
-  gtk_widget_set_tooltip_text(g->gamut_knee,
-    _("Knee point for gamut compression. Lower values start compression "
-      "sooner, preserving more detail at the gamut boundary. "
-      "Higher values allow more saturation before compression begins."));
 }
 
 // clang-format off
