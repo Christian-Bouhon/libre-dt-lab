@@ -231,7 +231,7 @@ static inline void nlc_inv(__private const float rgb_a[3],
  * ==================================================================== */
 
 static inline void xyz_to_jmh(__private const float xyz[3],
-                               __private const float d_rgb[3],
+                               __constant const float d_rgb[3],
                                float a_w, float z,
                                __private float jmh[3])
 {
@@ -263,7 +263,7 @@ static inline void xyz_to_jmh(__private const float xyz[3],
  * ==================================================================== */
 
 static inline void jmh_to_xyz(__private const float jmh[3],
-                               __private const float d_rgb[3],
+                               __constant const float d_rgb[3],
                                float a_w, float z,
                                __private float xyz[3])
 {
