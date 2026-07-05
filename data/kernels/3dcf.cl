@@ -134,19 +134,24 @@ static inline float st_desat_weight(const float y_norm, const float hl_desat, co
   return x * x;
 }
 
-/* Film-like gamut compression: blend out-of-gamut channels toward white */
-static inline float3 st_gamut_compress(float3 rgb)
+/* Hue-preserving gamut compression: blend out-of-[0,1] channels toward the
+ * pixel's own luma instead of a fixed white point. Mirrors st_gamut_compress()
+ * in 3dcf.c 1:1. */
+static inline float3 st_gamut_compress(float3 rgb, const float luma_coeff[3])
 {
-  const float m = fmin(fmin(rgb.x, rgb.y), rgb.z);
-  if(m >= 0.0f) return rgb;
+  const float luma = luma_coeff[0] * rgb.x + luma_coeff[1] * rgb.y + luma_coeff[2] * rgb.z;
+  const float anchor = (luma > 1e-4f) ? luma : 1.0f;
 
   float t = 0.0f;
-  if(rgb.x < 0.0f) { const float ti = -rgb.x / (1.0f - rgb.x); if(ti > t) t = ti; }
-  if(rgb.y < 0.0f) { const float ti = -rgb.y / (1.0f - rgb.y); if(ti > t) t = ti; }
-  if(rgb.z < 0.0f) { const float ti = -rgb.z / (1.0f - rgb.z); if(ti > t) t = ti; }
-  t = fmin(t, 1.0f);
-
-  return (1.0f - t) * rgb + t * (float3)(1.0f, 1.0f, 1.0f);
+  if(rgb.x < 0.0f)     { const float d = anchor - rgb.x;     const float ti = (d > 1e-6f) ? (-rgb.x) / d : 1.0f; if(ti > t) t = ti; }
+  else if(rgb.x > 1.0f){ const float d = rgb.x - anchor;     const float ti = (d > 1e-6f) ? (rgb.x - 1.0f) / d : 1.0f; if(ti > t) t = ti; }
+  if(rgb.y < 0.0f)     { const float d = anchor - rgb.y;     const float ti = (d > 1e-6f) ? (-rgb.y) / d : 1.0f; if(ti > t) t = ti; }
+  else if(rgb.y > 1.0f){ const float d = rgb.y - anchor;     const float ti = (d > 1e-6f) ? (rgb.y - 1.0f) / d : 1.0f; if(ti > t) t = ti; }
+  if(rgb.z < 0.0f)     { const float d = anchor - rgb.z;     const float ti = (d > 1e-6f) ? (-rgb.z) / d : 1.0f; if(ti > t) t = ti; }
+  else if(rgb.z > 1.0f){ const float d = rgb.z - anchor;     const float ti = (d > 1e-6f) ? (rgb.z - 1.0f) / d : 1.0f; if(ti > t) t = ti; }
+  if(t <= 0.0f) return rgb;
+  const float blend = fmin(t, 1.0f);
+  return (1.0f - blend) * rgb + blend * (float3)(anchor, anchor, anchor);
 }
 
 /* Output gamut protection: convert to target color space, clamp negatives, revert.
@@ -168,6 +173,100 @@ static inline float3 st_output_gamut_protect(float3 rgb, const float fwd[9], con
 }
 
 /* Spectral gamut: film-like chromaticity roll-off in CIE xy, preserving Y */
+
+/* ====================================================================
+ * ACES 2.0-derived per-hue chroma shape (RC1-style static tables)
+ * Mirrors the CPU definitions in 3dcf.c 1:1.
+ * ==================================================================== */
+
+static const float st_gamut_reach[360] =
+{
+   215.33465f,    216.65399f,    217.88428f,    219.05153f,    220.14357f,    221.16588f,
+   222.12170f,    223.01161f,    223.83662f,    224.59834f,    225.29921f,    225.93167f,
+   226.51031f,    227.04002f,    227.52505f,    227.96997f,    228.37961f,    228.75839f,
+   229.10887f,    229.44225f,    223.68723f,    214.16800f,    205.47426f,    197.50737f,
+   190.18221f,    183.42755f,    177.40927f,    171.71423f,    166.01921f,    161.26114f,
+   156.51205f,    152.09988f,    148.09119f,    144.08249f,    140.61681f,    137.19861f,
+   133.96431f,    131.02483f,    128.08536f,    125.48020f,    122.93465f,    120.49192f,
+   118.27464f,    116.05737f,    114.05550f,    112.11517f,    110.23206f,    108.52786f,
+   106.82366f,    105.26328f,    103.76254f,    102.29211f,    100.96827f,     99.64443f,
+    98.41933f,     97.25076f,     96.09600f,     95.06489f,     94.03378f,     93.07201f,
+    92.16363f,     91.25852f,     90.46065f,     89.66278f,     88.91450f,     88.21698f,
+    87.51945f,     86.91000f,     86.30434f,     85.73459f,     85.21377f,     84.69295f,
+    84.24227f,     83.80045f,     83.38480f,     83.01721f,     82.64962f,     82.33952f,
+    82.04231f,     81.76405f,     81.53416f,     81.30428f,     81.12289f,     80.95801f,
+    80.83521f,     80.72168f,     80.65045f,     80.59034f,     80.57131f,     80.56710f,
+    80.60517f,     80.65601f,     80.75144f,     80.85907f,     81.01254f,     81.17904f,
+    81.39567f,     81.62642f,     81.90923f,     82.20887f,     82.55980f,     82.93072f,
+    83.35113f,     83.79470f,     84.29233f,     84.81635f,     85.39422f,     86.00119f,
+    86.66454f,     87.35604f,     88.10696f,     88.88807f,     89.72918f,     90.60318f,
+    91.53980f,     92.51119f,     93.54398f,     94.61283f,     95.74192f,     96.90921f,
+    98.13804f,     99.40525f,    100.73635f,    102.10578f,    103.54021f,    105.01234f,
+   106.55258f,    108.13228f,    109.78187f,    111.47143f,    113.23616f,    115.04231f,
+   116.92601f,    118.85246f,    120.86163f,    122.91274f,    125.04886f,    127.22766f,
+   129.49422f,    131.80248f,    134.20437f,    136.64542f,    139.18477f,    141.75740f,
+   144.42843f,    147.11901f,    149.91091f,    152.71301f,    155.62236f,    158.53839f,
+   161.56854f,    164.59702f,    167.74177f,    170.87844f,    174.13757f,    177.38217f,
+   180.75291f,    184.09992f,    187.58020f,    191.02417f,    194.61319f,    198.14956f,
+   201.86339f,    205.49933f,    209.35075f,    213.10937f,    217.10868f,    220.98853f,
+   225.15117f,    229.14913f,    233.51938f,    237.72111f,    242.30969f,    246.71441f,
+   251.55396f,    256.19424f,    261.32180f,    266.20905f,    271.65866f,    276.83450f,
+   282.62812f,    288.11413f,    294.30017f,    300.15022f,    306.75516f,    313.00060f,
+   320.03412f,    326.65935f,    334.14812f,    341.20554f,    349.15821f,    356.62305f,
+   365.05924f,    373.00500f,    381.98756f,    390.45261f,    400.03007f,    409.09923f,
+   419.36868f,    429.09772f,    440.10982f,    450.60016f,    462.44890f,    473.75378f,
+   486.51340f,    498.72287f,    512.51868f,    525.71943f,    540.63986f,    554.90985f,
+   570.99998f,    586.35636f,    603.68996f,    620.20696f,    638.99757f,    656.90554f,
+   677.15919f,    696.34557f,    718.06863f,    738.60920f,    761.87958f,    783.85566f,
+   808.71603f,    832.03886f,    858.63238f,    883.55051f,    911.94378f,    938.53107f,
+   969.00048f,    997.36899f,   1029.94947f,   1060.28584f,   1094.99923f,   1127.44384f,
+  1164.36269f,   1198.98879f,   1237.19312f,   1273.05128f,   1313.63076f,   1351.65816f,
+  1394.65221f,   1434.90942f,   1479.36892f,   1521.29923f,   1568.31051f,   1611.98419f,
+  1660.62312f,   1705.85267f,   1756.34372f,   1803.03751f,   1855.55009f,   1903.87186f,
+  1958.61575f,   2008.99678f,   2065.34081f,   2116.53174f,   2174.75144f,   2227.24046f,
+  2286.71107f,   2334.72467f,   2382.30107f,   2412.86075f,   2440.19453f,   2454.06478f,
+  2459.10001f,   2451.71571f,   2434.68372f,   2404.68880f,   2367.15629f,   2312.62957f,
+  2255.38400f,   2181.09339f,   2107.34164f,   2016.32946f,   1927.02893f,   1817.55349f,
+  1712.68006f,   1587.07577f,   1470.86887f,   1330.42737f,   1206.14536f,   1053.68427f,
+   932.34317f,    788.29193f,    696.24225f,    611.53390f,    544.99676f,    492.60999f,
+   450.65358f,    416.32756f,    387.83403f,    363.87664f,    343.46013f,    325.87004f,
+   310.59306f,    297.22935f,    285.46049f,    275.03443f,    265.75110f,    257.45036f,
+   250.00035f,    243.29181f,    237.23430f,    231.75173f,    226.77956f,    222.26262f,
+   218.15373f,    214.41231f,    210.99364f,    207.86736f,    204.98974f,    202.32907f,
+   199.85763f,    197.55163f,    195.39062f,    193.35700f,    191.43587f,    189.61455f,
+   187.88248f,    186.23068f,    184.65166f,    183.13911f,    181.68774f,    180.29310f,
+   178.95149f,    177.65981f,    176.41537f,    175.21587f,    174.05930f,    172.94393f,
+   171.86825f,    170.83094f,    169.83086f,    168.86699f,    167.93843f,    167.04441f,
+   166.18422f,    165.35726f,    164.56299f,    163.80093f,    163.07064f,    162.37175f,
+};
+
+static inline float st_reach_from_table(float h)
+{
+  float hw = fmod(h, 360.0f);
+  if(hw < 0.0f) hw += 360.0f;
+  int i0 = (int)hw;
+  int i1 = (i0 + 1) % 360;
+  const float t = hw - (float)i0;
+  return st_gamut_reach[i0] + t * (st_gamut_reach[i1] - st_gamut_reach[i0]);
+}
+
+static inline float st_chroma_norm(float h)
+{
+  const float hr = h * (float)(M_PI / 180.0);
+  const float a = cos(hr);
+  const float b = sin(hr);
+  const float a2 = a * a - b * b;
+  const float b2 = 2.0f * a * b;
+  const float a3 = 4.0f * a * a * a - 3.0f * a;
+  const float b3 = 3.0f * b - 4.0f * b * b * b;
+  const float m = 11.34072f * a + 16.46899f * a2 + 7.88380f * a3
+                + 14.66441f * b - 6.37224f * b2 + 9.19364f * b3
+                + 77.12896f;
+  return m;
+}
+
+#define ST_GAMUT_SHAPE_REF  2.090563f
+
 static inline void st_spectral_gamut(float *x_tm, float *z_tm, const float y_tm,
                                      const float white_x_ratio, const float white_z_ratio,
                                      const float knee, const float steepness,
@@ -229,11 +328,20 @@ static inline void st_spectral_gamut(float *x_tm, float *z_tm, const float y_tm,
     }
   }
 
-  /* Existing knee */
-  if(chroma_sq > knee * knee)
+  /* Existing knee — modulated by hue-dependent shape factor */
+  {
+    const float angle = atan2(dz, dx);
+    float angle_deg = angle * (180.0f / M_PI_F);
+    if(angle_deg < 0.0f) angle_deg += 360.0f;
+    if(angle_deg >= 360.0f) angle_deg -= 360.0f;
+    const float shape = st_reach_from_table(angle_deg) / fmax(st_chroma_norm(angle_deg), 1e-6f);
+    const float shape_norm = fmax(shape / ST_GAMUT_SHAPE_REF, 0.0f);
+    const float knee_mod = knee * sqrt(shape_norm);
+
+  if(chroma_sq > knee_mod * knee_mod)
   {
     const float chroma = sqrt(chroma_sq);
-    const float excess = chroma - knee;
+    const float excess = chroma - knee_mod;
     const float compression = excess / (excess + steepness);
     const float scale = (chroma - compression * excess) / chroma;
 
@@ -247,6 +355,7 @@ static inline void st_spectral_gamut(float *x_tm, float *z_tm, const float y_tm,
       *x_tm = x_new * S_new;
       *z_tm = z_new * S_new;
     }
+  }
   }
 }
 
@@ -379,7 +488,7 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
   }
 
   /* Step 10: gamut compression */
-  rgb = st_gamut_compress(rgb);
+  rgb = st_gamut_compress(rgb, p->luma_coeff);
 
   /* Output gamut protection: clamp to selected primary space */
   if(p->gamut_enable)

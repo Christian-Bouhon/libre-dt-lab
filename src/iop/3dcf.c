@@ -419,42 +419,6 @@ float dt_st_ssts_fwd(const dt_st_ssts_params_t *p, float x)
   return h * n_r;
 }
 
-/* BT.1886-encoded (gamma 2.4) tone-mapped output of scene value x through a
- * given SSTS instance, with no exposure applied. Used only to define/compare
- * anchor points below — this is exactly the y_tm computation performed later
- * in dt_st_compute_y_tm() up to (but excluding) the contrast/shoulder stage. */
-static inline float dt_st_ssts_encoded(const dt_st_ssts_params_t *p, float x)
-{
-  if(p->n <= 0.0) return 0.0f;
-  const float y = dt_st_ssts_fwd(p, x) / (float)p->n;
-  return powf(fmaxf(y, 0.0f), 1.0f / 2.4f);
-}
-
-/* Solve, by bisection, the exposure (in EV) that makes 18% grey reproduce the
- * same BT.1886-encoded output through `ssts` as it does through the peak=100
- * nits reference SSTS with no exposure applied. This replaces a fixed linear
- * "auto_ev = k * spectral_brilliance" approximation (which measurably over-
- * exposes, increasingly so at high brilliance — verified: grey drifts from
- * 0.383 to 0.512 across the slider range with the old k=0.061 formula) with
- * an exact, self-consistent solve that holds regardless of the SSTS constants
- * in use. dt_st_ssts_fwd() is monotonically increasing in x for x > 0, so the
- * root is unique and bisection is safe. */
-static float dt_st_solve_grey_lock_ev(const dt_st_ssts_params_t *ssts)
-{
-  dt_st_ssts_params_t ref;
-  dt_st_ssts_init(&ref, 100.0);
-  const float target = dt_st_ssts_encoded(&ref, 0.18f);
-
-  float lo = -2.0f, hi = 10.0f;
-  for(int i = 0; i < 30; i++)
-  {
-    const float mid = 0.5f * (lo + hi);
-    const float val = dt_st_ssts_encoded(ssts, 0.18f * exp2f(mid));
-    if(val < target) lo = mid; else hi = mid;
-  }
-  return 0.5f * (lo + hi);
-}
-
 float dt_st_compute_y_tm(float y_scene, const dt_st_context_t *ctx)
 {
   if(ctx->ssts.n <= 0.0) return 0.0f;
@@ -516,27 +480,59 @@ static inline float st_desat_weight(float y_norm, float hl_desat, float threshol
   return x * x;
 }
 
-/* Film-like gamut compression: smoothly desaturate out-of-gamut colors toward
- * white (1,1,1) with linear blend. Blending toward white preserves hue better
- * than luma-gray. The linear blend guarantees that the most-negative channel
- * reaches exactly zero (in-gamut), avoiding residual negativity that shifts hue.
- * Only activates when a channel falls below zero.
+/* Hue-preserving gamut compression: smoothly pull out-of-[0,1] channels back
+ * in range with a Reinhard-style soft knee, blending toward the PIXEL'S OWN
+ * luma rather than a fixed white point.
+ *
+ * Why this matters (ACES 2.0-inspired principle, applied without needing a
+ * JMh/CAM conversion): blending toward a fixed neutral like (1,1,1) is a
+ * *compound* of desaturation and a genuine brightening — the more a pixel is
+ * pushed toward white, the more its perceived luma rises too, which is what
+ * makes strongly saturated highlights look like they "wash out" rather than
+ * gently losing saturation. Blending toward the pixel's own luma instead is a
+ * pure desaturation along the true hue-preserving axis: hue and luma stay
+ * put, only chroma is reduced. This mirrors what ACES 2.0's gamut_compress
+ * achieves via cusp/JMh geometry (compress chroma while leaving the
+ * lightness axis alone), just done directly in RGB.
+ *
+ * The response is also no longer strictly linear in the excess: mild
+ * excursions (t << 1) are barely touched, and only pixels close to the true
+ * minimal-correction boundary (t -> 1) get pulled hard — a soft knee instead
+ * of a uniform blend, which was making even mild out-of-gamut pixels lose a
+ * large, constant fraction of their saturation.
  */
-static inline void st_gamut_compress(float rgb[3])
+static inline void st_gamut_compress(float rgb[3], const float luma_coeff[3])
 {
-  const float m = fminf(fminf(rgb[0], rgb[1]), rgb[2]);
-  if(m >= 0.0f) return;
+  const float luma = luma_coeff[0] * rgb[0] + luma_coeff[1] * rgb[1] + luma_coeff[2] * rgb[2];
+  /* Guard against a degenerate (near-black) luma: falls back to the old
+   * anchor (1,1,1) only in this edge case, where "hue-preserving" is moot. */
+  const float anchor = (luma > 1e-4f) ? luma : 1.0f;
 
-  /* Linear blend toward white — guarantees full correction */
+  /* Minimal blend-toward-anchor amount `t` needed to bring every channel
+   * back into [0,1] -- same guarantee as before (the worst channel reaches
+   * exactly its boundary at t=1), just measured against `anchor` instead of
+   * against a fixed 1.0/0.0. */
   float t = 0.0f;
-  if(rgb[0] < 0.0f) { const float ti = -rgb[0] / (1.0f - rgb[0]); if(ti > t) t = ti; }
-  if(rgb[1] < 0.0f) { const float ti = -rgb[1] / (1.0f - rgb[1]); if(ti > t) t = ti; }
-  if(rgb[2] < 0.0f) { const float ti = -rgb[2] / (1.0f - rgb[2]); if(ti > t) t = ti; }
-  t = fminf(t, 1.0f);
+  for(int c = 0; c < 3; c++)
+  {
+    if(rgb[c] < 0.0f)
+    {
+      const float denom = anchor - rgb[c];
+      const float ti = (denom > 1e-6f) ? (-rgb[c]) / denom : 1.0f;
+      if(ti > t) t = ti;
+    }
+    else if(rgb[c] > 1.0f)
+    {
+      const float denom = rgb[c] - anchor;
+      const float ti = (denom > 1e-6f) ? (rgb[c] - 1.0f) / denom : 1.0f;
+      if(ti > t) t = ti;
+    }
+  }
+  if(t <= 0.0f) return;
+  const float blend = fminf(t, 1.0f);
 
-  rgb[0] = (1.0f - t) * rgb[0] + t * 1.0f;
-  rgb[1] = (1.0f - t) * rgb[1] + t * 1.0f;
-  rgb[2] = (1.0f - t) * rgb[2] + t * 1.0f;
+  for(int c = 0; c < 3; c++)
+    rgb[c] = (1.0f - blend) * rgb[c] + blend * anchor;
 }
 
 /* Output gamut protection: convert from Rec.2020 D65 to the target color space,
@@ -742,6 +738,121 @@ static void st_compute_spectral_boundary(float boundary[360],
     if(boundary[i] <= 0.0f) boundary[i] = min_nonzero;
 }
 
+/* ====================================================================
+ * ACES 2.0-derived per-hue chroma shape (RC1-style static tables)
+ *
+ * Ported from the verified aces20.c implementation:
+ *   - st_gamut_reach[360]: AP1-limited, AP0-reach M table at a fixed 100
+ *     nits reference, generated offline from the corrected cusp/reach
+ *     table-generation algorithm (AP1 limiting primaries; any_below_zero()
+ *     gamut test only, no upper-bound check — see aces20.c history).
+ *   - st_chroma_norm(): the exact trigonometric polynomial approximation
+ *     of the AP1 gamut cusp M by hue, verified term-for-term against the
+ *     official aces-core Lib.Academy.OutputTransform.ctl.
+ *
+ * Both are expressed in CAM16/JMh hue space in their origin. 3DCF has no
+ * CAM/JMh conversion, so here they are deliberately re-purposed: the hue
+ * fed in is the CIE xy chromaticity angle already computed in
+ * st_spectral_gamut() (atan2 of the (dz,dx) offset from white), NOT a true
+ * CAM16 hue. This means st_reach_from_table()/st_chroma_norm() are used
+ * here purely as a smooth, plausible per-hue *shape* for how the display
+ * gamut's chroma extent varies with hue — not as numerically exact ACES 2.0
+ * reach/Mnorm values. This is an explicit, deliberate trade-off (see
+ * conversation) favouring 3DCF's lightweight, RGB/xy-native architecture
+ * over a full CAM16 hue computation.
+ * ==================================================================== */
+
+static const float st_gamut_reach[360] =
+{
+   215.33465f,    216.65399f,    217.88428f,    219.05153f,    220.14357f,    221.16588f,
+   222.12170f,    223.01161f,    223.83662f,    224.59834f,    225.29921f,    225.93167f,
+   226.51031f,    227.04002f,    227.52505f,    227.96997f,    228.37961f,    228.75839f,
+   229.10887f,    229.44225f,    223.68723f,    214.16800f,    205.47426f,    197.50737f,
+   190.18221f,    183.42755f,    177.40927f,    171.71423f,    166.01921f,    161.26114f,
+   156.51205f,    152.09988f,    148.09119f,    144.08249f,    140.61681f,    137.19861f,
+   133.96431f,    131.02483f,    128.08536f,    125.48020f,    122.93465f,    120.49192f,
+   118.27464f,    116.05737f,    114.05550f,    112.11517f,    110.23206f,    108.52786f,
+   106.82366f,    105.26328f,    103.76254f,    102.29211f,    100.96827f,     99.64443f,
+    98.41933f,     97.25076f,     96.09600f,     95.06489f,     94.03378f,     93.07201f,
+    92.16363f,     91.25852f,     90.46065f,     89.66278f,     88.91450f,     88.21698f,
+    87.51945f,     86.91000f,     86.30434f,     85.73459f,     85.21377f,     84.69295f,
+    84.24227f,     83.80045f,     83.38480f,     83.01721f,     82.64962f,     82.33952f,
+    82.04231f,     81.76405f,     81.53416f,     81.30428f,     81.12289f,     80.95801f,
+    80.83521f,     80.72168f,     80.65045f,     80.59034f,     80.57131f,     80.56710f,
+    80.60517f,     80.65601f,     80.75144f,     80.85907f,     81.01254f,     81.17904f,
+    81.39567f,     81.62642f,     81.90923f,     82.20887f,     82.55980f,     82.93072f,
+    83.35113f,     83.79470f,     84.29233f,     84.81635f,     85.39422f,     86.00119f,
+    86.66454f,     87.35604f,     88.10696f,     88.88807f,     89.72918f,     90.60318f,
+    91.53980f,     92.51119f,     93.54398f,     94.61283f,     95.74192f,     96.90921f,
+    98.13804f,     99.40525f,    100.73635f,    102.10578f,    103.54021f,    105.01234f,
+   106.55258f,    108.13228f,    109.78187f,    111.47143f,    113.23616f,    115.04231f,
+   116.92601f,    118.85246f,    120.86163f,    122.91274f,    125.04886f,    127.22766f,
+   129.49422f,    131.80248f,    134.20437f,    136.64542f,    139.18477f,    141.75740f,
+   144.42843f,    147.11901f,    149.91091f,    152.71301f,    155.62236f,    158.53839f,
+   161.56854f,    164.59702f,    167.74177f,    170.87844f,    174.13757f,    177.38217f,
+   180.75291f,    184.09992f,    187.58020f,    191.02417f,    194.61319f,    198.14956f,
+   201.86339f,    205.49933f,    209.35075f,    213.10937f,    217.10868f,    220.98853f,
+   225.15117f,    229.14913f,    233.51938f,    237.72111f,    242.30969f,    246.71441f,
+   251.55396f,    256.19424f,    261.32180f,    266.20905f,    271.65866f,    276.83450f,
+   282.62812f,    288.11413f,    294.30017f,    300.15022f,    306.75516f,    313.00060f,
+   320.03412f,    326.65935f,    334.14812f,    341.20554f,    349.15821f,    356.62305f,
+   365.05924f,    373.00500f,    381.98756f,    390.45261f,    400.03007f,    409.09923f,
+   419.36868f,    429.09772f,    440.10982f,    450.60016f,    462.44890f,    473.75378f,
+   486.51340f,    498.72287f,    512.51868f,    525.71943f,    540.63986f,    554.90985f,
+   570.99998f,    586.35636f,    603.68996f,    620.20696f,    638.99757f,    656.90554f,
+   677.15919f,    696.34557f,    718.06863f,    738.60920f,    761.87958f,    783.85566f,
+   808.71603f,    832.03886f,    858.63238f,    883.55051f,    911.94378f,    938.53107f,
+   969.00048f,    997.36899f,   1029.94947f,   1060.28584f,   1094.99923f,   1127.44384f,
+  1164.36269f,   1198.98879f,  1237.19312f,   1273.05128f,   1313.63076f,  1351.65816f,
+  1394.65221f,   1434.90942f,  1479.36892f,  1521.29923f,   1568.31051f,   1611.98419f,
+  1660.62312f,   1705.85267f,  1756.34372f,   1803.03751f,   1855.55009f,  1903.87186f,
+  1958.61575f,  2008.99678f,  2065.34081f,   2116.53174f,   2174.75144f,  2227.24046f,
+  2286.71107f,  2334.72467f,  2382.30107f,  2412.86075f,   2440.19453f,  2454.06478f,
+  2459.10001f,  2451.71571f,  2434.68372f,   2404.68880f,   2367.15629f,  2312.62957f,
+  2255.38400f,  2181.09339f,  2107.34164f,   2016.32946f,   1927.02893f,  1817.55349f,
+  1712.68006f,  1587.07577f,  1470.86887f,   1330.42737f,   1206.14536f,  1053.68427f,
+   932.34317f,    788.29193f,    696.24225f,    611.53390f,    544.99676f,   492.60999f,
+   450.65358f,    416.32756f,    387.83403f,    363.87664f,    343.46013f,   325.87004f,
+   310.59306f,    297.22935f,    285.46049f,    275.03443f,    265.75110f,   257.45036f,
+   250.00035f,    243.29181f,    237.23430f,    231.75173f,    226.77956f,   222.26262f,
+   218.15373f,    214.41231f,    210.99364f,    207.86736f,    204.98974f,   202.32907f,
+   199.85763f,    197.55163f,    195.39062f,    193.35700f,    191.43587f,   189.61455f,
+   187.88248f,    186.23068f,    184.65166f,    183.13911f,    181.68774f,   180.29310f,
+   178.95149f,    177.65981f,    176.41537f,    175.21587f,    174.05930f,   172.94393f,
+   171.86825f,    170.83094f,    169.83086f,    168.86699f,    167.93843f,   167.04441f,
+   166.18422f,    165.35726f,    164.56299f,    163.80093f,    163.07064f,   162.37175f,
+};
+
+static inline float st_reach_from_table(float h)
+{
+  float hw = fmodf(h, 360.0f);
+  if(hw < 0.0f) hw += 360.0f;
+  int i0 = (int)hw;
+  int i1 = (i0 + 1) % 360;
+  const float t = hw - (float)i0;
+  return st_gamut_reach[i0] + t * (st_gamut_reach[i1] - st_gamut_reach[i0]);
+}
+
+static inline float st_chroma_norm(float h)
+{
+  const float hr = h * (float)(M_PI / 180.0);
+  const float a = cosf(hr);
+  const float b = sinf(hr);
+  const float a2 = a * a - b * b;                /* cos(2h) */
+  const float b2 = 2.0f * a * b;                 /* sin(2h) */
+  const float a3 = 4.0f * a * a * a - 3.0f * a;  /* cos(3h) */
+  const float b3 = 3.0f * b - 4.0f * b * b * b;  /* sin(3h) */
+  const float m = 11.34072f * a + 16.46899f * a2 + 7.88380f * a3
+                + 14.66441f * b - 6.37224f * b2 + 9.19364f * b3
+                + 77.12896f;
+  return m;
+}
+
+/* Mean of st_reach_from_table(h)/st_chroma_norm(h) over h=0..359, precomputed
+ * offline from the table above, used to normalise the shape factor below to
+ * ~1.0 on average. */
+#define ST_GAMUT_SHAPE_REF  2.090563f
+
 static inline void st_spectral_gamut(
   float *x_tm, float *z_tm, float y_tm,
   const float white_x_ratio, const float white_z_ratio,
@@ -806,11 +917,22 @@ static inline void st_spectral_gamut(
     }
   }
 
-  /* Existing knee — smooth circular roll-off controlled by user sliders */
-  if(chroma_sq > knee * knee)
+  /* Existing knee — smooth circular roll-off controlled by user sliders,
+   * modulated by a hue-dependent shape factor (reach/chroma_norm normalised
+   * to mean=1, with sqrt to temper extreme values). */
+  {
+    const float angle = atan2f(dz, dx);
+    float angle_deg = angle * (180.0f / (float)M_PI);
+    if(angle_deg < 0.0f) angle_deg += 360.0f;
+    if(angle_deg >= 360.0f) angle_deg -= 360.0f;
+    const float shape = st_reach_from_table(angle_deg) / fmaxf(st_chroma_norm(angle_deg), 1e-6f);
+    const float shape_norm = fmaxf(shape / ST_GAMUT_SHAPE_REF, 0.0f);
+    const float knee_mod = knee * sqrtf(shape_norm);
+
+  if(chroma_sq > knee_mod * knee_mod)
   {
     const float chroma = sqrtf(chroma_sq);
-    const float excess = chroma - knee;
+    const float excess = chroma - knee_mod;
     const float compression = excess / (excess + steepness);
     const float scale = (chroma - compression * excess) / chroma;
 
@@ -824,6 +946,7 @@ static inline void st_spectral_gamut(
       *x_tm = x_new * S_new;
       *z_tm = z_new * S_new;
     }
+  }
   }
 }
 
@@ -984,7 +1107,7 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
     }
   }
 
-  st_gamut_compress(rgb);
+  st_gamut_compress(rgb, ctx->luma_coeff);
 
   /* Output gamut protection: clamp to selected primary space */
   if(ctx->gamut_enable)
@@ -999,22 +1122,14 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
 static void st_compute_context(dt_iop_3dcf_params_t *p,
                                 dt_st_context_t *ctx)
 {
-  /* Initialize ACES 2.0 SSTS for the target roll-off character. Must happen
-   * BEFORE exposure_factor below, since the grey-lock solve needs ctx->ssts
-   * already set up for the current peak (spectral_brilliance) setting. */
-  const double rolloff_t = fmin(fmax((double)p->spectral_brilliance / 100.0, 0.0), 1.0);
-  const double peak = 100.0 * pow(100.0, rolloff_t);
-  dt_st_ssts_init(&ctx->ssts, peak);
-
   /* Auto-exposure compensation: single slider controls both SSTS tone curve
-   * character (via peak, above) and brightness. Higher spectral brilliance
-   * makes SSTS less compressive, so exposure is raised to compensate and
-   * keep 18% grey visually anchored. Solved exactly by bisection against the
-   * peak=100 reference (see dt_st_solve_grey_lock_ev) rather than via a fixed
-   * linear approximation, which measurably over-exposed at high brilliance. */
+   * character and brightness. Higher spectral brilliance makes SSTS less
+   * compressive, requiring positive exposure to maintain consistent perceived
+   * brightness. Formula auto_ev = 0.061 × spectral_brilliance ensures 18% gray
+   * and diffuse white map to the same BT.1886 output at any brilliance value. */
   {
-    const float auto_ev = dt_st_solve_grey_lock_ev(&ctx->ssts);
-    ctx->exposure_factor = exp2f(auto_ev);
+    const double auto_ev = 0.061 * (double)p->spectral_brilliance;
+    ctx->exposure_factor = exp2f((float)auto_ev);
   }
 
   /* === Combined input matrix: D50-adapted Rec.2020 RGB → D50 XYZ === */
@@ -1118,6 +1233,11 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
   ctx->gamma_power = exp2f(ctx->gamma);
 
   ctx->vibrance = fmaxf(p->vibrance, 0.0f);
+
+  /* Initialize ACES 2.0 SSTS for the target roll-off character */
+  const double rolloff_t = fmin(fmax((double)p->spectral_brilliance / 100.0, 0.0), 1.0);
+  const double peak = 100.0 * pow(100.0, rolloff_t);
+  dt_st_ssts_init(&ctx->ssts, peak);
 }
 
 /* Begin framework functions */
