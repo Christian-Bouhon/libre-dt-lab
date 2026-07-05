@@ -224,6 +224,8 @@ static const float dt_ac_aces_white_xyz[3] = { 95.2646074570f, 100.0f, 100.88251
 #define DT_AC_GAMUT_FOCUS_DIST_SCALING 1.75f
 #define DT_AC_GAMUT_COMPRESSION_THR    0.75f
 #define DT_AC_GAMUT_TABLE_SIZE         362
+#define DT_AC_TABLE_SIZE                360   /* uniform hue entries (0°..359°) */
+#define DT_AC_BASE_INDEX                  1   /* first valid entry index */
 #define DT_AC_CUSP_CORNER_COUNT         6
 #define DT_AC_TOTAL_CORNER_COUNT        8   /* 6 + 2 wrap-around */
 #define DT_AC_MAX_SORTED_CORNERS       12   /* 2 * 6 */
@@ -1058,39 +1060,14 @@ static inline int _ac_extract_sorted_cube_hues(float sorted_hues[DT_AC_MAX_SORTE
   return idx;
 }
 
-/* ---- Step 5: Build hue table (distribute 362 samples between corners) ---- */
-static inline void _ac_build_hue_table(float hues[DT_AC_GAMUT_TABLE_SIZE],
-    const float sorted_corners[12], int n_corners)
+/* ---- Build uniform hue table (0°..359° + padding) ---- */
+/* Matches CTL build_hue_table — uniform 1° spacing with padding at [0] and [361] */
+static inline void _ac_build_hue_table(float hues[DT_AC_GAMUT_TABLE_SIZE])
 {
-  const int intervals = n_corners;
-  const int samples_per = (DT_AC_GAMUT_TABLE_SIZE - intervals) / intervals;
-  int idx = 0;
-
-  for(int i = 0; i < intervals; i++)
-  {
-    const float h0 = sorted_corners[i];
-    const float h1 = sorted_corners[(i + 1) % intervals];
-    float dh = h1 - h0;
-    if(dh < 0.0f) dh += 360.0f;
-    if(dh <= 0.0f) dh = 360.0f / (float)intervals;
-
-    if(idx < DT_AC_GAMUT_TABLE_SIZE)
-      hues[idx++] = h0;
-
-    const int n = (i < intervals - 1) ? samples_per
-                 : (DT_AC_GAMUT_TABLE_SIZE - 1 - idx);
-    for(int j = 1; j <= n && idx < DT_AC_GAMUT_TABLE_SIZE; j++)
-    {
-      const float t = (float)j / (float)(n + 1);
-      hues[idx++] = _ac_wrap_hue(h0 + t * dh);
-    }
-  }
-
-  while(idx < DT_AC_GAMUT_TABLE_SIZE)
-  {
-    hues[idx] = hues[idx - 1];
-    idx++;
-  }
+  for(int i = 0; i < DT_AC_TABLE_SIZE; i++)
+    hues[DT_AC_BASE_INDEX + i] = (float)i;
+  hues[0] = hues[DT_AC_BASE_INDEX + DT_AC_TABLE_SIZE - 1] - 360.0f;
+  hues[DT_AC_BASE_INDEX + DT_AC_TABLE_SIZE] = hues[DT_AC_BASE_INDEX] + 360.0f;
 }
 
 /* ---- Find display cusp for a given hue (interval + binary search) ---- */
@@ -1163,14 +1140,23 @@ static inline void _ac_build_cusp_table(float cusps[DT_AC_GAMUT_TABLE_SIZE][3],
   const float smooth_factor = 1.0f
     + DT_AC_GAMUT_SMOOTH_M * DT_AC_GAMUT_SMOOTH_CUSPS;
 
-  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE; i++)
+  for(int i = 0; i < DT_AC_TABLE_SIZE; i++)
   {
+    const int idx = DT_AC_BASE_INDEX + i;
     float jm[2];
-    _ac_find_display_cusp_for_hue(jm, hues[i], limit, ctx);
-    cusps[i][0] = jm[0];
-    cusps[i][1] = jm[1] * smooth_factor;
-    cusps[i][2] = hues[i];
+    _ac_find_display_cusp_for_hue(jm, (float)i, limit, ctx);
+    cusps[idx][0] = jm[0];
+    cusps[idx][1] = jm[1] * smooth_factor;
+    cusps[idx][2] = (float)i;
   }
+
+  /* Padding entries for wraparound interpolation */
+  cusps[0][0] = cusps[DT_AC_BASE_INDEX + DT_AC_TABLE_SIZE - 1][0];
+  cusps[0][1] = cusps[DT_AC_BASE_INDEX + DT_AC_TABLE_SIZE - 1][1];
+  cusps[0][2] = hues[0];
+  cusps[DT_AC_BASE_INDEX + DT_AC_TABLE_SIZE][0] = cusps[DT_AC_BASE_INDEX][0];
+  cusps[DT_AC_BASE_INDEX + DT_AC_TABLE_SIZE][1] = cusps[DT_AC_BASE_INDEX][1];
+  cusps[DT_AC_BASE_INDEX + DT_AC_TABLE_SIZE][2] = hues[DT_AC_BASE_INDEX + DT_AC_TABLE_SIZE];
 }
 
 /* ---- Make uniform hue gamut table (orchestrator) ---- */
@@ -1185,29 +1171,24 @@ static inline void _ac_make_uniform_hue_table(float hues[DT_AC_GAMUT_TABLE_SIZE]
   _ac_corner_tables_t reach_tbl;
   _ac_find_reach_corners_table(&reach_tbl, ctx);
 
-  float sorted_hues[DT_AC_MAX_SORTED_CORNERS];
-  const int n_corners = _ac_extract_sorted_cube_hues(sorted_hues,
-      &reach_tbl, &limit_tbl);
-
-  _ac_build_hue_table(hues, sorted_hues, n_corners);
+  /* Build uniform hue table (0°..359° + padding) */
+  _ac_build_hue_table(hues);
 
   _ac_build_cusp_table(cusps, hues, &limit_tbl, ctx);
 }
 
 /* ---- Reach M table (binary search reach M at limit_J_max) ---- */
 static inline void _ac_make_reach_m_table(float reach_m[DT_AC_GAMUT_TABLE_SIZE],
-    const float hues[DT_AC_GAMUT_TABLE_SIZE],
     const dt_ac_context_t *ctx)
 {
-  /* Build XYZ→reach_primaries matrix */
   float xyz_to_reach[9];
   float prim_to_xyz[9];
   _ac_get_rgb_to_xyz(prim_to_xyz, 2);
   _mat_inv_3x3(xyz_to_reach, prim_to_xyz);
 
-  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE; i++)
+  for(int i = 0; i < DT_AC_TABLE_SIZE; i++)
   {
-    const float h = hues[i];
+    const float h = (float)i;
     const float hr = h * (float)(M_PI / 180.0);
     float best_m = 0.0f;
     float lo_m = 0.0f, hi_m = 500.0f;
@@ -1216,7 +1197,6 @@ static inline void _ac_make_reach_m_table(float reach_m[DT_AC_GAMUT_TABLE_SIZE],
     {
       const float mid_m = 0.5f * (lo_m + hi_m);
 
-      /* JMh → XYZ (nits) */
       const float A = ctx->a_w * powf(fmaxf(ctx->limit_j_max / 100.0f, 1e-12f), ctx->inv_cz);
       const float gamma_v = mid_m / DT_AC_M_SCALE;
       const float a_op = gamma_v * cosf(hr);
@@ -1229,17 +1209,9 @@ static inline void _ac_make_reach_m_table(float reach_m[DT_AC_GAMUT_TABLE_SIZE],
       for(int c = 0; c < 3; c++)
         rgb_c[c] /= fmaxf(ctx->d_rgb[c], 1e-12f);
       _mat_apply(xyz, dt_ac_m16_inv, rgb_c);
-      /* xyz is in absolute nits (same convention as dt_ac_pipeline_eval);
-       * reach primaries matrix expects normalised XYZ (Y=1 for white) —
-       * same /DT_AC_REF_LUM normalisation as pipeline_eval Step 8. */
       for(int c = 0; c < 3; c++) xyz[c] /= DT_AC_REF_LUM;
-      /* XYZ to reach primaries */
       _mat_apply(rgb_reach, xyz_to_reach, xyz);
 
-      /* Reach gamut test — matches official any_below_zero(): only negative
-       * components disqualify a point. There is NO upper-bound (>1) check:
-       * exceeding code-value 1 just means "brighter than reference white",
-       * which is expected (J can exceed 100) and is not a gamut violation. */
       int in_gamut = 1;
       for(int c = 0; c < 3; c++)
         if(rgb_reach[c] < -0.001f)
@@ -1255,27 +1227,23 @@ static inline void _ac_make_reach_m_table(float reach_m[DT_AC_GAMUT_TABLE_SIZE],
         hi_m = mid_m;
       }
     }
-    reach_m[i] = best_m;
+    reach_m[DT_AC_BASE_INDEX + i] = best_m;
   }
+
+  /* Padding entries for wraparound interpolation */
+  reach_m[0] = reach_m[DT_AC_BASE_INDEX + DT_AC_TABLE_SIZE - 1];
+  reach_m[DT_AC_BASE_INDEX + DT_AC_TABLE_SIZE] = reach_m[DT_AC_BASE_INDEX];
 }
 
-/* ---- Determine hue linearity search range ---- */
+/* ---- Determine hue linearity search range (uniform table => tight range) ---- */
+/* Matches CTL hue_linearity_search_range — with uniform 1° spacing the range
+ * is always [1, 2] */
 static inline void _ac_determine_search_range(int range[2],
     const float hues[DT_AC_GAMUT_TABLE_SIZE])
 {
-  float min_delta = 360.0f;
-  float max_delta = 0.0f;
-  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
-  {
-    float dh = hues[i + 1] - hues[i];
-    if(dh < 0.0f) dh += 360.0f;
-    if(dh < min_delta) min_delta = dh;
-    if(dh > max_delta) max_delta = dh;
-  }
-  range[0] = (int)(min_delta * 0.9f);
-  range[1] = (int)(max_delta * 1.1f) + 1;
-  if(range[0] < 1) range[0] = 1;
-  if(range[1] > 360) range[1] = 360;
+  (void)hues;
+  range[0] = 1;
+  range[1] = 2;
 }
 
 /* ====================================================================
@@ -1288,102 +1256,47 @@ static inline void _ac_determine_search_range(int range[2],
  * These operate on a single pixel in JMh space.
  * ==================================================================== */
 
-/* ---- Reach M from table (bilinear lookup) ---- */
+/* ---- Reach M from table (direct O(1) lookup, uniform 1° table) ---- */
 static inline float _ac_reach_m_from_table(float h,
     const float reach_m[DT_AC_GAMUT_TABLE_SIZE],
     const float hues[DT_AC_GAMUT_TABLE_SIZE])
 {
+  (void)hues;
   const float hw = _ac_wrap_hue(h);
-  int lo = 0, hi = 1;
-  bool found = false;
-  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
-  {
-    if(hw >= hues[i] && hw < hues[i + 1])
-    {
-      lo = i;
-      hi = i + 1;
-      found = true;
-      break;
-    }
-  }
-  if(!found)
-  {
-    if(hw < hues[0] || hw >= hues[DT_AC_GAMUT_TABLE_SIZE - 1])
-    {
-      lo = DT_AC_GAMUT_TABLE_SIZE - 1;
-      hi = 0;
-    }
-  }
-  float dh = hues[hi] - hues[lo];
-  if(dh < 0.0f) dh += 360.0f;
-  const float t = (dh > 0.0f) ? _ac_wrap_hue(hw - hues[lo]) / dh : 0.0f;
+  const int base = (int)hw;
+  const int lo = DT_AC_BASE_INDEX + base;
+  const int hi = lo + 1;
+  const float t = hw - (float)base;
   return reach_m[lo] + t * (reach_m[hi] - reach_m[lo]);
 }
 
-/* ---- Cusp from table (binary search) ---- */
+/* ---- Cusp from table (direct O(1) lookup, uniform 1° table) ---- */
 static inline void _ac_cusp_from_table(float cusp_out[2], float h,
     const float cusps[DT_AC_GAMUT_TABLE_SIZE][3],
     const float hues[DT_AC_GAMUT_TABLE_SIZE])
 {
+  (void)hues;
   const float hw = _ac_wrap_hue(h);
-  int lo = 0, hi = 1;
-  bool found = false;
-
-  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
-  {
-    if(hw >= hues[i] && hw < hues[i + 1])
-    {
-      lo = i;
-      hi = i + 1;
-      found = true;
-      break;
-    }
-  }
-  if(!found)
-  {
-    if(hw < hues[0] || hw >= hues[DT_AC_GAMUT_TABLE_SIZE - 1])
-    {
-      lo = DT_AC_GAMUT_TABLE_SIZE - 1;
-      hi = 0;
-    }
-  }
-  float dh = hues[hi] - hues[lo];
-  if(dh < 0.0f) dh += 360.0f;
-  const float t = (dh > 0.0f) ? _ac_wrap_hue(hw - hues[lo]) / dh : 0.0f;
+  const int base = (int)hw;
+  const int lo = DT_AC_BASE_INDEX + base;
+  const int hi = lo + 1;
+  const float t = hw - (float)base;
 
   cusp_out[0] = cusps[lo][0] + t * (cusps[hi][0] - cusps[lo][0]);
   cusp_out[1] = cusps[lo][1] + t * (cusps[hi][1] - cusps[lo][1]);
 }
 
-/* ---- Upper hull gamma from table (bilinear lookup) ---- */
+/* ---- Upper hull gamma from table (direct O(1) lookup, uniform 1° table) ---- */
 static inline float _ac_hue_upper_hull_gamma(float h,
     const float gamma_table[DT_AC_GAMUT_TABLE_SIZE],
     const float hues[DT_AC_GAMUT_TABLE_SIZE])
 {
+  (void)hues;
   const float hw = _ac_wrap_hue(h);
-  int lo = 0, hi = 1;
-  bool found = false;
-  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
-  {
-    if(hw >= hues[i] && hw < hues[i + 1])
-    {
-      lo = i;
-      hi = i + 1;
-      found = true;
-      break;
-    }
-  }
-  if(!found)
-  {
-    if(hw < hues[0] || hw >= hues[DT_AC_GAMUT_TABLE_SIZE - 1])
-    {
-      lo = DT_AC_GAMUT_TABLE_SIZE - 1;
-      hi = 0;
-    }
-  }
-  float dh = hues[hi] - hues[lo];
-  if(dh < 0.0f) dh += 360.0f;
-  const float t = (dh > 0.0f) ? _ac_wrap_hue(hw - hues[lo]) / dh : 0.0f;
+  const int base = (int)hw;
+  const int lo = DT_AC_BASE_INDEX + base;
+  const int hi = lo + 1;
+  const float t = hw - (float)base;
   return gamma_table[lo] + t * (gamma_table[hi] - gamma_table[lo]);
 }
 
@@ -1613,15 +1526,16 @@ static inline void _ac_make_upper_hull_gamma_table(
   const float gamma_search_step = 0.4f;
   const float gamma_accuracy = 1e-5f;
 
-  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE; i++)
+  for(int i = 0; i < DT_AC_TABLE_SIZE; i++)
   {
-    const float cusp_j = cusps[i][0];
-    const float cusp_m = cusps[i][1];
-    const float hue = cusps[i][2];
+    const int idx = DT_AC_BASE_INDEX + i;
+    const float cusp_j = cusps[idx][0];
+    const float cusp_m = cusps[idx][1];
+    const float hue = cusps[idx][2];
 
     if(cusp_m <= 0.0f || cusp_j <= 0.0f)
     {
-      gamma_table[i] = 0.0f;
+      gamma_table[idx] = 0.0f;
       continue;
     }
 
@@ -1656,8 +1570,12 @@ static inline void _ac_make_upper_hull_gamma_table(
         lo = mid;
     }
 
-    gamma_table[i] = 1.0f / hi;
+    gamma_table[idx] = 1.0f / hi;
   }
+
+  /* Padding entries for wraparound interpolation */
+  gamma_table[0] = gamma_table[DT_AC_BASE_INDEX + DT_AC_TABLE_SIZE - 1];
+  gamma_table[DT_AC_BASE_INDEX + DT_AC_TABLE_SIZE] = gamma_table[DT_AC_BASE_INDEX];
 }
 
 /* ---- Remap M (adaptive Reinhard, reference match) ---- */
@@ -1972,7 +1890,7 @@ static void dt_ac_compute_context(const dt_iop_aces20_params_t *p,
     _ac_make_uniform_hue_table(ctx->table_hues, ctx->table_gamut_cusps, 1, peak_scale, ctx);
 
     /* Reach M table at limit_J_max */
-    _ac_make_reach_m_table(ctx->table_reach_m, ctx->table_hues, ctx);
+    _ac_make_reach_m_table(ctx->table_reach_m, ctx);
 
     /* Upper hull gamma table */
     _ac_make_upper_hull_gamma_table(ctx->table_upper_hull_gamma,

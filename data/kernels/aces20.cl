@@ -97,6 +97,8 @@ __constant float dt_ac_panlrcm[9] =
 #define DT_AC_GAMUT_FOCUS_DIST_SCALING 1.75f
 #define DT_AC_GAMUT_COMPRESSION_THR    0.75f
 #define DT_AC_GAMUT_TABLE_SIZE         362
+#define DT_AC_TABLE_SIZE                360
+#define DT_AC_BASE_INDEX                  1
 
 /* ====================================================================
  * CL Params Struct
@@ -393,19 +395,10 @@ static inline float reach_m_from_table(float h,
     __constant const dt_ac_cl_params_t * restrict p)
 {
   const float hw = wrap_hue(h);
-  int lo = 0, hi = 1;
-  int found = 0;
-  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
-  {
-    if(hw >= p->table_hues[i] && hw < p->table_hues[i + 1])
-    { lo = i; hi = i + 1; found = 1; break; }
-  }
-  if(!found)
-    if(hw < p->table_hues[0] || hw >= p->table_hues[DT_AC_GAMUT_TABLE_SIZE - 1])
-    { lo = DT_AC_GAMUT_TABLE_SIZE - 1; hi = 0; }
-  float dh = p->table_hues[hi] - p->table_hues[lo];
-  if(dh < 0.0f) dh += 360.0f;
-  const float t = (dh > 0.0f) ? wrap_hue(hw - p->table_hues[lo]) / dh : 0.0f;
+  const int base = (int)hw;
+  const int lo = DT_AC_BASE_INDEX + base;
+  const int hi = lo + 1;
+  const float t = hw - (float)base;
   return p->table_reach_m[lo] + t * (p->table_reach_m[hi] - p->table_reach_m[lo]);
 }
 
@@ -413,19 +406,10 @@ static inline void cusp_from_table(__private float cusp_out[2], float h,
     __constant const dt_ac_cl_params_t * restrict p)
 {
   const float hw = wrap_hue(h);
-  int lo = 0, hi = 1;
-  int found = 0;
-  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
-  {
-    if(hw >= p->table_hues[i] && hw < p->table_hues[i + 1])
-    { lo = i; hi = i + 1; found = 1; break; }
-  }
-  if(!found)
-    if(hw < p->table_hues[0] || hw >= p->table_hues[DT_AC_GAMUT_TABLE_SIZE - 1])
-    { lo = DT_AC_GAMUT_TABLE_SIZE - 1; hi = 0; }
-  float dh = p->table_hues[hi] - p->table_hues[lo];
-  if(dh < 0.0f) dh += 360.0f;
-  const float t = (dh > 0.0f) ? wrap_hue(hw - p->table_hues[lo]) / dh : 0.0f;
+  const int base = (int)hw;
+  const int lo = DT_AC_BASE_INDEX + base;
+  const int hi = lo + 1;
+  const float t = hw - (float)base;
   cusp_out[0] = p->table_cusp_j[lo] + t * (p->table_cusp_j[hi] - p->table_cusp_j[lo]);
   cusp_out[1] = p->table_cusp_m[lo] + t * (p->table_cusp_m[hi] - p->table_cusp_m[lo]);
 }
@@ -434,19 +418,10 @@ static inline float hue_upper_hull_gamma(float h,
     __constant const dt_ac_cl_params_t * restrict p)
 {
   const float hw = wrap_hue(h);
-  int lo = 0, hi = 1;
-  int found = 0;
-  for(int i = 0; i < DT_AC_GAMUT_TABLE_SIZE - 1; i++)
-  {
-    if(hw >= p->table_hues[i] && hw < p->table_hues[i + 1])
-    { lo = i; hi = i + 1; found = 1; break; }
-  }
-  if(!found)
-    if(hw < p->table_hues[0] || hw >= p->table_hues[DT_AC_GAMUT_TABLE_SIZE - 1])
-    { lo = DT_AC_GAMUT_TABLE_SIZE - 1; hi = 0; }
-  float dh = p->table_hues[hi] - p->table_hues[lo];
-  if(dh < 0.0f) dh += 360.0f;
-  const float t = (dh > 0.0f) ? wrap_hue(hw - p->table_hues[lo]) / dh : 0.0f;
+  const int base = (int)hw;
+  const int lo = DT_AC_BASE_INDEX + base;
+  const int hi = lo + 1;
+  const float t = hw - (float)base;
   return p->table_upper_hull_gamma[lo] + t * (p->table_upper_hull_gamma[hi] - p->table_upper_hull_gamma[lo]);
 }
 
