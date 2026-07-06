@@ -142,8 +142,8 @@ typedef struct
   float table_upper_hull_gamma[DT_AC_GAMUT_TABLE_SIZE];
   int   hue_search_min;
   int   hue_search_max;
-  int   sdr_output_clip;          /* repurposed from _pad[2] — same struct size */
-  int   _pad;
+  int   sdr_clip_enable;          /* soft ceiling enable */
+  float sdr_clip_softness;       /* smooth transition width */
 } dt_ac_cl_params_t;
 
 /* ====================================================================
@@ -694,11 +694,11 @@ static inline void pipeline_eval(__private const float rgb_in[3],
   for(int c = 0; c < 3; c++)
     rgb_out[c] = max(rgb[c], 0.0f);
 
-  /* Optional Step 11 (NOT part of the official reference): clip to display
-   * white (code-value 1.0). Off by default — see aces20.c for rationale. */
-  if(p->sdr_output_clip)
+  /* Optional Step 11 (NOT part of the official reference): soft clip to
+   * display white (code-value 1.0). Off by default — see aces20.c. */
+  if(p->sdr_clip_enable)
     for(int c = 0; c < 3; c++)
-      rgb_out[c] = min(rgb_out[c], 1.0f);
+      rgb_out[c] = smin(rgb_out[c], 1.0f, p->sdr_clip_softness);
 }
 
 /* ====================================================================
