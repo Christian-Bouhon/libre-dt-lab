@@ -1226,7 +1226,8 @@ gboolean dt_is_scene_referred(void)
     || dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (sigmoid)")
     || dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (AgX)")
     || dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (basecurve)")
-    || dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (3DCF)");
+    || dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (3DCF)")
+    || dt_conf_is_equal("plugins/darkroom/workflow", "scene-referred (ACES 2.0)");
 }
 
 gboolean dt_is_display_referred(void)

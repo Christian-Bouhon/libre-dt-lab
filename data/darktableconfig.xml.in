@@ -3910,6 +3910,7 @@
         <option>scene-referred (AgX)</option>
         <option>scene-referred (3DCF)</option>
         <option>scene-referred (basecurve)</option>
+        <option>scene-referred (ACES 2.0)</option>
         <option>display-referred (legacy)</option>
         <option>none</option>
       </enum>

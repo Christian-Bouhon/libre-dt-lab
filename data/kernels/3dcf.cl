@@ -179,7 +179,7 @@ static inline float3 st_output_gamut_protect(float3 rgb, const float fwd[9], con
  * Mirrors the CPU definitions in 3dcf.c 1:1.
  * ==================================================================== */
 
-static __constant const float st_gamut_reach[360] =
+__constant float st_gamut_reach[360] =
 {
    215.33465f,    216.65399f,    217.88428f,    219.05153f,    220.14357f,    221.16588f,
    222.12170f,    223.01161f,    223.83662f,    224.59834f,    225.29921f,    225.93167f,
@@ -242,6 +242,7 @@ static __constant const float st_gamut_reach[360] =
 
 static inline float st_reach_from_table(float h)
 {
+  if(!isfinite(h)) return 0.0f;
   float hw = fmod(h, 360.0f);
   if(hw < 0.0f) hw += 360.0f;
   int i0 = (int)hw;
@@ -252,7 +253,7 @@ static inline float st_reach_from_table(float h)
 
 static inline float st_chroma_norm(float h)
 {
-  const float hr = h * (float)(M_PI / 180.0);
+  const float hr = h * (M_PI_F / 180.0f);
   const float a = cos(hr);
   const float b = sin(hr);
   const float a2 = a * a - b * b;
@@ -456,9 +457,8 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
         }
       }
 
-      /* Blend toward white with sigmoidal curve — film-like */
-      const float t = fmin(w_final, 1.0f);
-      const float ts = (t * t) / (t * t + (1.0f - t) * (1.0f - t) + 1e-6f);
+      /* Blend toward white with linear ramp */
+      const float ts = fmin(w_final, 1.0f);
       if(isfinite(ts))
         rgb = rgb * (1.0f - ts) + (float3)(1.0f, 1.0f, 1.0f) * ts;
     }

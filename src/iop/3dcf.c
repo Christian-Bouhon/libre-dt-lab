@@ -71,7 +71,7 @@
 #include <stdio.h>
 #include <string.h>
 
-DT_MODULE_INTROSPECTION(6, dt_iop_3dcf_params_t)
+DT_MODULE_INTROSPECTION(7, dt_iop_3dcf_params_t)
 
 /* Type definitions for the ACES 2.0 SSTS pipeline context.
  * spectral_tone_data.c and spectral_tone_pipeline.c have been merged into 3dcf.c
@@ -110,12 +110,12 @@ typedef enum dt_iop_st_look_t
 typedef struct dt_iop_3dcf_params_t
 {
   float contrast;              // $MIN: 0.25 $MAX: 4.25 $DEFAULT: 2.25 $DESCRIPTION: "contrast"
-  float gray_point;            // $MIN: -1 $MAX: 1 $DEFAULT: 0 $DESCRIPTION: "gamma"
+  float gamma;                 // $MIN: -1 $MAX: 1 $DEFAULT: 0 $DESCRIPTION: "gamma"
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
   float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "perceptual brightness"
   float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "Abney rotation"
-  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.70 $DESCRIPTION: "highlight roll-off"
-  float hl_desat_threshold;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.55 $DESCRIPTION: "desaturation threshold"
+  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.25 $DESCRIPTION: "highlight roll-off"
+  float hl_desat_threshold;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.50 $DESCRIPTION: "desaturation threshold"
   float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.20 $DESCRIPTION: "gamut knee"
   float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "gamut steepness"
   dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "color space"
@@ -825,6 +825,7 @@ static const float st_gamut_reach[360] =
 
 static inline float st_reach_from_table(float h)
 {
+  if(!isfinite(h)) return 0.0f;
   float hw = fmodf(h, 360.0f);
   if(hw < 0.0f) hw += 360.0f;
   int i0 = (int)hw;
@@ -1073,9 +1074,8 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
         }
       }
 
-      /* Blend toward white with sigmoidal curve — film-like */
-      const float t = fminf(w_final, 1.0f);
-      const float ts = (t * t) / (t * t + (1.0f - t) * (1.0f - t) + 1e-6f);
+      /* Blend toward white with linear ramp */
+      const float ts = fminf(w_final, 1.0f);
       if(isfinite(ts))
       {
         rgb[0] = rgb[0] * (1.0f - ts) + 1.0f * ts;
@@ -1196,7 +1196,8 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
 
   /* Output gamut protection matrices from pre-computed lookup table */
   {
-    const int cs = p->output_cs;
+    const int cs = (p->output_cs >= DT_ST_CS_REC709 && p->output_cs <= DT_ST_CS_ADOBERGB)
+                     ? (int)p->output_cs : (int)DT_ST_CS_REC2020;
     for(int i = 0; i < 9; i++)
     {
       ctx->gamut_fwd[i] = st_gamut_fwd[cs][i];
@@ -1234,7 +1235,7 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
                                 ctx->white_chroma_z);
 
   /* Mid-tone gamma adjustment - Inversion pour que 'droite' éclaircisse (Gamma < 1.0) */
-  ctx->gamma = -fmaxf(fminf(p->gray_point, 1.0f), -1.0f);
+  ctx->gamma = -fmaxf(fminf(p->gamma, 1.0f), -1.0f);
   ctx->gamma_power = exp2f(ctx->gamma);
 
   ctx->vibrance = fmaxf(p->vibrance, 0.0f);
@@ -1278,7 +1279,7 @@ int legacy_params(dt_iop_module_t *self,
     dt_iop_3dcf_params_t *new_p = malloc(sizeof(dt_iop_3dcf_params_t));
 
     new_p->contrast            = old->contrast;
-    new_p->gray_point          = old->gray_point;
+    new_p->gamma               = old->gray_point;
     new_p->vibrance            = old->vibrance;
     new_p->spectral_brilliance = old->spectral_brilliance;
     new_p->hl_hue_shift        = old->hl_hue_shift;
@@ -1297,7 +1298,7 @@ int legacy_params(dt_iop_module_t *self,
 
     *new_params = new_p;
     *new_params_size = sizeof(dt_iop_3dcf_params_t);
-    *new_version = 6;
+    *new_version = 7;
     return 0;
   }
 
@@ -1328,7 +1329,7 @@ int legacy_params(dt_iop_module_t *self,
     dt_iop_3dcf_params_t *new_p = malloc(sizeof(dt_iop_3dcf_params_t));
 
     new_p->contrast            = old->contrast;
-    new_p->gray_point          = old->gray_point;
+    new_p->gamma               = old->gray_point;
     new_p->vibrance            = old->vibrance;
     new_p->spectral_brilliance = old->spectral_brilliance;
     new_p->hl_hue_shift        = old->hl_hue_shift;
@@ -1347,7 +1348,58 @@ int legacy_params(dt_iop_module_t *self,
 
     *new_params = new_p;
     *new_params_size = sizeof(dt_iop_3dcf_params_t);
-    *new_version = 6;
+    *new_version = 7;
+    return 0;
+  }
+
+  // v6 → v7: renamed gray_point → gamma field
+  if(old_version == 6)
+  {
+    typedef struct
+    {
+      float contrast;
+      float gray_point;
+      float vibrance;
+      float spectral_brilliance;
+      float hl_hue_shift;
+      float hl_desaturation;
+      float hl_desat_threshold;
+      float gamut_knee;
+      float gamut_steepness;
+      dt_iop_st_colorspace_t output_cs;
+      dt_iop_st_look_t color_look;
+      float look_opacity;
+      float contrast_pivot;
+      float toe_power;
+      float shoulder_power;
+      float hl_detail_recovery;
+      float hl_exposure;
+    } dt_iop_3dcf_params_v6_t;
+
+    const dt_iop_3dcf_params_v6_t *old = old_params;
+    dt_iop_3dcf_params_t *new_p = malloc(sizeof(dt_iop_3dcf_params_t));
+
+    new_p->contrast            = old->contrast;
+    new_p->gamma               = old->gray_point;
+    new_p->vibrance            = old->vibrance;
+    new_p->spectral_brilliance = old->spectral_brilliance;
+    new_p->hl_hue_shift        = old->hl_hue_shift;
+    new_p->hl_desaturation     = old->hl_desaturation;
+    new_p->hl_desat_threshold  = old->hl_desat_threshold;
+    new_p->gamut_knee          = old->gamut_knee;
+    new_p->gamut_steepness     = old->gamut_steepness;
+    new_p->output_cs           = old->output_cs;
+    new_p->color_look          = old->color_look;
+    new_p->look_opacity        = old->look_opacity;
+    new_p->contrast_pivot      = old->contrast_pivot;
+    new_p->toe_power           = old->toe_power;
+    new_p->shoulder_power      = old->shoulder_power;
+    new_p->hl_detail_recovery  = old->hl_detail_recovery;
+    new_p->hl_exposure         = old->hl_exposure;
+
+    *new_params = new_p;
+    *new_params_size = sizeof(dt_iop_3dcf_params_t);
+    *new_version = 7;
     return 0;
   }
 
@@ -1827,10 +1879,10 @@ void init_presets(dt_iop_module_so_t *self)
   memset(&p, 0, sizeof(p));
   p.contrast = 2.25f;
   p.spectral_brilliance = 5.0f;
-  p.gray_point = 0.0f;
+  p.gamma = 0.0f;
   p.vibrance = 1.0f;
-  p.hl_desaturation = 0.70f; //CB
-  p.hl_desat_threshold = 0.55f;
+  p.hl_desaturation = 0.25f; //CB
+  p.hl_desat_threshold = 0.50f;
   p.hl_hue_shift = 0.0f;
   p.gamut_knee = 0.20f; //CB
   p.gamut_steepness = 0.50f;
@@ -1877,7 +1929,7 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->toe_power, p->toe_power);
   dt_bauhaus_slider_set(g->spectral_brilliance, p->spectral_brilliance);
   dt_bauhaus_slider_set(g->hl_power, p->hl_exposure);
-  dt_bauhaus_slider_set(g->mid_tone, p->gray_point);
+  dt_bauhaus_slider_set(g->mid_tone, p->gamma);
   dt_bauhaus_slider_set(g->vibrance, p->vibrance);
   dt_bauhaus_slider_set(g->hl_desaturation, p->hl_desaturation);
   dt_bauhaus_slider_set(g->hl_desat_threshold, p->hl_desat_threshold);
@@ -2272,7 +2324,7 @@ void gui_init(dt_iop_module_t *self)
     _("Toe (shadow) contrast multiplier relative to master contrast. \n"
       "100% = identical to master, 0% = no contrast in shadows, 200% = double contrast."));
 
-  g->mid_tone = dt_bauhaus_slider_from_params(self, "gray_point");
+  g->mid_tone = dt_bauhaus_slider_from_params(self, "gamma");
   dt_bauhaus_slider_set_factor(g->mid_tone, 100.0f);
   dt_bauhaus_slider_set_format(g->mid_tone, " %");
   dt_bauhaus_slider_set_digits(g->mid_tone, 0);

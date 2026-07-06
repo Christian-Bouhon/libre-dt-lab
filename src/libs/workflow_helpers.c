@@ -89,21 +89,18 @@ void dt_workflow_selector_set(const int selected)
   dt_develop_t *dev = darktable.develop;
   if(!dev) return;
 
-  const char *name = NULL;
   const char *op = NULL;
   switch(selected)
   {
-    case 0: name = "none"; op = NULL; break;
-    case 1: name = "scene-referred (filmic)";   op = "filmicrgb"; break;
-    case 2: name = "scene-referred (sigmoid)";  op = "sigmoid"; break;
-    case 3: name = "scene-referred (AgX)";      op = "agx"; break;
-    case 4: name = "scene-referred (basecurve)";op = "basecurve"; break;
-    case 5: name = "scene-referred (3DCF)";     op = "3dcf"; break;
-    case 6: name = "scene-referred (ACES 2.0)"; op = "aces20"; break;
+    case 0: op = NULL; break;
+    case 1: op = "filmicrgb"; break;
+    case 2: op = "sigmoid"; break;
+    case 3: op = "agx"; break;
+    case 4: op = "basecurve"; break;
+    case 5: op = "3dcf"; break;
+    case 6: op = "aces20"; break;
     default: return;
   }
-
-  dt_conf_set_string("plugins/darkroom/workflow", name);
 
   // disable all tone mapper modules
   for(int i = 0; _tm_ops[i]; i++)
