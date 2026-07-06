@@ -274,6 +274,7 @@ typedef struct
 
   float luma_coeff[3];      /* AP1 luma */
   float exposure_factor;
+  float forward_limit;      /* upper clamp limit in AP1 (from SSTS: r_hit_max / n_r = 8.96) */
   int   surround_idx;
   int   sdr_output_clip;    /* optional final ceiling at code-value 1.0 */
 
@@ -328,7 +329,7 @@ typedef struct dt_ac_cl_params_t
   float fwd_matrix[9];
   float inv_matrix[9];
   float exposure_factor;
-  float _pad_gamut_strength;      /* kept for CL struct alignment */
+  float forward_limit;            /* upper clamp limit in AP1 (from SSTS) */
   float _pad_gamut_knee;          /* kept for CL struct alignment */
   float f_l_n;                    /* F_L_n = F_L / ref_lum */
   float a_w;                      /* A_w — white achromatic signal (JMh) */
@@ -1813,6 +1814,14 @@ static void dt_ac_compute_context(const dt_iop_aces20_params_t *p,
   /* SSTS init (ACES 2.0 official tonescale params) */
   dt_ac_ssts_init(&ctx->ssts, (double)p->peak_luminance, p->surround);
 
+  /* Forward limit for AP1 clamp — matches CTL's r_hit / n_r in init_TSParams */
+  {
+    const float peak = fmaxf(p->peak_luminance, 1.0f);
+    const float log_ratio = logf(peak / 100.0f) / logf(10000.0f / 100.0f);
+    const float r_hit = 128.0f + (896.0f - 128.0f) * fminf(fmaxf(log_ratio, 0.0f), 1.0f);
+    ctx->forward_limit = r_hit / 100.0f;
+  }
+
   /* CAT16 CAM precomputation */
   {
     float n_unused;
@@ -1960,19 +1969,21 @@ static void dt_ac_pipeline_eval(const float rgb_in[3], float rgb_out[3],
     return;
   }
 
-  for(int c = 0; c < 3; c++) ap1[c] = fmaxf(ap1[c], 0.0f);
-
   /* Apply exposure */
   for(int c = 0; c < 3; c++) ap1[c] *= ctx->exposure_factor;
 
-  /* Step 2: AP1 → XYZ D60 (scene linear, not display-referred) */
+  /* Step 2: Clamp AP1 to [0, forward_limit] — CTL clamp_AP0_to_AP1 equivalent */
+  for(int c = 0; c < 3; c++)
+    ap1[c] = fminf(fmaxf(ap1[c], 0.0f), ctx->forward_limit);
+
+  /* Step 3: AP1 → XYZ D60 */
   float xyz[3];
   _mat_apply(xyz, dt_ac_ap1_to_xyz, ap1);
 
-  /* Step 3: ×100 to absolute nits for CAM */
+  /* Step 4: ×100 to absolute nits for CAM */
   for(int c = 0; c < 3; c++) xyz[c] *= DT_AC_REF_LUM;
 
-  /* Step 4: XYZ D60 → CAT16 JMh */
+  /* Step 5: XYZ D60 → CAT16 JMh */
   float jmh[3];
   _ac_xyz_to_jmh(xyz, ctx->d_rgb, ctx->a_w, ctx->z, jmh);
 
@@ -2154,6 +2165,7 @@ static void dt_ac_fill_cl_params(const dt_iop_aces20_data_t *d,
   for(int i = 0; i < 9; i++) clp->inv_matrix[i]  = ctx->inv_matrix[i];
 
   clp->exposure_factor  = ctx->exposure_factor;
+  clp->forward_limit    = ctx->forward_limit;
   clp->f_l_n            = ctx->f_l_n;
   clp->a_w              = ctx->a_w;
   clp->z                = ctx->z;

@@ -109,7 +109,7 @@ typedef struct
   float fwd_matrix[9];
   float inv_matrix[9];
   float exposure_factor;
-  float _pad_gamut_strength;
+  float forward_limit;
   float _pad_gamut_knee;
   float f_l_n;
   float a_w;
@@ -653,17 +653,20 @@ static inline void pipeline_eval(__private const float rgb_in[3],
     return;
   }
 
-  for(int c = 0; c < 3; c++) ap1[c] = fmax(ap1[c], 0.0f);
   for(int c = 0; c < 3; c++) ap1[c] *= p->exposure_factor;
 
-  /* Step 2: AP1 -> XYZ (scene linear) */
+  /* Step 2: Clamp AP1 to [0, forward_limit] — CTL clamp_AP0_to_AP1 equivalent */
+  for(int c = 0; c < 3; c++)
+    ap1[c] = fmin(fmax(ap1[c], 0.0f), p->forward_limit);
+
+  /* Step 3: AP1 -> XYZ */
   float xyz[3];
   _mat_apply(xyz, dt_ac_ap1_to_xyz, ap1);
 
-  /* Step 3: x100 to absolute nits for CAM */
+  /* Step 4: x100 to absolute nits for CAM */
   for(int c = 0; c < 3; c++) xyz[c] *= DT_AC_REF_LUM;
 
-  /* Step 4: XYZ -> JMh */
+  /* Step 5: XYZ -> JMh */
   float jmh[3];
   xyz_to_jmh(xyz, p->d_rgb, p->a_w, p->z, jmh);
 
