@@ -205,9 +205,6 @@ static const float dt_ac_aces_white_xyz[3] = { 95.2646074570f, 100.0f, 100.88251
 /* Reference luminance (nits) — ACES D60 white = 100 nits */
 #define DT_AC_REF_LUM     100.0f
 
-/* Limit J_max for chroma compression (static SDR default, scaled dynamically) */
-#define DT_AC_LIMIT_JMAX_SDR  100.0f
-
 /* Chroma compression constants (base values, scaled by peak luminance) */
 #define DT_AC_COMPR_BASE      2.4f
 #define DT_AC_COMPR_FACT      3.3f
@@ -228,7 +225,6 @@ static const float dt_ac_aces_white_xyz[3] = { 95.2646074570f, 100.0f, 100.88251
 #define DT_AC_BASE_INDEX                  1   /* first valid entry index */
 #define DT_AC_CUSP_CORNER_COUNT         6
 #define DT_AC_TOTAL_CORNER_COUNT        8   /* 6 + 2 wrap-around */
-#define DT_AC_MAX_SORTED_CORNERS       12   /* 2 * 6 */
 #define DT_AC_DISPLAY_CUSP_TOL          1e-7f
 
 /* Reach primaries — ACES 2.0 reference uses AP1 (D60) as the reach gamut */
@@ -332,7 +328,6 @@ typedef struct dt_ac_cl_params_t
   float inv_matrix[9];
   float exposure_factor;
   float forward_limit;            /* upper clamp limit in AP1 (from SSTS) */
-  float _pad_gamut_knee;          /* kept for CL struct alignment */
   float f_l_n;                    /* F_L_n = F_L / ref_lum */
   float a_w;                      /* A_w — white achromatic signal (JMh) */
   float z;                        /* 1.48 + sqrt(Y_b/Y_w) */
@@ -1032,38 +1027,6 @@ static inline void _ac_find_reach_corners_table(
   tbl->jmh[DT_AC_CUSP_CORNER_COUNT + 1][2] += 360.0f;
 }
 
-/* ---- Extract sorted cube hues (merge 2 sorted 6-element arrays) ---- */
-/* Matches CTL extract_sorted_cube_hues (lines 1123-1159) */
-static inline int _ac_extract_sorted_cube_hues(float sorted_hues[DT_AC_MAX_SORTED_CORNERS],
-    const _ac_corner_tables_t *reach,
-    const _ac_corner_tables_t *limit)
-{
-  int idx = 0, ri = 1, li = 1;
-  while(ri < DT_AC_CUSP_CORNER_COUNT + 1
-     || li < DT_AC_CUSP_CORNER_COUNT + 1)
-  {
-    const float rh = reach->jmh[ri][2];
-    const float lh = limit->jmh[li][2];
-    if(rh == lh)
-    {
-      sorted_hues[idx++] = rh;
-      ri++;
-      li++;
-    }
-    else if(rh < lh)
-    {
-      sorted_hues[idx++] = rh;
-      ri++;
-    }
-    else
-    {
-      sorted_hues[idx++] = lh;
-      li++;
-    }
-  }
-  return idx;
-}
-
 /* ---- Build uniform hue table (0°..359° + padding) ---- */
 /* Matches CTL build_hue_table — uniform 1° spacing with padding at [0] and [361] */
 static inline void _ac_build_hue_table(float hues[DT_AC_GAMUT_TABLE_SIZE])
@@ -1412,12 +1375,6 @@ static inline void _ac_gamma_test_data(_ac_gamma_test_point_t tests[5],
   }
 }
 
-/* ---- smin_scaled ---- */
-static inline float _ac_smin_scaled(float a, float b, float scale_ref)
-{
-  return _ac_smin(a, b, DT_AC_GAMUT_SMOOTH_CUSPS * scale_ref);
-}
-
 /* ---- Estimate line and boundary intersection M (reference match) ---- */
 static inline float _ac_estimate_intersect_M(float j_axis_intersect, float slope,
     float inv_gamma, float j_max, float m_max, float j_intersection_ref)
@@ -1693,47 +1650,6 @@ static inline void _ac_gamut_compress_fwd(float jmh[3],
 
   /* Apply compression using J as the reference Jx */
   _ac_compress_gamut(jmh, jx, ctx);
-}
-
-/* ---- gamut_compress_inv ---- */
-static inline void _ac_gamut_compress_inv(float jmh[3],
-    const dt_ac_context_t *ctx)
-{
-  float j = jmh[0], m = jmh[1];
-  const float h = jmh[2];
-
-  if(!isfinite(j + m)) return;
-  if(j <= 0.0f || m <= 0.0f) return;
-
-  const float limit_j_max = ctx->limit_j_max;
-  float cusp[2];
-  _ac_cusp_from_table(cusp, h, ctx->table_gamut_cusps, ctx->table_hues);
-  const float analytical_threshold = cusp[0]
-    + DT_AC_GAMUT_FOCUS_GAIN_BLEND * (limit_j_max - cusp[0]);
-
-  if(j < analytical_threshold)
-  {
-    _ac_compress_gamut(jmh, j, ctx);
-  }
-  else
-  {
-    float jmh_temp[3] = { j, m, h };
-    float jx = j;
-
-    /* First pass: compress with Jx = J */
-    _ac_compress_gamut(jmh_temp, jx, ctx);
-    jx = jmh_temp[0];
-    m = jmh_temp[1];
-
-    /* Second pass: compress with Jx = compressed J */
-    jmh_temp[0] = jx;
-    jmh_temp[1] = m;
-    _ac_compress_gamut(jmh_temp, jx, ctx);
-
-    jmh[0] = jmh_temp[0];
-    jmh[1] = jmh_temp[1];
-    jmh[2] = h;
-  }
 }
 
 /* ====================================================================

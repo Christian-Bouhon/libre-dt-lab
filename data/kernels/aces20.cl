@@ -73,11 +73,8 @@ __constant float dt_ac_panlrcm[9] =
 };
 
 /* CAT16 CAM viewing-condition parameters */
-#define DT_AC_LA        100.0f
-#define DT_AC_YB         20.0f
 #define DT_AC_RA          2.0f
 #define DT_AC_BA          0.05f
-#define DT_AC_SURR_F      0.9f
 #define DT_AC_SURR_C      0.59f
 #define DT_AC_SURR_NC     0.9f
 
@@ -90,14 +87,10 @@ __constant float dt_ac_panlrcm[9] =
 
 /* Gamut compression constants */
 #define DT_AC_GAMUT_SMOOTH_CUSPS       0.12f
-#define DT_AC_GAMUT_SMOOTH_M           0.27f
 #define DT_AC_GAMUT_CUSP_MID_BLEND     1.3f
 #define DT_AC_GAMUT_FOCUS_GAIN_BLEND   0.3f
-#define DT_AC_GAMUT_FOCUS_DISTANCE     1.35f
-#define DT_AC_GAMUT_FOCUS_DIST_SCALING 1.75f
 #define DT_AC_GAMUT_COMPRESSION_THR    0.75f
 #define DT_AC_GAMUT_TABLE_SIZE         362
-#define DT_AC_TABLE_SIZE                360
 #define DT_AC_BASE_INDEX                  1
 
 /* ====================================================================
@@ -110,7 +103,6 @@ typedef struct
   float inv_matrix[9];
   float exposure_factor;
   float forward_limit;
-  float _pad_gamut_knee;
   float f_l_n;
   float a_w;
   float z;
@@ -478,11 +470,6 @@ static inline float compression_slope(float intersect_j, float focus_j,
   return direction_scalar * (intersect_j - focus_j) / (focus_j * slope_gain);
 }
 
-static inline float smin_scaled(float a, float b, float scale_ref)
-{
-  return smin(a, b, DT_AC_GAMUT_SMOOTH_CUSPS * scale_ref);
-}
-
 static inline float estimate_intersect_M(float j_axis_intersect, float slope,
     float inv_gamma, float j_max, float m_max, float j_intersection_ref)
 {
@@ -597,40 +584,6 @@ static inline void gamut_compress_fwd(__private float jmh[3],
   if(!isfinite(j + m)) return;
   if(j <= 0.0f || m <= 0.0f) return;
   compress_gamut(jmh, j, p);
-}
-
-static inline void gamut_compress_inv(__private float jmh[3],
-    __constant const dt_ac_cl_params_t * restrict p)
-{
-  float j = jmh[0], m = jmh[1];
-  const float h = jmh[2];
-  if(!isfinite(j + m)) return;
-  if(j <= 0.0f || m <= 0.0f) return;
-
-  const float limit_j_max = p->limit_j_max;
-  float cusp[2];
-  cusp_from_table(cusp, h, p);
-  const float analytical_threshold = cusp[0]
-    + DT_AC_GAMUT_FOCUS_GAIN_BLEND * (limit_j_max - cusp[0]);
-
-  if(j < analytical_threshold)
-  {
-    compress_gamut(jmh, j, p);
-  }
-  else
-  {
-    float jmh_tmp[3] = { j, m, h };
-    float jx = j;
-    compress_gamut(jmh_tmp, jx, p);
-    jx = jmh_tmp[0];
-    m = jmh_tmp[1];
-    jmh_tmp[0] = jx;
-    jmh_tmp[1] = m;
-    compress_gamut(jmh_tmp, jx, p);
-    jmh[0] = jmh_tmp[0];
-    jmh[1] = jmh_tmp[1];
-    jmh[2] = h;
-  }
 }
 
 /* ====================================================================
