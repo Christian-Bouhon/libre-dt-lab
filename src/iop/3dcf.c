@@ -112,7 +112,7 @@ typedef struct dt_iop_3dcf_params_t
   float contrast;              // $MIN: 0.25 $MAX: 4.25 $DEFAULT: 2.25 $DESCRIPTION: "contrast"
   float gamma;                 // $MIN: -1 $MAX: 1 $DEFAULT: 0 $DESCRIPTION: "gamma"
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
-  float chromatic_contrast;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $STEP: 0.01 $DESCRIPTION: "chromatic contrast"
+  float chromatic_boost;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $STEP: 0.01 $DESCRIPTION: "chromatic boost"
   float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "perceptual brightness"
   float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "Abney rotation"
   float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.25 $DESCRIPTION: "highlight roll-off"
@@ -157,7 +157,7 @@ typedef struct
   float gamma;
   float gamma_power;
   float vibrance;
-  float chromatic_contrast;
+  float chromatic_boost;
   float gamut_knee;
   float gamut_steepness;
   float toe_power;
@@ -198,7 +198,7 @@ typedef struct dt_st_cl_params_t
   float gamma;
   float gamma_power;
   float vibrance;
-  float chromatic_contrast;
+  float chromatic_boost;
   float gamut_knee;
   float gamut_steepness;
   float toe_power;
@@ -234,7 +234,7 @@ typedef struct dt_iop_3dcf_gui_data_t
   GtkWidget *spectral_brilliance;
   GtkWidget *mid_tone;
   GtkWidget *vibrance;
-  GtkWidget *chromatic_contrast;
+  GtkWidget *chromatic_boost;
   GtkWidget *hl_desaturation;
   GtkWidget *hl_desat_threshold;
   GtkWidget *hl_hue_shift;
@@ -1117,7 +1117,7 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
   }
 
   /* Step 9b: chromatic contrast — luminance-adaptive mid-tone saturation boost */
-  if(ctx->chromatic_contrast > 0.0f)
+  if(ctx->chromatic_boost > 0.0f)
   {
     const float *lc = ctx->luma_coeff;
     const float luma = lc[0] * rgb[0] + lc[1] * rgb[1] + lc[2] * rgb[2];
@@ -1128,8 +1128,9 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
     const float sat_norm = (level > 0.0f) ? sat_m / level : 0.0f;
     const float y_mid = 0.18f, sigma = 1.85f;
     const float log_rel = log2f(fmaxf(y_abs / y_mid, 1e-10f));
+    const float w_gauss = expf(-(log_rel * log_rel) / (2.0f * sigma * sigma));
     const float w_mid = (log_rel <= 0.0f) ? 1.0f
-                       : expf(-(log_rel * log_rel) / (2.0f * sigma * sigma));
+                       : 1.328f * w_gauss - 0.328f;
     const float pp = 1.0f - fminf(sat_norm, 1.0f);
     /* Hue modulation: −10% jaunes (60°), +10% bleus (240°) */
     float hue_deg = 0.0f;
@@ -1144,7 +1145,7 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
       if(hue_deg < 0.0f) hue_deg += 360.0f;
     }
     const float hue_mod = 1.0f + 0.1f * cosf((hue_deg - 60.0f) * (M_PI / 180.0f));
-    const float gain = 1.0f + ctx->chromatic_contrast * w_mid * (pp * pp) * hue_mod;
+    const float gain = 1.0f + ctx->chromatic_boost * w_mid * (pp * pp) * hue_mod;
     rgb[0] = luma + gain * (rgb[0] - luma);
     rgb[1] = luma + gain * (rgb[1] - luma);
     rgb[2] = luma + gain * (rgb[2] - luma);
@@ -1277,7 +1278,7 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
   ctx->gamma_power = exp2f(ctx->gamma);
 
   ctx->vibrance = fmaxf(p->vibrance, 0.0f);
-  ctx->chromatic_contrast = fmaxf(p->chromatic_contrast, 0.0f);
+  ctx->chromatic_boost = fmaxf(p->chromatic_boost, 0.0f);
 
   /* Initialize ACES 2.0 SSTS for the target roll-off character */
   const double rolloff_t = fmin(fmax((double)p->spectral_brilliance / 100.0, 0.0), 1.0);
@@ -1334,7 +1335,7 @@ int legacy_params(dt_iop_module_t *self,
     new_p->shoulder_power      = old->shoulder_power;
     new_p->hl_detail_recovery  = 0.0f;
     new_p->hl_exposure         = 1.0f;
-    new_p->chromatic_contrast  = 0.0f;
+    new_p->chromatic_boost  = 0.0f;
 
     *new_params = new_p;
     *new_params_size = sizeof(dt_iop_3dcf_params_t);
@@ -1385,7 +1386,7 @@ int legacy_params(dt_iop_module_t *self,
     new_p->shoulder_power      = old->shoulder_power;
     new_p->hl_detail_recovery  = old->hl_detail_recovery;
     new_p->hl_exposure         = 1.0f;
-    new_p->chromatic_contrast  = 0.0f;
+    new_p->chromatic_boost  = 0.0f;
 
     *new_params = new_p;
     *new_params_size = sizeof(dt_iop_3dcf_params_t);
@@ -1437,7 +1438,7 @@ int legacy_params(dt_iop_module_t *self,
     new_p->shoulder_power      = old->shoulder_power;
     new_p->hl_detail_recovery  = old->hl_detail_recovery;
     new_p->hl_exposure         = old->hl_exposure;
-    new_p->chromatic_contrast  = 0.0f;
+    new_p->chromatic_boost  = 0.0f;
 
     *new_params = new_p;
     *new_params_size = sizeof(dt_iop_3dcf_params_t);
@@ -1445,7 +1446,7 @@ int legacy_params(dt_iop_module_t *self,
     return 0;
   }
 
-  // v7 → v8: added chromatic_contrast field
+  // v7 → v8: added chromatic_boost field
   if(old_version == 7)
   {
     typedef struct
@@ -1475,7 +1476,7 @@ int legacy_params(dt_iop_module_t *self,
     new_p->contrast            = old->contrast;
     new_p->gamma               = old->gamma;
     new_p->vibrance            = old->vibrance;
-    new_p->chromatic_contrast  = 0.0f;
+    new_p->chromatic_boost  = 0.0f;
     new_p->spectral_brilliance = old->spectral_brilliance;
     new_p->hl_hue_shift        = old->hl_hue_shift;
     new_p->hl_desaturation     = old->hl_desaturation;
@@ -1838,7 +1839,7 @@ static void st_fill_cl_params(const dt_iop_3dcf_data_t *d,
   clp->gamma           = ctx->gamma;
   clp->gamma_power     = ctx->gamma_power;
   clp->vibrance        = ctx->vibrance;
-  clp->chromatic_contrast = ctx->chromatic_contrast;
+  clp->chromatic_boost = ctx->chromatic_boost;
   clp->gamut_knee      = ctx->gamut_knee;
   clp->gamut_steepness = ctx->gamut_steepness;
   clp->toe_power       = ctx->toe_power;
@@ -1976,7 +1977,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.spectral_brilliance = 5.0f;
   p.gamma = 0.0f;
   p.vibrance = 1.0f;
-  p.chromatic_contrast = 0.0f;
+  p.chromatic_boost = 0.0f;
   p.hl_desaturation = 0.25f; //CB
   p.hl_desat_threshold = 0.50f;
   p.hl_hue_shift = 0.0f;
@@ -2027,7 +2028,7 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->hl_power, p->hl_exposure);
   dt_bauhaus_slider_set(g->mid_tone, p->gamma);
   dt_bauhaus_slider_set(g->vibrance, p->vibrance);
-  dt_bauhaus_slider_set(g->chromatic_contrast, p->chromatic_contrast);
+  dt_bauhaus_slider_set(g->chromatic_boost, p->chromatic_boost);
   dt_bauhaus_slider_set(g->hl_desaturation, p->hl_desaturation);
   dt_bauhaus_slider_set(g->hl_desat_threshold, p->hl_desat_threshold);
   dt_bauhaus_slider_set(g->hl_hue_shift, p->hl_hue_shift);
@@ -2441,12 +2442,12 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->vibrance,
     _("Smart saturation boost. Protects already-saturated colors while enhancing pastels."));
 
-  g->chromatic_contrast = dt_bauhaus_slider_from_params(self, "chromatic_contrast");
-  dt_bauhaus_slider_set_factor(g->chromatic_contrast, 100.0f);
-  dt_bauhaus_slider_set_format(g->chromatic_contrast, " %");
-  dt_bauhaus_slider_set_digits(g->chromatic_contrast, 0);
-  gtk_widget_set_tooltip_text(g->chromatic_contrast,
-    _("Mid-tone chromatic contrast boost. Adds saturation in mid-tones while protecting highlights and pastels."));
+  g->chromatic_boost = dt_bauhaus_slider_from_params(self, "chromatic_boost");
+  dt_bauhaus_slider_set_factor(g->chromatic_boost, 100.0f);
+  dt_bauhaus_slider_set_format(g->chromatic_boost, " %");
+  dt_bauhaus_slider_set_digits(g->chromatic_boost, 0);
+  gtk_widget_set_tooltip_text(g->chromatic_boost,
+    _("Chromatic accentuation of midtones with a slight contrast in hue in the highlights"));
 
   g->color_look = dt_bauhaus_combobox_from_params(self, "color_look");
   gtk_widget_set_tooltip_text(g->color_look, _("Apply a color style to the image."));

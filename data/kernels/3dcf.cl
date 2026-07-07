@@ -48,7 +48,7 @@ typedef struct dt_st_cl_params_t
   float gamma;
   float gamma_power;
   float vibrance;
-  float chromatic_contrast;
+  float chromatic_boost;
   float gamut_knee;
   float gamut_steepness;
   float toe_power;
@@ -494,7 +494,7 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
   }
 
   /* Step 9b: chromatic contrast — luminance-adaptive mid-tone saturation boost */
-  if(p->chromatic_contrast > 0.0f)
+  if(p->chromatic_boost > 0.0f)
   {
     const float lc0 = p->luma_coeff[0], lc1 = p->luma_coeff[1], lc2 = p->luma_coeff[2];
     const float luma = lc0 * rgb.x + lc1 * rgb.y + lc2 * rgb.z;
@@ -505,8 +505,9 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
     const float sat_norm = (level > 0.0f) ? sat_m / level : 0.0f;
     const float y_mid = 0.18f, sigma = 1.85f;
     const float log_rel = log2(fmax(y_abs / y_mid, 1e-10f));
+    const float w_gauss = exp(-(log_rel * log_rel) / (2.0f * sigma * sigma));
     const float w_mid = (log_rel <= 0.0f) ? 1.0f
-                       : exp(-(log_rel * log_rel) / (2.0f * sigma * sigma));
+                       : 1.328f * w_gauss - 0.328f;
     const float pp = 1.0f - fmin(sat_norm, 1.0f);
     /* Hue modulation: −10% jaunes (60°), +10% bleus (240°) */
     float hue_deg = 0.0f;
@@ -521,7 +522,7 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
       if(hue_deg < 0.0f) hue_deg += 360.0f;
     }
     const float hue_mod = 1.0f + 0.1f * cos((hue_deg - 60.0f) * (M_PI_F / 180.0f));
-    const float gain = 1.0f + p->chromatic_contrast * w_mid * (pp * pp) * hue_mod;
+    const float gain = 1.0f + p->chromatic_boost * w_mid * (pp * pp) * hue_mod;
     rgb.x = luma + gain * (rgb.x - luma);
     rgb.y = luma + gain * (rgb.y - luma);
     rgb.z = luma + gain * (rgb.z - luma);
