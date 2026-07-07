@@ -195,7 +195,7 @@ typedef struct dt_iop_filmicrgb_params_t
   gboolean compensate_icc_black; // $DEFAULT: FALSE $DESCRIPTION: "compensate output ICC profile black point"
   dt_iop_filmicrgb_spline_version_type_t spline_version; // $DEFAULT: DT_FILMIC_SPLINE_VERSION_V3 $DESCRIPTION: "spline handling"
   gboolean enable_highlight_reconstruction; // $DEFAULT: FALSE $DESCRIPTION: "enable highlight reconstruction"
-  float input_exposure; // $MIN: -18.0 $MAX: 18.0 $DEFAULT: 0.7 $DESCRIPTION: "input exposure compensation"
+  float input_exposure; // $MIN: -2.0 $MAX: 2.0 $DEFAULT: 0.7 $DESCRIPTION: "input exposure"
 } dt_iop_filmicrgb_params_t;
 // clang-format on
 
@@ -234,6 +234,7 @@ typedef struct dt_iop_filmicrgb_gui_data_t
   GtkWidget *white_point_source;
   GtkWidget *grey_point_source;
   GtkWidget *black_point_source;
+  GtkWidget *input_exposure;
   GtkWidget *reconstruct_threshold, *reconstruct_bloom_vs_details, *reconstruct_grey_vs_color,
       *reconstruct_structure_vs_texture, *reconstruct_feather;
   GtkWidget *show_highlight_mask;
@@ -3162,6 +3163,8 @@ void gui_update(dt_iop_module_t *self)
 
   // fetch last view in dartablerc
 
+  dt_bauhaus_slider_set(g->input_exposure, p->input_exposure);
+
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->auto_hardness), p->auto_hardness);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->custom_grey), p->custom_grey);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->enable_highlight_reconstruction), p->enable_highlight_reconstruction);
@@ -4398,6 +4401,14 @@ void gui_init(dt_iop_module_t *self)
                               _("adjust to match the average luminance of the image's subject.\n"
                                 "the value entered here will then be remapped to 18.45%.\n"
                                 "decrease the value to increase the overall brightness."));
+
+  // Input exposure compensation
+  g->input_exposure = dt_bauhaus_slider_from_params(self, "input_exposure");
+  dt_bauhaus_slider_set_format(g->input_exposure, _(" EV"));
+  dt_bauhaus_slider_set_digits(g->input_exposure, 2);
+  gtk_widget_set_tooltip_text(g->input_exposure,
+    _("exposure compensation applied before tone mapping.\n"
+      "positive values brighten, negative values darken."));
 
   // White slider
   g->white_point_source

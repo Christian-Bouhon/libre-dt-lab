@@ -70,7 +70,7 @@ typedef struct dt_iop_sigmoid_params_t
   float blue_rotation;    // $MIN: -0.4  $MAX: 0.4  $DEFAULT: 0.0 $DESCRIPTION: "blue rotation"
   float purity;           // $MIN:  0.0  $MAX: 1.0  $DEFAULT: 0.0 $DESCRIPTION: "recover purity"
   dt_iop_sigmoid_base_primaries_t base_primaries; // $DEFAULT: DT_SIGMOID_WORK_PROFILE $DESCRIPTION: "base primaries"
-  float input_exposure; // $MIN: -18.0 $MAX: 18.0 $DEFAULT: 0.7 $DESCRIPTION: "input exposure compensation"
+  float input_exposure; // $MIN: -2.0 $MAX: 2.0 $DEFAULT: 0.7 $DESCRIPTION: "input exposure"
 } dt_iop_sigmoid_params_t;
 
 int legacy_params(dt_iop_module_t *self,
@@ -192,6 +192,7 @@ typedef struct dt_iop_sigmoid_data_t
 typedef struct dt_iop_sigmoid_gui_data_t
 {
   GtkWidget *color_processing_list, *hue_preservation_slider;
+  GtkWidget *input_exposure;
 
   dt_gui_collapsible_section_t display_luminance_section, primaries_section;
 } dt_iop_sigmoid_gui_data_t;
@@ -905,9 +906,12 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 void gui_update(dt_iop_module_t *self)
 {
   const dt_iop_sigmoid_gui_data_t *g = self->gui_data;
+  const dt_iop_sigmoid_params_t *p = self->params;
 
   dt_gui_update_collapsible_section(&g->display_luminance_section);
   dt_gui_update_collapsible_section(&g->primaries_section);
+
+  dt_bauhaus_slider_set(g->input_exposure, p->input_exposure);
 
   gui_changed(self, NULL, NULL);
 }
@@ -915,6 +919,14 @@ void gui_update(dt_iop_module_t *self)
 void gui_init(dt_iop_module_t *self)
 {
   dt_iop_sigmoid_gui_data_t *g = IOP_GUI_ALLOC(sigmoid);
+
+  // Input exposure compensation
+  g->input_exposure = dt_bauhaus_slider_from_params(self, "input_exposure");
+  dt_bauhaus_slider_set_format(g->input_exposure, _(" EV"));
+  dt_bauhaus_slider_set_digits(g->input_exposure, 2);
+  gtk_widget_set_tooltip_text(g->input_exposure,
+    _("exposure compensation applied before tone mapping.\n"
+      "positive values brighten, negative values darken."));
 
   // Look controls
   GtkWidget *slider = dt_bauhaus_slider_from_params(self, "middle_grey_contrast");

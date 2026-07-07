@@ -154,7 +154,7 @@ typedef struct dt_iop_agx_params_t
   gboolean completely_reverse_primaries; // $DEFAULT: FALSE $DESCRIPTION: "reverse all"
 
   // v8
-  float input_exposure; // $MIN: -18.0 $MAX: 18.0 $DEFAULT: 0.7 $DESCRIPTION: "input exposure compensation"
+  float input_exposure; // $MIN: -2.0 $MAX: 2.0 $DEFAULT: 0.7 $DESCRIPTION: "input exposure"
 } dt_iop_agx_params_t;
 
 typedef struct dt_iop_basic_curve_controls_t
@@ -185,6 +185,7 @@ typedef struct dt_iop_agx_gui_data_t
   GtkWidget *range_exposure_picker;
   GtkWidget *black_exposure_picker;
   GtkWidget *white_exposure_picker;
+  GtkWidget *input_exposure;
   GtkWidget *security_factor;
   GtkWidget *range_exposure_picker_group;
   GtkWidget *btn_read_exposure;
@@ -2059,6 +2060,13 @@ static void _add_exposure_box(dt_iop_module_t *self, dt_iop_agx_gui_data_t *g, d
   gchar *section_name = NC_("section", "input exposure range");
   dt_gui_box_add(self->widget, dt_ui_section_label_new(Q_(section_name)));
 
+  g->input_exposure = dt_bauhaus_slider_from_params(self, "input_exposure");
+  dt_bauhaus_slider_set_format(g->input_exposure, _(" EV"));
+  dt_bauhaus_slider_set_digits(g->input_exposure, 2);
+  gtk_widget_set_tooltip_text(g->input_exposure,
+    _("exposure compensation applied before tone mapping.\n"
+      "positive values brighten, negative values darken."));
+
   GtkWidget *white_slider = dt_bauhaus_slider_from_params(self, "range_white_relative_ev");
   g->white_exposure_picker = dt_color_picker_new(self, DT_COLOR_PICKER_AREA | DT_COLOR_PICKER_DENOISE, white_slider);
   dt_bauhaus_slider_set_soft_range(g->white_exposure_picker, 1.f, 10.f);
@@ -2267,6 +2275,8 @@ void gui_update(dt_iop_module_t *self)
                                p->disable_primaries_adjustments);
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->completely_reverse_primaries),
                                p->completely_reverse_primaries);
+
+  dt_bauhaus_slider_set(g->input_exposure, p->input_exposure);
 
   _update_redraw_dynamic_gui(self, g, p);
 
@@ -2483,6 +2493,7 @@ void gui_init(dt_iop_module_t *self)
                                                 N_("settings"),
                                                 _("main look and curve settings"));
   dt_iop_module_t *settings_section = DT_IOP_SECTION_FOR_PARAMS(self, NULL, settings_page);
+
   _add_exposure_box(settings_section, g, self);
   dt_gui_box_add(settings_section->widget, g->curve_basic_controls_box);
   GtkWidget *curve_page_parent = settings_page;
