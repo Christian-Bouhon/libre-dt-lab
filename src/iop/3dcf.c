@@ -273,11 +273,11 @@ static const float color_looks[11][9] = {
   {1.067f, -0.049f, -0.031f, -0.017f, 1.033f, -0.026f, -0.088f, 0.042f, 1.055f}  // 11. bright atmosphere
 };
 
-/* Rec.2020 RGB -> CIE XYZ (D50) — ITU-R BT.2020-2 Table 4 */
-const double dt_st_rec2020_to_xyz[9] = {
-  6.369580467986713e-01, 1.446169121462670e-01, 1.688809980493937e-01,
-  2.627002366306831e-01, 6.779980956614056e-01, 5.930176218802780e-02,
- -3.132235483284409e-08, 2.807267854412832e-02, 1.060985074810122e+00
+/* Rec.2020 RGB -> CIE XYZ (D50) — from primaries + D50 white point */
+const double dt_st_rec2020_d50_to_xyz[9] = {
+  6.9458363963246861e-01, 1.4268890101747944e-01, 1.2693945377125121e-01,
+  2.8646669883147013e-01, 6.6895914182900651e-01, 4.4574159339523321e-02,
+  0.0,                    2.7698433726922409e-02, 7.9748985079190637e-01
 };
 
 /* Chromatic adaptation matrix CIE CAT16: D65 -> D50 */
@@ -1176,18 +1176,10 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
     ctx->exposure_factor = exp2f((float)auto_ev);
   }
 
-  /* === Combined input matrix: D50-adapted Rec.2020 RGB → D50 XYZ === */
+  /* === Combined input matrix: Rec.2020 D50 RGB → D50 XYZ === */
   {
-    double M_in[9];
-    for(int i = 0; i < 3; i++)
-      for(int j = 0; j < 3; j++)
-      {
-        M_in[i * 3 + j] = 0.0;
-        for(int k = 0; k < 3; k++)
-          M_in[i * 3 + j] += dt_st_cat_d65_to_d50[i * 3 + k]
-                           * dt_st_rec2020_to_xyz[k * 3 + j];
-      }
-    for(int i = 0; i < 9; i++) ctx->input_matrix[i] = (float)M_in[i];
+    for(int i = 0; i < 9; i++)
+      ctx->input_matrix[i] = (float)dt_st_rec2020_d50_to_xyz[i];
   }
 
   /* === Output matrix: D50 XYZ → Rec.2020 D50 RGB (working space) === */
