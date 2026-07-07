@@ -508,7 +508,20 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
     const float w_mid = (log_rel <= 0.0f) ? 1.0f
                        : exp(-(log_rel * log_rel) / (2.0f * sigma * sigma));
     const float pp = 1.0f - fmin(sat_norm, 1.0f);
-    const float gain = 1.0f + p->chromatic_contrast * w_mid * (pp * pp);
+    /* Hue modulation: −10% jaunes (60°), +10% bleus (240°) */
+    float hue_deg = 0.0f;
+    if(sat_m > 0.0f)
+    {
+      if(maxc == rgb.x)
+        hue_deg = 60.0f * fmod((rgb.y - rgb.z) / sat_m, 6.0f);
+      else if(maxc == rgb.y)
+        hue_deg = 60.0f * ((rgb.z - rgb.x) / sat_m + 2.0f);
+      else
+        hue_deg = 60.0f * ((rgb.x - rgb.y) / sat_m + 4.0f);
+      if(hue_deg < 0.0f) hue_deg += 360.0f;
+    }
+    const float hue_mod = 1.0f + 0.1f * cos((hue_deg - 60.0f) * (M_PI_F / 180.0f));
+    const float gain = 1.0f + p->chromatic_contrast * w_mid * (pp * pp) * hue_mod;
     rgb.x = luma + gain * (rgb.x - luma);
     rgb.y = luma + gain * (rgb.y - luma);
     rgb.z = luma + gain * (rgb.z - luma);

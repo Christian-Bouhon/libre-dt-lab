@@ -1131,7 +1131,20 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
     const float w_mid = (log_rel <= 0.0f) ? 1.0f
                        : expf(-(log_rel * log_rel) / (2.0f * sigma * sigma));
     const float pp = 1.0f - fminf(sat_norm, 1.0f);
-    const float gain = 1.0f + ctx->chromatic_contrast * w_mid * (pp * pp);
+    /* Hue modulation: −10% jaunes (60°), +10% bleus (240°) */
+    float hue_deg = 0.0f;
+    if(sat_m > 0.0f)
+    {
+      if(maxc == rgb[0])
+        hue_deg = 60.0f * fmodf((rgb[1] - rgb[2]) / sat_m, 6.0f);
+      else if(maxc == rgb[1])
+        hue_deg = 60.0f * ((rgb[2] - rgb[0]) / sat_m + 2.0f);
+      else
+        hue_deg = 60.0f * ((rgb[0] - rgb[1]) / sat_m + 4.0f);
+      if(hue_deg < 0.0f) hue_deg += 360.0f;
+    }
+    const float hue_mod = 1.0f + 0.1f * cosf((hue_deg - 60.0f) * (M_PI / 180.0f));
+    const float gain = 1.0f + ctx->chromatic_contrast * w_mid * (pp * pp) * hue_mod;
     rgb[0] = luma + gain * (rgb[0] - luma);
     rgb[1] = luma + gain * (rgb[1] - luma);
     rgb[2] = luma + gain * (rgb[2] - luma);
