@@ -71,7 +71,7 @@
 #include <stdio.h>
 #include <string.h>
 
-DT_MODULE_INTROSPECTION(7, dt_iop_3dcf_params_t)
+DT_MODULE_INTROSPECTION(8, dt_iop_3dcf_params_t)
 
 /* Type definitions for the ACES 2.0 SSTS pipeline context.
  * spectral_tone_data.c and spectral_tone_pipeline.c have been merged into 3dcf.c
@@ -112,6 +112,7 @@ typedef struct dt_iop_3dcf_params_t
   float contrast;              // $MIN: 0.25 $MAX: 4.25 $DEFAULT: 2.25 $DESCRIPTION: "contrast"
   float gamma;                 // $MIN: -1 $MAX: 1 $DEFAULT: 0 $DESCRIPTION: "gamma"
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
+  float chromatic_contrast;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $STEP: 0.01 $DESCRIPTION: "chromatic contrast"
   float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "perceptual brightness"
   float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "Abney rotation"
   float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.25 $DESCRIPTION: "highlight roll-off"
@@ -156,6 +157,7 @@ typedef struct
   float gamma;
   float gamma_power;
   float vibrance;
+  float chromatic_contrast;
   float gamut_knee;
   float gamut_steepness;
   float toe_power;
@@ -196,6 +198,7 @@ typedef struct dt_st_cl_params_t
   float gamma;
   float gamma_power;
   float vibrance;
+  float chromatic_contrast;
   float gamut_knee;
   float gamut_steepness;
   float toe_power;
@@ -231,6 +234,7 @@ typedef struct dt_iop_3dcf_gui_data_t
   GtkWidget *spectral_brilliance;
   GtkWidget *mid_tone;
   GtkWidget *vibrance;
+  GtkWidget *chromatic_contrast;
   GtkWidget *hl_desaturation;
   GtkWidget *hl_desat_threshold;
   GtkWidget *hl_hue_shift;
@@ -1112,6 +1116,27 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
     }
   }
 
+  /* Step 9b: chromatic contrast — luminance-adaptive mid-tone saturation boost */
+  if(ctx->chromatic_contrast > 0.0f)
+  {
+    const float *lc = ctx->luma_coeff;
+    const float luma = lc[0] * rgb[0] + lc[1] * rgb[1] + lc[2] * rgb[2];
+    const float maxc = fmaxf(fmaxf(rgb[0], rgb[1]), rgb[2]);
+    const float minc = fminf(fminf(rgb[0], rgb[1]), rgb[2]);
+    const float sat_m = maxc - minc;
+    const float level = fmaxf(maxc, fmaxf(fabsf(minc), fabsf(luma)));
+    const float sat_norm = (level > 0.0f) ? sat_m / level : 0.0f;
+    const float y_mid = 0.18f, sigma = 1.85f;
+    const float log_rel = log2f(fmaxf(y_abs / y_mid, 1e-10f));
+    const float w_mid = (log_rel <= 0.0f) ? 1.0f
+                       : expf(-(log_rel * log_rel) / (2.0f * sigma * sigma));
+    const float pp = 1.0f - fminf(sat_norm, 1.0f);
+    const float gain = 1.0f + ctx->chromatic_contrast * w_mid * (pp * pp);
+    rgb[0] = luma + gain * (rgb[0] - luma);
+    rgb[1] = luma + gain * (rgb[1] - luma);
+    rgb[2] = luma + gain * (rgb[2] - luma);
+  }
+
   st_gamut_compress(rgb, ctx->luma_coeff);
 
   /* Output gamut protection: clamp to selected primary space */
@@ -1239,6 +1264,7 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
   ctx->gamma_power = exp2f(ctx->gamma);
 
   ctx->vibrance = fmaxf(p->vibrance, 0.0f);
+  ctx->chromatic_contrast = fmaxf(p->chromatic_contrast, 0.0f);
 
   /* Initialize ACES 2.0 SSTS for the target roll-off character */
   const double rolloff_t = fmin(fmax((double)p->spectral_brilliance / 100.0, 0.0), 1.0);
@@ -1295,10 +1321,11 @@ int legacy_params(dt_iop_module_t *self,
     new_p->shoulder_power      = old->shoulder_power;
     new_p->hl_detail_recovery  = 0.0f;
     new_p->hl_exposure         = 1.0f;
+    new_p->chromatic_contrast  = 0.0f;
 
     *new_params = new_p;
     *new_params_size = sizeof(dt_iop_3dcf_params_t);
-    *new_version = 7;
+    *new_version = 8;
     return 0;
   }
 
@@ -1345,10 +1372,11 @@ int legacy_params(dt_iop_module_t *self,
     new_p->shoulder_power      = old->shoulder_power;
     new_p->hl_detail_recovery  = old->hl_detail_recovery;
     new_p->hl_exposure         = 1.0f;
+    new_p->chromatic_contrast  = 0.0f;
 
     *new_params = new_p;
     *new_params_size = sizeof(dt_iop_3dcf_params_t);
-    *new_version = 7;
+    *new_version = 8;
     return 0;
   }
 
@@ -1396,10 +1424,63 @@ int legacy_params(dt_iop_module_t *self,
     new_p->shoulder_power      = old->shoulder_power;
     new_p->hl_detail_recovery  = old->hl_detail_recovery;
     new_p->hl_exposure         = old->hl_exposure;
+    new_p->chromatic_contrast  = 0.0f;
 
     *new_params = new_p;
     *new_params_size = sizeof(dt_iop_3dcf_params_t);
-    *new_version = 7;
+    *new_version = 8;
+    return 0;
+  }
+
+  // v7 → v8: added chromatic_contrast field
+  if(old_version == 7)
+  {
+    typedef struct
+    {
+      float contrast;
+      float gamma;
+      float vibrance;
+      float spectral_brilliance;
+      float hl_hue_shift;
+      float hl_desaturation;
+      float hl_desat_threshold;
+      float gamut_knee;
+      float gamut_steepness;
+      dt_iop_st_colorspace_t output_cs;
+      dt_iop_st_look_t color_look;
+      float look_opacity;
+      float contrast_pivot;
+      float toe_power;
+      float shoulder_power;
+      float hl_detail_recovery;
+      float hl_exposure;
+    } dt_iop_3dcf_params_v7_t;
+
+    const dt_iop_3dcf_params_v7_t *old = old_params;
+    dt_iop_3dcf_params_t *new_p = malloc(sizeof(dt_iop_3dcf_params_t));
+
+    new_p->contrast            = old->contrast;
+    new_p->gamma               = old->gamma;
+    new_p->vibrance            = old->vibrance;
+    new_p->chromatic_contrast  = 0.0f;
+    new_p->spectral_brilliance = old->spectral_brilliance;
+    new_p->hl_hue_shift        = old->hl_hue_shift;
+    new_p->hl_desaturation     = old->hl_desaturation;
+    new_p->hl_desat_threshold  = old->hl_desat_threshold;
+    new_p->gamut_knee          = old->gamut_knee;
+    new_p->gamut_steepness     = old->gamut_steepness;
+    new_p->output_cs           = old->output_cs;
+    new_p->color_look          = old->color_look;
+    new_p->look_opacity        = old->look_opacity;
+    new_p->contrast_pivot      = old->contrast_pivot;
+    new_p->toe_power           = old->toe_power;
+    new_p->shoulder_power      = old->shoulder_power;
+    new_p->hl_detail_recovery  = old->hl_detail_recovery;
+    new_p->hl_exposure         = old->hl_exposure;
+
+    *new_params = new_p;
+    *new_params_size = sizeof(dt_iop_3dcf_params_t);
+    *new_version = 8;
     return 0;
   }
 
@@ -1744,6 +1825,7 @@ static void st_fill_cl_params(const dt_iop_3dcf_data_t *d,
   clp->gamma           = ctx->gamma;
   clp->gamma_power     = ctx->gamma_power;
   clp->vibrance        = ctx->vibrance;
+  clp->chromatic_contrast = ctx->chromatic_contrast;
   clp->gamut_knee      = ctx->gamut_knee;
   clp->gamut_steepness = ctx->gamut_steepness;
   clp->toe_power       = ctx->toe_power;
@@ -1881,6 +1963,7 @@ void init_presets(dt_iop_module_so_t *self)
   p.spectral_brilliance = 5.0f;
   p.gamma = 0.0f;
   p.vibrance = 1.0f;
+  p.chromatic_contrast = 0.0f;
   p.hl_desaturation = 0.25f; //CB
   p.hl_desat_threshold = 0.50f;
   p.hl_hue_shift = 0.0f;
@@ -1931,6 +2014,7 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->hl_power, p->hl_exposure);
   dt_bauhaus_slider_set(g->mid_tone, p->gamma);
   dt_bauhaus_slider_set(g->vibrance, p->vibrance);
+  dt_bauhaus_slider_set(g->chromatic_contrast, p->chromatic_contrast);
   dt_bauhaus_slider_set(g->hl_desaturation, p->hl_desaturation);
   dt_bauhaus_slider_set(g->hl_desat_threshold, p->hl_desat_threshold);
   dt_bauhaus_slider_set(g->hl_hue_shift, p->hl_hue_shift);
@@ -2343,6 +2427,13 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_digits(g->vibrance, 0);
   gtk_widget_set_tooltip_text(g->vibrance,
     _("Smart saturation boost. Protects already-saturated colors while enhancing pastels."));
+
+  g->chromatic_contrast = dt_bauhaus_slider_from_params(self, "chromatic_contrast");
+  dt_bauhaus_slider_set_factor(g->chromatic_contrast, 100.0f);
+  dt_bauhaus_slider_set_format(g->chromatic_contrast, " %");
+  dt_bauhaus_slider_set_digits(g->chromatic_contrast, 0);
+  gtk_widget_set_tooltip_text(g->chromatic_contrast,
+    _("Mid-tone chromatic contrast boost. Adds saturation in mid-tones while protecting highlights and pastels."));
 
   g->color_look = dt_bauhaus_combobox_from_params(self, "color_look");
   gtk_widget_set_tooltip_text(g->color_look, _("Apply a color style to the image."));
