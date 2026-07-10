@@ -63,7 +63,6 @@ typedef struct dt_st_cl_params_t
   float ssts_n;
   float look_opacity;
   float hl_detail_recovery;
-  float hl_power;
   float spectral_boundary[360];
   int   look_idx;            // 0 = no look, 1..10 = color_look_mat is active
   int   gamut_enable;
@@ -83,7 +82,7 @@ static inline float st_compute_y_tm(const float y_scene, const dt_st_cl_params_t
 {
   if(p->ssts_n <= 0.0f) return 0.0f;
 
-  float y_tm = st_ssts_fwd(p, y_scene * p->exposure_factor) / p->ssts_n;
+  float y_tm = st_ssts_fwd(p, y_scene * p->exposure_factor) / p->ssts_n_r;
 
   /* BT.1886 OETF */
   y_tm = pow(fmax(y_tm, 0.0f), 1.0f / 2.4f);
@@ -112,14 +111,6 @@ static inline float st_compute_y_tm(const float y_scene, const dt_st_cl_params_t
       const float exp_eff = c * (cs + (1.0f - cs) * t);
       y_tm = 1.0f - rp * pow(fmax((1.0f - y_tm) / rp, 0.0f), exp_eff);
     }
-  }
-
-  /* Highlight boost intégré à la courbe */
-  if(p->hl_power != 1.0f)
-  {
-    const float hl_w = y_tm * y_tm;
-    y_tm = y_tm + (1.0f - y_tm) * (p->hl_power - 1.0f) * hl_w;
-    y_tm = fmin(y_tm, 1.0f);
   }
 
   return y_tm;

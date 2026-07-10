@@ -71,7 +71,7 @@
 #include <stdio.h>
 #include <string.h>
 
-DT_MODULE_INTROSPECTION(8, dt_iop_3dcf_params_t)
+DT_MODULE_INTROSPECTION(9, dt_iop_3dcf_params_t)
 
 /* Type definitions for the ACES 2.0 SSTS pipeline context.
  * spectral_tone_data.c and spectral_tone_pipeline.c have been merged into 3dcf.c
@@ -113,12 +113,13 @@ typedef struct dt_iop_3dcf_params_t
   float gamma;                 // $MIN: -1 $MAX: 1 $DEFAULT: 0 $DESCRIPTION: "gamma"
   float vibrance;              // $MIN: 0 $MAX: 2 $DEFAULT: 1.0 $DESCRIPTION: "vibrance"
   float chromatic_boost;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $STEP: 0.01 $DESCRIPTION: "chromatic boost"
-  float spectral_brilliance;   // $MIN: 0 $MAX: 100 $DEFAULT: 5 $DESCRIPTION: "perceptual brightness"
-  float hl_hue_shift;          // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "Abney rotation"
-  float hl_desaturation;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.25 $DESCRIPTION: "highlight roll-off"
-  float hl_desat_threshold;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.50 $DESCRIPTION: "desaturation threshold"
-  float gamut_knee;            // $MIN: 0 $MAX: 1 $DEFAULT: 0.20 $DESCRIPTION: "gamut knee"
-  float gamut_steepness;       // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "gamut steepness"
+  float peak_luminance;     // $MIN: -100 $MAX: 100 $DEFAULT: 0 $DESCRIPTION: "peak luminance"
+  float input_exposure;      // $MIN: -2 $MAX: 2 $DEFAULT: 0 $STEP: 0.05 $DESCRIPTION: "input exposure"
+  float hl_hue_shift;        // $MIN: -1 $MAX: 1 $DEFAULT: 0 $STEP: 0.01 $DESCRIPTION: "Abney rotation"
+  float hl_desaturation;     // $MIN: 0 $MAX: 1 $DEFAULT: 0.25 $DESCRIPTION: "highlight roll-off"
+  float hl_desat_threshold;  // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.50 $DESCRIPTION: "desaturation threshold"
+  float gamut_knee;          // $MIN: 0 $MAX: 1 $DEFAULT: 0.20 $DESCRIPTION: "gamut knee"
+  float gamut_steepness;     // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "gamut steepness"
   dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "color space"
   dt_iop_st_look_t color_look;       // $DEFAULT: DT_ST_LOOK_NEUTRAL $DESCRIPTION: "color look"
   float look_opacity;          // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "look opacity"
@@ -126,7 +127,6 @@ typedef struct dt_iop_3dcf_params_t
   float toe_power;             // $MIN: 0.25 $MAX: 3.0 $DEFAULT: 1.0 $DESCRIPTION: "toe power"
   float shoulder_power;        // $MIN: 0.25 $MAX: 3.0 $DEFAULT: 1.0 $DESCRIPTION: "shoulder power"
   float hl_detail_recovery;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.20 $DESCRIPTION: "detail recovery"
-  float hl_exposure;           // $MIN: 1.0 $MAX: 2.0 $DEFAULT: 1.5 $DESCRIPTION: "highlight power"
 } dt_iop_3dcf_params_t;
 
 /* SSTS (ACES 2.0 Single-Stage Tone Scale) precomputed parameters */
@@ -163,7 +163,6 @@ typedef struct
   float toe_power;
   float shoulder_power;
   float hl_detail_recovery;
-  float hl_power;
   float spectral_boundary[360];  /* max CIE xz distance from D50 per angle degree */
   float gamut_fwd[9];
   float gamut_inv[9];
@@ -213,7 +212,6 @@ typedef struct dt_st_cl_params_t
   float ssts_n;
   float look_opacity;
   float hl_detail_recovery;
-  float hl_power;
   float spectral_boundary[360];
   int   look_idx;
   int   gamut_enable;
@@ -231,7 +229,8 @@ typedef struct dt_iop_3dcf_gui_data_t
   GtkWidget *contrast_pivot;
   GtkWidget *toe_power;
   GtkWidget *shoulder_power;
-  GtkWidget *spectral_brilliance;
+  GtkWidget *peak_luminance;
+  GtkWidget *input_exposure;
   GtkWidget *mid_tone;
   GtkWidget *vibrance;
   GtkWidget *chromatic_boost;
@@ -239,7 +238,6 @@ typedef struct dt_iop_3dcf_gui_data_t
   GtkWidget *hl_desat_threshold;
   GtkWidget *hl_hue_shift;
   GtkWidget *hl_detail_recovery;
-  GtkWidget *hl_power;
   GtkWidget *gamut_knee;
   GtkWidget *gamut_steepness;
   dt_gui_collapsible_section_t advanced_section;
@@ -428,7 +426,7 @@ float dt_st_compute_y_tm(float y_scene, const dt_st_context_t *ctx)
   if(ctx->ssts.n <= 0.0) return 0.0f;
 
   float y_tm = dt_st_ssts_fwd(&ctx->ssts, y_scene * ctx->exposure_factor)
-             / (float)ctx->ssts.n;
+             / (float)ctx->ssts.n_r;
 
   y_tm = powf(fmaxf(y_tm, 0.0f), 1.0f / 2.4f);
 
@@ -455,14 +453,6 @@ float dt_st_compute_y_tm(float y_scene, const dt_st_context_t *ctx)
       const float exp_eff = c * (cs + (1.0f - cs) * t);
       y_tm = 1.0f - rp * powf(fmaxf((1.0f - y_tm) / rp, 0.0f), exp_eff);
     }
-  }
-
-  /* Highlight power — intégré à la courbe pour visibilité sur le graphique */
-  if(ctx->hl_power != 1.0f)
-  {
-    const float hl_w = y_tm * y_tm;
-    y_tm = y_tm + (1.0f - y_tm) * (ctx->hl_power - 1.0f) * hl_w;
-    y_tm = fminf(y_tm, 1.0f);
   }
 
   return y_tm;
@@ -1166,15 +1156,8 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
 static void st_compute_context(dt_iop_3dcf_params_t *p,
                                 dt_st_context_t *ctx)
 {
-  /* Auto-exposure compensation: single slider controls both SSTS tone curve
-   * character and brightness. Higher spectral brilliance makes SSTS less
-   * compressive, requiring positive exposure to maintain consistent perceived
-   * brightness. Formula auto_ev = 0.061 × spectral_brilliance ensures 18% gray
-   * and diffuse white map to the same BT.1886 output at any brilliance value. */
-  {
-    const double auto_ev = 0.061 * (double)p->spectral_brilliance;
-    ctx->exposure_factor = exp2f((float)auto_ev);
-  }
+  /* Exposure factor from independent EV slider (ACES 2.0 parity) */
+  ctx->exposure_factor = exp2f(p->input_exposure);
 
   /* === Combined input matrix: Rec.2020 D50 RGB → D50 XYZ === */
   {
@@ -1223,7 +1206,6 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
   ctx->toe_power = fmaxf(p->toe_power, 0.0f);
   ctx->shoulder_power = fmaxf(p->shoulder_power, 0.0f);
   ctx->hl_detail_recovery = fmaxf(p->hl_detail_recovery, 0.0f);
-  ctx->hl_power = fmaxf(p->hl_exposure, 1.0f);
 
   /* Output gamut protection matrices from pre-computed lookup table */
   {
@@ -1272,10 +1254,12 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
   ctx->vibrance = fmaxf(p->vibrance, 0.0f);
   ctx->chromatic_boost = fmaxf(p->chromatic_boost, 0.0f);
 
-  /* Initialize ACES 2.0 SSTS for the target roll-off character */
-  const double rolloff_t = fmin(fmax((double)p->spectral_brilliance / 100.0, 0.0), 1.0);
-  const double peak = 100.0 * pow(100.0, rolloff_t);
-  dt_st_ssts_init(&ctx->ssts, peak);
+  /* Initialize ACES 2.0 SSTS from peak_luminance (%, 0% = 200 nits) */
+  {
+    const float hp = p->peak_luminance / 100.0f; /* -1 .. 1 */
+    const double peak = 200.0 * (1.0 + (double)hp);
+    dt_st_ssts_init(&ctx->ssts, peak);
+  }
 }
 
 /* Begin framework functions */
@@ -1313,7 +1297,9 @@ int legacy_params(dt_iop_module_t *self,
     new_p->contrast            = old->contrast;
     new_p->gamma               = old->gray_point;
     new_p->vibrance            = old->vibrance;
-    new_p->spectral_brilliance = old->spectral_brilliance;
+    new_p->peak_luminance     = 0.0f;
+    new_p->input_exposure      = 0.0f;
+    new_p->chromatic_boost     = 0.0f;
     new_p->hl_hue_shift        = old->hl_hue_shift;
     new_p->hl_desaturation     = old->hl_desaturation;
     new_p->hl_desat_threshold  = old->hl_desat_threshold;
@@ -1326,12 +1312,10 @@ int legacy_params(dt_iop_module_t *self,
     new_p->toe_power           = old->toe_power;
     new_p->shoulder_power      = old->shoulder_power;
     new_p->hl_detail_recovery  = 0.0f;
-    new_p->hl_exposure         = 1.0f;
-    new_p->chromatic_boost  = 0.0f;
 
     *new_params = new_p;
     *new_params_size = sizeof(dt_iop_3dcf_params_t);
-    *new_version = 8;
+    *new_version = 9;
     return 0;
   }
 
@@ -1364,7 +1348,9 @@ int legacy_params(dt_iop_module_t *self,
     new_p->contrast            = old->contrast;
     new_p->gamma               = old->gray_point;
     new_p->vibrance            = old->vibrance;
-    new_p->spectral_brilliance = old->spectral_brilliance;
+    new_p->peak_luminance     = 0.0f;
+    new_p->input_exposure      = 0.0f;
+    new_p->chromatic_boost     = 0.0f;
     new_p->hl_hue_shift        = old->hl_hue_shift;
     new_p->hl_desaturation     = old->hl_desaturation;
     new_p->hl_desat_threshold  = old->hl_desat_threshold;
@@ -1377,12 +1363,10 @@ int legacy_params(dt_iop_module_t *self,
     new_p->toe_power           = old->toe_power;
     new_p->shoulder_power      = old->shoulder_power;
     new_p->hl_detail_recovery  = old->hl_detail_recovery;
-    new_p->hl_exposure         = 1.0f;
-    new_p->chromatic_boost  = 0.0f;
 
     *new_params = new_p;
     *new_params_size = sizeof(dt_iop_3dcf_params_t);
-    *new_version = 8;
+    *new_version = 9;
     return 0;
   }
 
@@ -1416,7 +1400,9 @@ int legacy_params(dt_iop_module_t *self,
     new_p->contrast            = old->contrast;
     new_p->gamma               = old->gray_point;
     new_p->vibrance            = old->vibrance;
-    new_p->spectral_brilliance = old->spectral_brilliance;
+    new_p->peak_luminance     = 0.0f;
+    new_p->input_exposure      = 0.0f;
+    new_p->chromatic_boost     = 0.0f;
     new_p->hl_hue_shift        = old->hl_hue_shift;
     new_p->hl_desaturation     = old->hl_desaturation;
     new_p->hl_desat_threshold  = old->hl_desat_threshold;
@@ -1429,12 +1415,10 @@ int legacy_params(dt_iop_module_t *self,
     new_p->toe_power           = old->toe_power;
     new_p->shoulder_power      = old->shoulder_power;
     new_p->hl_detail_recovery  = old->hl_detail_recovery;
-    new_p->hl_exposure         = old->hl_exposure;
-    new_p->chromatic_boost  = 0.0f;
 
     *new_params = new_p;
     *new_params_size = sizeof(dt_iop_3dcf_params_t);
-    *new_version = 8;
+    *new_version = 9;
     return 0;
   }
 
@@ -1468,8 +1452,9 @@ int legacy_params(dt_iop_module_t *self,
     new_p->contrast            = old->contrast;
     new_p->gamma               = old->gamma;
     new_p->vibrance            = old->vibrance;
-    new_p->chromatic_boost  = 0.0f;
-    new_p->spectral_brilliance = old->spectral_brilliance;
+    new_p->peak_luminance     = 0.0f;
+    new_p->input_exposure      = 0.0f;
+    new_p->chromatic_boost     = 0.0f;
     new_p->hl_hue_shift        = old->hl_hue_shift;
     new_p->hl_desaturation     = old->hl_desaturation;
     new_p->hl_desat_threshold  = old->hl_desat_threshold;
@@ -1482,11 +1467,26 @@ int legacy_params(dt_iop_module_t *self,
     new_p->toe_power           = old->toe_power;
     new_p->shoulder_power      = old->shoulder_power;
     new_p->hl_detail_recovery  = old->hl_detail_recovery;
-    new_p->hl_exposure         = old->hl_exposure;
 
     *new_params = new_p;
     *new_params_size = sizeof(dt_iop_3dcf_params_t);
-    *new_version = 8;
+    *new_version = 9;
+    return 0;
+  }
+
+  // v8 → v9: spectral_brilliance split into peak_luminance + input_exposure
+  if(old_version == 8)
+  {
+    const dt_iop_3dcf_params_t *old = old_params;
+    dt_iop_3dcf_params_t *new_p = malloc(sizeof(dt_iop_3dcf_params_t));
+
+    *new_p = *old;
+    new_p->peak_luminance = 0.0f;
+    new_p->input_exposure = 0.0f;
+
+    *new_params = new_p;
+    *new_params_size = sizeof(dt_iop_3dcf_params_t);
+    *new_version = 9;
     return 0;
   }
 
@@ -1837,7 +1837,6 @@ static void st_fill_cl_params(const dt_iop_3dcf_data_t *d,
   clp->toe_power       = ctx->toe_power;
   clp->shoulder_power  = ctx->shoulder_power;
   clp->hl_detail_recovery = ctx->hl_detail_recovery;
-  clp->hl_power           = ctx->hl_power;
 
   for(int i = 0; i < 9; i++) clp->gamut_fwd[i] = ctx->gamut_fwd[i];
   for(int i = 0; i < 9; i++) clp->gamut_inv[i] = ctx->gamut_inv[i];
@@ -1966,7 +1965,8 @@ void init_presets(dt_iop_module_so_t *self)
   dt_iop_3dcf_params_t p;
   memset(&p, 0, sizeof(p));
   p.contrast = 2.25f;
-  p.spectral_brilliance = 5.0f;
+  p.peak_luminance = 0.0f;
+  p.input_exposure = 0.0f;
   p.gamma = 0.0f;
   p.vibrance = 1.0f;
   p.chromatic_boost = 0.0f;
@@ -1982,7 +1982,6 @@ void init_presets(dt_iop_module_so_t *self)
   p.toe_power = 1.0f;
   p.shoulder_power = 1.0f;
   p.hl_detail_recovery = 0.20f; //CB
-  p.hl_exposure = 1.5f;
 
   if(auto_apply_st)
   {
@@ -2016,8 +2015,8 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->contrast_pivot, p->contrast_pivot);
   dt_bauhaus_slider_set(g->shoulder_power, p->shoulder_power);
   dt_bauhaus_slider_set(g->toe_power, p->toe_power);
-  dt_bauhaus_slider_set(g->spectral_brilliance, p->spectral_brilliance);
-  dt_bauhaus_slider_set(g->hl_power, p->hl_exposure);
+  dt_bauhaus_slider_set(g->input_exposure, p->input_exposure);
+  dt_bauhaus_slider_set(g->peak_luminance, p->peak_luminance);
   dt_bauhaus_slider_set(g->mid_tone, p->gamma);
   dt_bauhaus_slider_set(g->vibrance, p->vibrance);
   dt_bauhaus_slider_set(g->chromatic_boost, p->chromatic_boost);
@@ -2201,7 +2200,7 @@ static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf,
     darktable.bauhaus->graph_fg.green,
     darktable.bauhaus->graph_fg.blue, 0.25f,
     ({
-      float _y = dt_st_ssts_fwd(&ctx.ssts, y_scene * ctx.exposure_factor) / (float)ctx.ssts.n;
+      float _y = dt_st_ssts_fwd(&ctx.ssts, y_scene * ctx.exposure_factor) / (float)ctx.ssts.n_r;
       powf(fmaxf(_y, 0.0f), 1.0f / 2.4f);
     }));
 
@@ -2362,21 +2361,20 @@ void gui_init(dt_iop_module_t *self)
   /* === TONE section === */
   dt_gui_box_add(GTK_BOX(main_vbox), dt_ui_section_label_new(C_("section", "tone")));
 
-  g->spectral_brilliance = dt_bauhaus_slider_from_params(self, "spectral_brilliance");
-  dt_bauhaus_slider_set_format(g->spectral_brilliance, "%");
-  gtk_widget_set_tooltip_text(g->spectral_brilliance,
-    _("Perceptual brightness: auto-exposure compensation with tone scale character. \n"
-      "Higher values increase highlight headroom with a softer, film-like rolloff. \n"
-      "Brightness is stabilised across the full range."));
+  g->input_exposure = dt_bauhaus_slider_from_params(self, "input_exposure");
+  dt_bauhaus_slider_set_format(g->input_exposure, _(" EV"));
+  dt_bauhaus_slider_set_digits(g->input_exposure, 2);
+  gtk_widget_set_tooltip_text(g->input_exposure,
+    _("Pre-SSTS exposure in EV steps. Positive values brighten the image \n"
+      "and push more signal into the SSTS. Negative values darken it. \n"
+      "0 EV = no compensation (ACES 2.0 reference)."));
 
-  g->hl_power = dt_bauhaus_slider_from_params(self, "hl_exposure");
-  dt_bauhaus_slider_set_factor(g->hl_power, 100.0f);
-  dt_bauhaus_slider_set_offset(g->hl_power, -150.0f);
-  dt_bauhaus_slider_set_format(g->hl_power, " %");
-  dt_bauhaus_slider_set_digits(g->hl_power, 0);
-  gtk_widget_set_tooltip_text(g->hl_power,
-    _("Highlight power: recovers overexposed highlights. \n"
-      "0% = default, negative dims, positive brightens."));
+  g->peak_luminance = dt_bauhaus_slider_from_params(self, "peak_luminance");
+  dt_bauhaus_slider_set_format(g->peak_luminance, _("%"));
+  gtk_widget_set_tooltip_text(g->peak_luminance,
+    _("Peak luminance: controls SSTS peak luminance via the tone scale character. \n"
+      "0% = 200 nits (ACES 2.0 reference). -100% = 0 nits (soft), +100% = 400 nits.\n"
+      "Higher values give more highlight headroom with a gentler roll-off."));
 
   g->contrast = dt_bauhaus_slider_from_params(self, "contrast");
   dt_bauhaus_slider_set_factor(g->contrast, 50.0f);
