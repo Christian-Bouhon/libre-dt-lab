@@ -1014,30 +1014,49 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
 
   /* Step 8: Film-print highlight desaturation toward white */
   {
+    /* Abney hue rotation tied to SSTS compression ratio.
+     * weight = 1.0 for extreme highlights, 0 for midtones/shadows.
+     * hl_hue_shift controls the exponent: +1 → weight = 1 everywhere,
+     * 0 → weight = sqrt(comp_factor), -1 → weight = comp_factor. */
     const float y_exposed = y_abs * ctx->exposure_factor;
-
-    /* Progressive Abney hue rotation — independent of hl_desat, only on
-     * highlight luminance exceeding the threshold. */
-    if(ctx->hl_rotation != 0.0f && isfinite(y_exposed))
+    float hl_weight = 0.0f;
+    if(ctx->hl_rotation != 0.0f && y_abs > 1e-10f)
     {
-      const float wr = fminf(st_desat_weight(y_exposed, 1.0f, ctx->hl_desat_threshold), 1.0f);
-      if(wr > 0.0f)
+      const float compression = fminf(y_tm / (y_abs * ctx->exposure_factor), 1.0f);
+      const float comp_factor = 1.0f - compression;
+      const float exp_power = fmaxf(1.0f * (1.0f - fabsf(ctx->hl_rotation)), 0.1f);
+      hl_weight = powf(fmaxf(comp_factor, 1e-10f), exp_power);
+      const float max_angle = 1.0f; //CB
+      const float angle = ctx->hl_rotation * max_angle * hl_weight;
+      const float ca = cosf(angle);
+      const float sa = sinf(angle);
+      if(isfinite(ca) && isfinite(sa))
       {
-        const float angle = ctx->hl_rotation * 0.25f * wr; //CB
-        const float ca = cosf(angle);
-        const float sa = sinf(angle);
-        if(isfinite(ca) && isfinite(sa))
+        const float *lc = ctx->luma_coeff;
+        const float y = lc[0] * rgb[0] + lc[1] * rgb[1] + lc[2] * rgb[2];
+        float u = rgb[0] - y;
+        float v = rgb[2] - y;
+        const float ur = u * ca - v * sa;
+        const float vr = u * sa + v * ca;
+
+        /* Chroma clamp: scale uv to keep rotated RGB in [0,1] */
         {
-          const float *lc = ctx->luma_coeff;
-          const float y = lc[0] * rgb[0] + lc[1] * rgb[1] + lc[2] * rgb[2];
-          float u = rgb[0] - y;
-          float v = rgb[2] - y;
-          const float ur = u * ca - v * sa;
-          const float vr = u * sa + v * ca;
-          rgb[0] = y + ur;
-          rgb[2] = y + vr;
+          float t = 1.0f;
+          if(ur > 0.0f) t = fminf(t, (1.0f - y) / ur);
+          if(ur < 0.0f) t = fminf(t, -y / ur);
+          if(vr > 0.0f) t = fminf(t, (1.0f - y) / vr);
+          if(vr < 0.0f) t = fminf(t, -y / vr);
           if(lc[1] > 0.0f)
-            rgb[1] = y - (lc[0] / lc[1]) * ur - (lc[2] / lc[1]) * vr;
+          {
+            const float g_d = -(lc[0] * ur + lc[2] * vr) / lc[1];
+            if(g_d > 0.0f) t = fminf(t, (1.0f - y) / g_d);
+            if(g_d < 0.0f) t = fminf(t, -y / g_d);
+          }
+          t = fmaxf(t, 0.0f);
+          rgb[0] = y + t * ur;
+          rgb[2] = y + t * vr;
+          if(lc[1] > 0.0f)
+            rgb[1] = y - (lc[0] / lc[1]) * t * ur - (lc[2] / lc[1]) * t * vr;
         }
       }
     }
@@ -1050,22 +1069,13 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
       const float sat_pre = (maxc_pre > 0.0f) ? (maxc_pre - minc_pre) / maxc_pre : 0.0f;
       const float ss_pre = (sat_pre * sat_pre) / (sat_pre * sat_pre + (1.0f - sat_pre) * (1.0f - sat_pre) + 1e-6f);
 
-      /* Negative vibrance: desaturate saturated pixels more, driven by hl_desat and hl_hue_shift */
+      /* Negative vibrance: desaturate saturated pixels more, driven by hl_desat */
       float w_final = w;
-      if(ctx->hl_desat > 0.0f || ctx->hl_rotation != 0.0f)
+      if(ctx->hl_desat > 0.0f)
       {
-        if(ctx->hl_desat > 0.0f)
-        {
-          const float vib_neg = ctx->hl_desat * ss_pre * 0.35f;
-          const float w_vib = st_desat_weight(y_exposed, 1.0f, ctx->hl_desat_threshold) * vib_neg;
-          w_final = fminf(w_final + w_vib, 1.0f);
-        }
-        if(ctx->hl_rotation != 0.0f)
-        {
-          const float vib_neg = fabsf(ctx->hl_rotation) * ss_pre * 1.0f;
-          const float w_rot = st_desat_weight(y_exposed, 1.0f, ctx->hl_desat_threshold) * vib_neg;
-          w_final = fmaxf(w_final, w_rot);
-        }
+        const float vib_neg = ctx->hl_desat * ss_pre * 0.35f;
+        const float w_vib = st_desat_weight(y_exposed, 1.0f, ctx->hl_desat_threshold) * vib_neg;
+        w_final = fminf(w_final + w_vib, 1.0f);
       }
 
       /* Blend toward white with linear ramp */
