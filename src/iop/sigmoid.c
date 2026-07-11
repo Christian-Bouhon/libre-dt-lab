@@ -848,14 +848,16 @@ int process_cl(dt_iop_module_t *self,
     err = dt_opencl_enqueue_kernel_2d_args(
         devid, gd->kernel_sigmoid_loglogistic_per_channel, width, height, CLARG(dev_in), CLARG(dev_out),
         CLARG(width), CLARG(height), CLARG(d->white_target), CLARG(d->paper_exposure), CLARG(d->film_fog), CLARG(d->film_power),
-        CLARG(d->paper_power), CLARG(d->hue_preservation), CLARG(dev_pipe_to_base), CLARG(dev_base_to_rendering), CLARG(dev_rendering_to_pipe));
+        CLARG(d->paper_power), CLARG(d->hue_preservation), CLARG(dev_pipe_to_base), CLARG(dev_base_to_rendering), CLARG(dev_rendering_to_pipe),
+        CLARG(d->input_exposure_factor));
   }
   else
   {
     err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_sigmoid_loglogistic_rgb_ratio, width, height,
                                            CLARG(dev_in), CLARG(dev_out), CLARG(width), CLARG(height),
                                            CLARG(d->white_target), CLARG(d->black_target), CLARG(d->paper_exposure),
-                                           CLARG(d->film_fog), CLARG(d->film_power), CLARG(d->paper_power));
+                                           CLARG(d->film_fog), CLARG(d->film_power), CLARG(d->paper_power),
+                                           CLARG(d->input_exposure_factor));
   }
 
 cleanup:

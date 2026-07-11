@@ -2856,7 +2856,8 @@ int process_cl(dt_iop_module_t *self,
     CLARG(dev_base_to_rendering),
     CLARG(dev_rendering_to_pipe),
     CLARG(dev_rendering_to_xyz),
-    CLARG(base_working_same_profile)
+    CLARG(base_working_same_profile),
+    CLARG(d->input_exposure_factor)
   );
 
 cleanup:

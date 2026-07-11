@@ -806,14 +806,17 @@ filmicrgb_split (read_only image2d_t in, write_only image2d_t out,
                  constant const float *const matrix_in, constant const float *const matrix_out,
                  const float display_black, const float display_white,
                  const int use_output_profile,
-                 constant const float *const export_matrix_in, constant const float *const export_matrix_out)
+                 constant const float *const export_matrix_in, constant const float *const export_matrix_out,
+                 const float input_exposure_factor)
 {
   const unsigned int x = get_global_id(0);
   const unsigned int y = get_global_id(1);
 
   if(x >= width || y >= height) return;
 
-  const float4 i = readpixel(in, x, y);
+  float4 i = readpixel(in, x, y);
+  // apply input exposure compensation
+  i.xyz *= input_exposure_factor;
   float4 o;
 
   const dt_iop_filmicrgb_curve_type_t type[2] = { type_1, type_2 };
@@ -971,14 +974,17 @@ filmicrgb_chroma (read_only image2d_t in, write_only image2d_t out,
                  const float display_black, const float display_white,
                  const int use_output_profile,
                  constant const float *const export_matrix_in, constant const float *const export_matrix_out,
-                 const float norm_min, const float norm_max)
+                 const float norm_min, const float norm_max,
+                 const float input_exposure_factor)
 {
   const unsigned int x = get_global_id(0);
   const unsigned int y = get_global_id(1);
 
   if(x >= width || y >= height) return;
 
-  const float4 i = readpixel(in, x, y);
+  float4 i = readpixel(in, x, y);
+  // apply input exposure compensation
+  i.xyz *= input_exposure_factor;
   float4 o;
 
   const dt_iop_filmicrgb_curve_type_t type[2] = { type_1, type_2 };

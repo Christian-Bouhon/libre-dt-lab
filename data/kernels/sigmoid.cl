@@ -186,7 +186,8 @@ sigmoid_loglogistic_per_channel (read_only image2d_t in,
                                  const float hue_preservation,
                                  constant const float *const pipe_to_base,
                                  constant const float *const base_to_rendering,
-                                 constant const float *const rendering_to_pipe)
+                                 constant const float *const rendering_to_pipe,
+                                 const float input_exposure_factor)
 {
   const unsigned int x = get_global_id(0);
   const unsigned int y = get_global_id(1);
@@ -195,6 +196,9 @@ sigmoid_loglogistic_per_channel (read_only image2d_t in,
 
   float4 i = Areadpixel(in, x, y);
   float alpha = i.w;
+
+  // apply input exposure compensation in linear RGB base space
+  i.xyz *= input_exposure_factor;
 
   i = matrix_product_float4(i, pipe_to_base);
 
@@ -232,7 +236,8 @@ sigmoid_loglogistic_rgb_ratio(read_only image2d_t in,
                               const float paper_exp,
                               const float film_fog,
                               const float contrast_power,
-                              const float skew_power)
+                              const float skew_power,
+                              const float input_exposure_factor)
 {
   const unsigned int x = get_global_id(0);
   const unsigned int y = get_global_id(1);
@@ -242,6 +247,8 @@ sigmoid_loglogistic_rgb_ratio(read_only image2d_t in,
   float4 i = Areadpixel(in, x, y);
   float alpha = i.w;
 
+  // apply input exposure compensation
+  i.xyz *= input_exposure_factor;
 
   // Force negative values to zero
   i = _desaturate_negative_values(i);

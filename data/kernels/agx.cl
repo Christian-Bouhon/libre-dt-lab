@@ -223,7 +223,8 @@ __kernel void kernel_agx(
     constant float *base_to_rendering,
     constant float *rendering_to_pipe,
     constant float *rendering_to_xyz,
-    const int base_working_same_profile
+    const int base_working_same_profile,
+    const float input_exposure_factor
 )
 {
     const int i = get_global_id(0);
@@ -245,6 +246,9 @@ __kernel void kernel_agx(
     {
         base_rgb = matrix_product_float4(in_pixel, pipe_to_base);
     }
+
+    // apply input exposure compensation in linear RGB base space
+    base_rgb *= input_exposure_factor;
 
     _agx_compress_into_gamut(&base_rgb);
 

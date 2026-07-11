@@ -1418,11 +1418,18 @@ static inline void filmic_split_v1(const float *const restrict in,
   for(size_t k = 0; k < height * width * 4; k += 4)
   {
     const float *const restrict pix_in = in + k;
+
+    // Apply input exposure compensation
+    dt_aligned_pixel_t pix_scaled;
+    for_each_channel(c)
+      pix_scaled[c] = pix_in[c] * data->input_exposure_factor;
+    pix_scaled[3] = pix_in[3];
+
     dt_aligned_pixel_t temp;
 
     // Log tone-mapping
     for(int c = 0; c < 3; c++)
-      temp[c] = log_tonemapping_v1(MAX(pix_in[c], NORM_MIN), data->grey_source, data->black_source,
+      temp[c] = log_tonemapping_v1(MAX(pix_scaled[c], NORM_MIN), data->grey_source, data->black_source,
                                    data->dynamic_range);
 
     // Get the desaturation coeff based on the log value
@@ -1464,9 +1471,16 @@ static inline void filmic_split_v2_v3(const float *const restrict in,
   for(size_t k = 0; k < height * width * 4; k += 4)
   {
     const float *const restrict pix_in = in + k;
+
+    // Apply input exposure compensation
+    dt_aligned_pixel_t pix_scaled;
+    for_each_channel(c)
+      pix_scaled[c] = pix_in[c] * data->input_exposure_factor;
+    pix_scaled[3] = pix_in[3];
+
     dt_aligned_pixel_t temp;
-    for_each_channel(c,aligned(pix_in,temp))
-      temp[c] = MAX(pix_in[c], NORM_MIN);
+    for_each_channel(c,aligned(pix_scaled,temp))
+      temp[c] = MAX(pix_scaled[c], NORM_MIN);
 
     // Log tone-mapping
     log_tonemapping_v2(temp, temp, data->grey_source, data->black_source, data->dynamic_range);
@@ -1507,12 +1521,18 @@ static inline void filmic_chroma_v1(const float *const restrict in, float *const
   {
     const float *const restrict pix_in = in + k;
 
+    // Apply input exposure compensation
+    dt_aligned_pixel_t pix_scaled;
+    for_each_channel(c)
+      pix_scaled[c] = pix_in[c] * data->input_exposure_factor;
+    pix_scaled[3] = pix_in[3];
+
     dt_aligned_pixel_t ratios = { 0.0f, 0.0f, 0.0f, 0.0f };
-    float norm = MAX(get_pixel_norm(pix_in, variant, work_profile), NORM_MIN);
+    float norm = MAX(get_pixel_norm(pix_scaled, variant, work_profile), NORM_MIN);
 
     // Save the ratios
-    for_each_channel(c,aligned(pix_in))
-      ratios[c] = pix_in[c] / norm;
+    for_each_channel(c,aligned(pix_scaled))
+      ratios[c] = pix_scaled[c] / norm;
 
     // Sanitize the ratios
     const float min_ratios = MIN(MIN(ratios[0], ratios[1]), ratios[2]);
@@ -1566,13 +1586,20 @@ static inline void filmic_chroma_v2_v3(const float *const restrict in,
   for(size_t k = 0; k < 4 * height * width; k += 4)
   {
     const float *const restrict pix_in = in + k;
-    float norm = MAX(get_pixel_norm(pix_in, variant, work_profile), NORM_MIN);
+
+    // Apply input exposure compensation
+    dt_aligned_pixel_t pix_scaled;
+    for_each_channel(c)
+      pix_scaled[c] = pix_in[c] * data->input_exposure_factor;
+    pix_scaled[3] = pix_in[3];
+
+    float norm = MAX(get_pixel_norm(pix_scaled, variant, work_profile), NORM_MIN);
 
     // Save the ratios
     dt_aligned_pixel_t ratios = { 0.0f };
 
-    for_each_channel(c,aligned(pix_in))
-      ratios[c] = pix_in[c] / norm;
+    for_each_channel(c,aligned(pix_scaled))
+      ratios[c] = pix_scaled[c] / norm;
 
     // Sanitize the ratios
     const float min_ratios = MIN(MIN(ratios[0], ratios[1]), ratios[2]);
@@ -1884,13 +1911,20 @@ static inline void filmic_chroma_v4(const float *const restrict in,
   for(size_t k = 0; k < 4 * height * width; k += 4)
   {
     const float *const restrict pix_in = in + k;
+
+    // Apply input exposure compensation
+    dt_aligned_pixel_t pix_scaled;
+    for_each_channel(c)
+      pix_scaled[c] = pix_in[c] * data->input_exposure_factor;
+    pix_scaled[3] = pix_in[3];
+
     dt_aligned_pixel_t pix_out;
-    norm_tone_mapping_v4(pix_in, pix_out, variant, work_profile, data, spline,
+    norm_tone_mapping_v4(pix_scaled, pix_out, variant, work_profile, data, spline,
                          norm_min, norm_max, display_black, display_white);
 
     // Save Ych in Kirk/Filmlight Yrg
     dt_aligned_pixel_t Ych_original = { 0.f };
-    RGB_to_Ych(pix_in, input_matrix_trans, Ych_original);
+    RGB_to_Ych(pix_scaled, input_matrix_trans, Ych_original);
 
     // Get final Ych in Kirk/Filmlight Yrg
     dt_aligned_pixel_t Ych_final = { 0.f };
@@ -1903,6 +1937,7 @@ static inline void filmic_chroma_v4(const float *const restrict in,
   }
   dt_omploop_sfence();	// ensure that nontemporal writes complete before we attempt to read output
 }
+
 
 static inline void filmic_split_v4(const float *const restrict in,
                                    float *const restrict out,
@@ -1935,13 +1970,20 @@ static inline void filmic_split_v4(const float *const restrict in,
   for(size_t k = 0; k < 4 * height * width; k += 4)
   {
     const float *const restrict pix_in = in + k;
+
+    // Apply input exposure compensation
+    dt_aligned_pixel_t pix_scaled;
+    for_each_channel(c)
+      pix_scaled[c] = pix_in[c] * data->input_exposure_factor;
+    pix_scaled[3] = pix_in[3];
+
     dt_aligned_pixel_t pix_out;
 
-    RGB_tone_mapping_v4(pix_in, pix_out, data, spline, display_black, display_white);
+    RGB_tone_mapping_v4(pix_scaled, pix_out, data, spline, display_black, display_white);
 
     // Save Ych in Kirk/Filmlight Yrg
     dt_aligned_pixel_t Ych_original = { 0.f };
-    RGB_to_Ych(pix_in, input_matrix_trans, Ych_original);
+    RGB_to_Ych(pix_scaled, input_matrix_trans, Ych_original);
 
     // Get final Ych in Kirk/Filmlight Yrg
     dt_aligned_pixel_t Ych_final = { 0.f };
@@ -2557,7 +2599,7 @@ int process_cl(dt_iop_module_t *self,
       CLARG(spline.latitude_min), CLARG(spline.latitude_max), CLARG(d->output_power), CLARG(d->version),
       CLARG(spline.type[0]), CLARG(spline.type[1]), CLARG(input_matrix_cl), CLARG(output_matrix_cl),
       CLARG(black_display), CLARG(white_display), CLARG(use_output_profile), CLARG(export_input_matrix_cl),
-      CLARG(export_output_matrix_cl));
+      CLARG(export_output_matrix_cl), CLARG(d->input_exposure_factor));
   }
   else
   {
@@ -2569,7 +2611,8 @@ int process_cl(dt_iop_module_t *self,
       CLARG(spline.latitude_min), CLARG(spline.latitude_max), CLARG(d->output_power), CLARG(d->preserve_color),
       CLARG(d->version), CLARG(spline.type[0]), CLARG(spline.type[1]), CLARG(input_matrix_cl), CLARG(output_matrix_cl),
       CLARG(black_display), CLARG(white_display), CLARG(use_output_profile), CLARG(export_input_matrix_cl),
-      CLARG(export_output_matrix_cl), CLARG(norm_min), CLARG(norm_max));
+      CLARG(export_output_matrix_cl), CLARG(norm_min), CLARG(norm_max),
+      CLARG(d->input_exposure_factor));
   }
 
 error:
