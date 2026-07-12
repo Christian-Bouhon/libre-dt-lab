@@ -530,7 +530,8 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
   }
 
   /* Step 10: gamut compression */
-  rgb = st_gamut_compress(rgb, p->luma_coeff);
+  const float lc[3] = { p->luma_coeff[0], p->luma_coeff[1], p->luma_coeff[2] };
+  rgb = st_gamut_compress(rgb, lc);
 
   /* Output gamut protection: clamp to selected primary space */
   if(p->gamut_enable)
