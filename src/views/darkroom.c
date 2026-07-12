@@ -591,6 +591,12 @@ void expose(dt_view_t *self,
         port->pipe->backbuf                                // do we have an image?
      && port->pipe->output_imgid == dev->image_storage.id; // same image?
 
+  const gboolean use_loading_screen =
+#ifdef _WIN32
+    TRUE;
+#else
+    dt_conf_get_bool("darkroom/ui/loading_screen");
+#endif
   if(expose_full)
   {
     // draw image
@@ -601,7 +607,7 @@ void expose(dt_view_t *self,
       cairo_surface_destroy(darktable.gui->surface);
       darktable.gui->surface = NULL;
     }
-    if(!dt_conf_get_bool("darkroom/ui/loading_screen"))
+    if(!use_loading_screen)
     {
       // cache the rendered bitmap for use while loading the next image
       darktable.gui->surface = cairo_get_target(cri);
@@ -687,14 +693,14 @@ _("libre-dt-lab could not load `%s', switching to lighttable now.\n\n"
     else
     {
       fontsize = DT_PIXEL_APPLY_DPI(14);
-      if(dt_conf_get_bool("darkroom/ui/loading_screen"))
+      if(use_loading_screen)
         load_txt = g_strdup_printf(C_("darkroom", "loading `%s' ..."),
                                    dev->image_storage.filename);
       else
         load_txt = g_strdup(dev->image_storage.filename);
     }
 
-    if(dt_conf_get_bool("darkroom/ui/loading_screen"))
+    if(use_loading_screen)
     {
       dt_gui_gtk_set_source_rgb(cri, DT_GUI_COLOR_DARKROOM_BG);
       cairo_paint(cri);
@@ -4215,12 +4221,14 @@ gboolean gesture_pan(dt_view_t *self,
   (void)state;
   if(!dev) return FALSE;
 
-  // Mask editing (brush etc.) uses scroll for tool parameters.
+  // If pointer is over an active mask, let scroll go to the mask handler;
+  // otherwise allow two-finger scroll to pan the image.
   if(dev->form_visible
-     && !darktable.develop->darkroom_skip_mouse_events)
+     && !darktable.develop->darkroom_skip_mouse_events
+     && dt_masks_scroll_over_mask())
   {
     dt_print(DT_DEBUG_INPUT,
-             "[darkroom pan] ignored: mask form active");
+             "[darkroom pan] ignored: pointer over active mask");
     return FALSE;
   }
 

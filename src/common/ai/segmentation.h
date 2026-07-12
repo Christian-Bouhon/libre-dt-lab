@@ -30,8 +30,8 @@
  * may be invoked from a background thread, the decoder typically
  * runs on the UI thread on a user click. Callers must serialise
  * dt_seg_encode_image / dt_seg_compute_mask / dt_seg_reset_*
- * against each other (and against dt_seg_free) — the prev_mask
- * field is mutated by both encode and compute.
+ * against each other (and against dt_seg_free) — the prev_mask and
+ * has_prev_mask fields are mutated by both encode and compute.
  */
 typedef struct dt_seg_context_t dt_seg_context_t;
 

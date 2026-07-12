@@ -322,8 +322,9 @@ static dt_iop_module_t *_find_cloned_module(dt_develop_t *dev, dt_iop_module_t *
   {
     dt_iop_module_t *mod = (dt_iop_module_t *)iter->data;
     // During cloning we preserve the instance ID and other unique fields
-    if(mod->instance == src_mod->instance && g_strcmp0(mod->op, src_mod->op) == 0 &&
-       mod->multi_priority == src_mod->multi_priority)
+    if(mod->instance == src_mod->instance
+       && g_strcmp0(mod->op, src_mod->op) == 0
+       && mod->multi_priority == src_mod->multi_priority)
       return mod;
   }
   return NULL;
@@ -3524,7 +3525,10 @@ dt_iop_module_t *dt_dev_module_duplicate_ext(dt_develop_t *dev,
   // we create the new module
   dt_iop_module_t *module = calloc(1, sizeof(dt_iop_module_t));
   if(dt_iop_load_module(module, base->so, base->dev))
+  {
+    free(module);
     return NULL;
+  }
   module->instance = base->instance;
 
   // we set the multi-instance priority and the iop order

@@ -795,6 +795,20 @@ static char *_get_version_string(void)
   const char *libraw_version = LIBRAW_VERSION_STR "\n";
 #endif
 
+#ifdef _WIN32
+  const char *system_name = "windows";
+#else
+  #ifdef __APPLE__
+    const char *system_name = "mac";
+  #else
+    #ifdef __linux__
+      const char *system_name = "linux";
+    #else
+      const char *system_name = "other";
+    #endif
+  #endif
+#endif
+
 #ifdef USE_LUA
   const char *lua_api_version = strcmp(LUA_API_VERSION_SUFFIX, "") ?
                                        STR(LUA_API_VERSION_MAJOR) "."
@@ -807,7 +821,7 @@ static char *_get_version_string(void)
 #endif
 
 char *version = g_strdup_printf(
-               "darktable %s\n"
+               "darktable %s [%s]\n"
                "Copyright (C) 2012-%s Johannes Hanika and other contributors.\n\n"
                "Compile options:\n"
                "  Bit depth              -> %zu bit\n"
@@ -815,6 +829,7 @@ char *version = g_strdup_printf(
                "See %s for detailed documentation.\n"
                "See %s to report bugs.\n",
                darktable_package_version,
+               system_name,
                darktable_last_commit_year,
                CHAR_BIT * sizeof(void *),
 
@@ -2082,9 +2097,11 @@ int dt_init(int argc,
   dt_capabilities_add("nonapple");
 #elif defined(__APPLE__)
   dt_capabilities_add("apple");
+  dt_capabilities_add("nonwindows");
 #else
   dt_capabilities_add("linux");
   dt_capabilities_add("nonapple");
+  dt_capabilities_add("nonwindows");
 #endif
 
   dt_print(DT_DEBUG_CONTROL,
@@ -2125,14 +2142,14 @@ void dt_get_sysresource_level()
   if(level != oldlevel)
   {
     oldlevel = res->level = level;
-    dt_print(DT_DEBUG_MEMORY | DT_DEBUG_DEV,
-             "[dt_get_sysresource_level] switched to `%s'", config);
-    dt_print(DT_DEBUG_MEMORY | DT_DEBUG_DEV,
-             "  total mem:       %luMB", res->total_memory / DT_MEGA);
-    dt_print(DT_DEBUG_MEMORY | DT_DEBUG_DEV,
-             "  available mem:   %luMB", dt_get_available_mem() / DT_MEGA);
-    dt_print(DT_DEBUG_MEMORY | DT_DEBUG_DEV,
-             "  singlebuff:      %luMB", dt_get_singlebuffer_mem() / DT_MEGA);
+    dt_print_nts(DT_DEBUG_MEMORY | DT_DEBUG_PIPE | DT_DEBUG_OPENCL,
+             "[dt_get_sysresource_level] switched to `%s'\n", config);
+    dt_print_nts(DT_DEBUG_MEMORY | DT_DEBUG_PIPE | DT_DEBUG_OPENCL,
+             "  total mem:       %luMB\n", res->total_memory / DT_MEGA);
+    dt_print_nts(DT_DEBUG_MEMORY | DT_DEBUG_PIPE | DT_DEBUG_OPENCL,
+             "  available mem:   %luMB\n", dt_get_available_mem() / DT_MEGA);
+    dt_print_nts(DT_DEBUG_MEMORY | DT_DEBUG_PIPE | DT_DEBUG_OPENCL,
+             "  singlebuff:      %luMB\n", dt_get_singlebuffer_mem() / DT_MEGA);
   }
 }
 
