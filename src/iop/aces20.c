@@ -1036,7 +1036,11 @@ static inline void _ac_build_hue_table(float hues[DT_AC_GAMUT_TABLE_SIZE],
     const _ac_corner_tables_t *limit,
     const _ac_corner_tables_t *reach)
 {
-  /* Collect 12 key hues: reach corners [1..6], limiting corners [1..6] */
+  /* Collect the 12 raw key hues: reach corners [1..6], limit corners [1..6].
+   * Deliberately NOT deduplicated here -- this matches the official
+   * build_hue_table() exactly, including its own collision-handling logic
+   * below for near-coincident hues (samples_count adjustment), rather than
+   * silently dropping duplicates beforehand. */
   float keys[12];
   int n_keys = 0;
 
@@ -1046,7 +1050,7 @@ static inline void _ac_build_hue_table(float hues[DT_AC_GAMUT_TABLE_SIZE],
     keys[n_keys++] = limit->jmh[i + 1][2];
   }
 
-  /* Insertion sort on n_keys (≤ 12, negligible cost) */
+  /* Insertion sort on n_keys (= 12, negligible cost) */
   for(int i = 1; i < n_keys; i++)
   {
     const float tmp = keys[i];
@@ -1059,42 +1063,75 @@ static inline void _ac_build_hue_table(float hues[DT_AC_GAMUT_TABLE_SIZE],
     keys[j + 1] = tmp;
   }
 
-  /* Deduplicate */
-  int nd = 0;
+  /* Per-segment sample count proportional to angular width (official
+   * build_hue_table): nominal_idx = round(hue * ideal_spacing), ideal_spacing
+   * = tableSize/hue_limit = 360/360 = 1. This replaces an earlier equal-share
+   * scheme (fixed ~360/n_keys samples per segment regardless of its angular
+   * width), which produced gaps up to ~2.8 deg in wide segments while wasting
+   * ~30 samples on segments under 1 deg wide -- worse local resolution than
+   * even a plain uniform 1 deg table in the wide segments. */
+  const float ideal_spacing = (float)DT_AC_TABLE_SIZE / 360.0f; /* = 1.0 */
+  int samples_count[12];
+  int last_idx = -1;
+  int min_index = (keys[0] == 0.0f) ? 0 : 1;
+
   for(int i = 0; i < n_keys; i++)
   {
-    if(nd == 0 || fabsf(keys[i] - keys[nd - 1]) > 1e-4f)
-      keys[nd++] = keys[i];
-  }
-  n_keys = nd;
+    int nominal_idx = (int)roundf(keys[i] * ideal_spacing);
+    if(nominal_idx < min_index) nominal_idx = min_index;
+    if(nominal_idx > DT_AC_TABLE_SIZE - 1) nominal_idx = DT_AC_TABLE_SIZE - 1;
 
-  /* Distribute 360 entries across n_keys segments.
-   * Each segment gets base = 360 / n_keys entries, with
-   * the first (360 % n_keys) segments getting one extra. */
-  const int base = 360 / n_keys;
-  const int extra = 360 % n_keys;
-  int pos = 0;
-  for(int s = 0; s < n_keys; s++)
-  {
-    const int a_idx = s;               /* key hue index */
-    const int b_idx = (s + 1) % n_keys; /* next key hue (wraps) */
-    const float ha = keys[a_idx];
-    const float hb = keys[b_idx] + (b_idx == 0 ? 360.0f : 0.0f); /* unwrap across 0 */
-    const int count = base + (s < extra ? 1 : 0);
-
-    for(int j = 0; j < count && pos < 360; j++)
+    if(last_idx == nominal_idx)
     {
-      const float t = (count > 1) ? (float)j / (float)(count - 1) : 0.0f;
-      hues[DT_AC_BASE_INDEX + pos++] = ha + t * (hb - ha);
+      /* Two consecutive key hues land on the same index: shrink the
+       * previous segment by one sample if possible, else bump this one. */
+      if(i > 1 && samples_count[i - 2] != samples_count[i - 1] - 1)
+        samples_count[i - 1] -= 1;
+      else
+        nominal_idx += 1;
     }
+    samples_count[i] = (nominal_idx < DT_AC_TABLE_SIZE - 1) ? nominal_idx : DT_AC_TABLE_SIZE - 1;
+    min_index = nominal_idx;
+    last_idx = min_index;
   }
 
-  /* Ensure we fill exactly 360 entries */
-  while(pos < 360)
+  int total_samples = 0;
+
+  /* First interval: [0, keys[0]) */
   {
-    hues[DT_AC_BASE_INDEX + pos] = hues[DT_AC_BASE_INDEX + pos - 1]
-      + (hues[DT_AC_BASE_INDEX + pos - 1] - hues[DT_AC_BASE_INDEX + pos - 2]);
-    pos++;
+    const int samples = samples_count[0];
+    if(samples > 0)
+    {
+      const float delta = (keys[0] - 0.0f) / (float)samples;
+      for(int j = 0; j < samples; j++)
+        hues[DT_AC_BASE_INDEX + total_samples + j] = (float)j * delta;
+    }
+    total_samples += samples;
+  }
+
+  /* Middle intervals: [keys[i-1], keys[i]) */
+  int i;
+  for(i = 1; i < n_keys; i++)
+  {
+    const int samples = samples_count[i] - samples_count[i - 1];
+    if(samples > 0)
+    {
+      const float delta = (keys[i] - keys[i - 1]) / (float)samples;
+      for(int j = 0; j < samples; j++)
+        hues[DT_AC_BASE_INDEX + total_samples + j] = keys[i - 1] + (float)j * delta;
+    }
+    total_samples += samples;
+  }
+
+  /* Final interval: [keys[n_keys-1], 360) */
+  {
+    const int samples = DT_AC_TABLE_SIZE - total_samples;
+    if(samples > 0)
+    {
+      const float delta = (360.0f - keys[n_keys - 1]) / (float)samples;
+      for(int j = 0; j < samples; j++)
+        hues[DT_AC_BASE_INDEX + total_samples + j] = keys[n_keys - 1] + (float)j * delta;
+    }
   }
 
   /* Padding entries for wraparound interpolation */
