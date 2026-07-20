@@ -432,7 +432,7 @@ static inline float reach_m_from_table(float h,
   const int lo = lookup_hue_index(h, p);
   const int hi = lo + 1;
   const float hw = wrap_hue(h);
-  const float t = (hw - p->table_hues[lo]) / (p->table_hues[hi] - p->table_hues[lo]);
+  const float t = (hw - p->table_hues[lo]) / fmax(p->table_hues[hi] - p->table_hues[lo], 1e-6f);
   return p->table_reach_m[lo] + t * (p->table_reach_m[hi] - p->table_reach_m[lo]);
 }
 
@@ -442,7 +442,7 @@ static inline void cusp_from_table(__private float cusp_out[2], float h,
   const int lo = lookup_hue_index(h, p);
   const int hi = lo + 1;
   const float hw = wrap_hue(h);
-  const float t = (hw - p->table_hues[lo]) / (p->table_hues[hi] - p->table_hues[lo]);
+  const float t = (hw - p->table_hues[lo]) / fmax(p->table_hues[hi] - p->table_hues[lo], 1e-6f);
   cusp_out[0] = p->table_cusp_j[lo] + t * (p->table_cusp_j[hi] - p->table_cusp_j[lo]);
   cusp_out[1] = p->table_cusp_m[lo] + t * (p->table_cusp_m[hi] - p->table_cusp_m[lo]);
 }
@@ -453,7 +453,7 @@ static inline float hue_upper_hull_gamma(float h,
   const int lo = lookup_hue_index(h, p);
   const int hi = lo + 1;
   const float hw = wrap_hue(h);
-  const float t = (hw - p->table_hues[lo]) / (p->table_hues[hi] - p->table_hues[lo]);
+  const float t = (hw - p->table_hues[lo]) / fmax(p->table_hues[hi] - p->table_hues[lo], 1e-6f);
   return p->table_upper_hull_gamma[lo] + t * (p->table_upper_hull_gamma[hi] - p->table_upper_hull_gamma[lo]);
 }
 
@@ -685,7 +685,7 @@ static inline void pipeline_eval(__private const float rgb_in[3],
 
   /* Step 10: Hard floor (reference: hardClip = fmax(v, 0.0f)) */
   for(int c = 0; c < 3; c++)
-    rgb_out[c] = max(rgb[c], 0.0f);
+    rgb_out[c] = isfinite(rgb[c]) ? max(rgb[c], 0.0f) : 0.0f;
 
   /* Optional Step 11 (NOT part of the official reference): soft clip to
    * display white (code-value 1.0). Off by default — see aces20.c. */

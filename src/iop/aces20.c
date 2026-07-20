@@ -1414,7 +1414,7 @@ static inline float _ac_reach_m_from_table(float h,
   const int lo = _ac_lookup_hue_index(h, hues, search_range);
   const int hi = lo + 1;
   const float hw = _ac_wrap_hue(h);
-  const float t = (hw - hues[lo]) / (hues[hi] - hues[lo]);
+  const float t = (hw - hues[lo]) / fmaxf(hues[hi] - hues[lo], 1e-6f);
   return reach_m[lo] + t * (reach_m[hi] - reach_m[lo]);
 }
 
@@ -1427,7 +1427,7 @@ static inline void _ac_cusp_from_table(float cusp_out[2], float h,
   const int lo = _ac_lookup_hue_index(h, hues, search_range);
   const int hi = lo + 1;
   const float hw = _ac_wrap_hue(h);
-  const float t = (hw - hues[lo]) / (hues[hi] - hues[lo]);
+  const float t = (hw - hues[lo]) / fmaxf(hues[hi] - hues[lo], 1e-6f);
 
   cusp_out[0] = cusps[lo][0] + t * (cusps[hi][0] - cusps[lo][0]);
   cusp_out[1] = cusps[lo][1] + t * (cusps[hi][1] - cusps[lo][1]);
@@ -1442,7 +1442,7 @@ static inline float _ac_hue_upper_hull_gamma(float h,
   const int lo = _ac_lookup_hue_index(h, hues, search_range);
   const int hi = lo + 1;
   const float hw = _ac_wrap_hue(h);
-  const float t = (hw - hues[lo]) / (hues[hi] - hues[lo]);
+  const float t = (hw - hues[lo]) / fmaxf(hues[hi] - hues[lo], 1e-6f);
   return gamma_table[lo] + t * (gamma_table[hi] - gamma_table[lo]);
 }
 
