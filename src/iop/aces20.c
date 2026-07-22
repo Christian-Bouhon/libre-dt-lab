@@ -2189,6 +2189,16 @@ void init(dt_iop_module_t *self)
   g_assert(self->default_params != NULL);
 }
 
+void reload_defaults(dt_iop_module_t *self)
+{
+  dt_iop_aces20_params_t *d = (dt_iop_aces20_params_t *)self->default_params;
+  const gboolean raw = dt_image_is_rawprepare_supported(&self->dev->image_storage);
+  if(raw && dt_is_scene_referred())
+    d->exposure_ev = 1.0f;
+  else
+    d->exposure_ev = 0.0f;
+}
+
 void cleanup(dt_iop_module_t *self)
 {
   dt_iop_default_cleanup(self);
@@ -2400,7 +2410,7 @@ void init_presets(dt_iop_module_so_t *self)
   memset(&p, 0, sizeof(p));
   p.peak_luminance = 200.0f;
   p.surround = DT_AC_SURROUND_DIM;
-  p.exposure_ev = 0.0f;
+  p.exposure_ev = 1.0f;
 
   if(auto_apply_st)
   {
