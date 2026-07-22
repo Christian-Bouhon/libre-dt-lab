@@ -374,9 +374,31 @@ int legacy_params(dt_iop_module_t *self,
   }
   if(old_version == 9)
   {
-    const dt_iop_basecurve_params_t *o = (dt_iop_basecurve_params_t *)old_params;
+    typedef struct dt_iop_basecurve_params_v9_t
+    {
+      dt_iop_basecurve_node_t basecurve[3][MAXNODES];
+      int basecurve_nodes[3];
+      int basecurve_type[3];
+      int exposure_fusion;
+      float exposure_stops;
+      float exposure_bias;
+      dt_iop_rgb_norms_t preserve_colors;
+      int workflow_mode;
+      float shadow_lift;
+      float highlight_gain;
+      float ucs_saturation_balance;
+      float saturation_boost;
+      float gamut_strength;
+      float highlight_corr;
+      int color_space;
+      int color_look;
+      float look_opacity;
+      float use_rolloff;
+    } dt_iop_basecurve_params_v9_t;
+
+    const dt_iop_basecurve_params_v9_t *o = (dt_iop_basecurve_params_v9_t *)old_params;
     dt_iop_basecurve_params_t *n = calloc(1, sizeof(dt_iop_basecurve_params_t));
-    memcpy(n, o, sizeof(dt_iop_basecurve_params_t));
+    memcpy(n, o, sizeof(dt_iop_basecurve_params_v9_t));
     n->contrast_brilliance_power = 1.10f;
     n->purity_boost = 0.0f;
     *new_params = n;
@@ -386,9 +408,33 @@ int legacy_params(dt_iop_module_t *self,
   }
   if(old_version == 10)
   {
-    dt_iop_basecurve_params_t *n = (dt_iop_basecurve_params_t *)calloc(1, sizeof(dt_iop_basecurve_params_t));
-    memcpy(n, old_params, sizeof(dt_iop_basecurve_params_t) - sizeof(float));
-    n->purity_boost = 0.0f;
+    typedef struct dt_iop_basecurve_params_v10_t
+    {
+      dt_iop_basecurve_node_t basecurve[3][MAXNODES];
+      int basecurve_nodes[3];
+      int basecurve_type[3];
+      int exposure_fusion;
+      float exposure_stops;
+      float exposure_bias;
+      dt_iop_rgb_norms_t preserve_colors;
+      int workflow_mode;
+      float shadow_lift;
+      float highlight_gain;
+      float ucs_saturation_balance;
+      float saturation_boost;
+      float gamut_strength;
+      float highlight_corr;
+      int color_space;
+      int color_look;
+      float look_opacity;
+      float use_rolloff;
+      float contrast_brilliance_power;
+      float purity_boost;
+    } dt_iop_basecurve_params_v10_t;
+
+    const dt_iop_basecurve_params_v10_t *o = (dt_iop_basecurve_params_v10_t *)old_params;
+    dt_iop_basecurve_params_t *n = calloc(1, sizeof(dt_iop_basecurve_params_t));
+    memcpy(n, o, sizeof(dt_iop_basecurve_params_v10_t));
     n->gamut_threshold_c = 0.15f;
     n->gamut_threshold_m = 0.15f;
     n->gamut_threshold_y = 0.15f;
@@ -1273,8 +1319,7 @@ int process_cl_lut(dt_iop_module_t *self,
                                            CLARG(dev_profile_lut), CLARG(use_work_profile));
   }
 
-  if(d->workflow_mode > 0 || d->color_look > 0 || d->gamut_strength > 0.0f
-     || d->purity_boost != 0.0f || d->highlight_corr != 0.0f || d->ucs_saturation_balance != 0.0f)
+  if(d->workflow_mode > 0 || d->color_look > 0)
   {
     err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_basecurve_finalize, width, height,
         CLARG(dev_in), CLARG(dev_tmp), CLARG(dev_out), CLARG(width), CLARG(height), CLARG(d->workflow_mode),
@@ -1636,9 +1681,9 @@ static void apply_postprocess(float *rgb, dt_iop_basecurve_data_t *const d,
   }
   if(d->shadow_lift != 1.0f && d->workflow_mode != 3)
   {
-    r = powf(r, d->shadow_lift);
-    g = powf(g, d->shadow_lift);
-    b = powf(b, d->shadow_lift);
+    r = (r > 0.0f) ? powf(r, d->shadow_lift) : r;
+    g = (g > 0.0f) ? powf(g, d->shadow_lift) : g;
+    b = (b > 0.0f) ? powf(b, d->shadow_lift) : b;
   }
 
   dt_aligned_pixel_t xyz = { 0 };
