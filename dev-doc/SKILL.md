@@ -28,6 +28,15 @@ git branch --show-current
 
 Treat untracked files as reviewable. Read the relevant commits individually as well as the aggregate diff. Verify author claims and new invariant comments against the implementation and sibling paths.
 
+### Designing vs. Hacking
+
+The official guide warns against "saturday-afternoon projects that lack polish, disregard ergonomics and got their inner colour science wrong." Before diving into code review, assess whether the change follows a design process:
+- Was the problem understood before coding? Are there traces of research, sketches, or specification?
+- Does the solution match a real user need, or is it a half-baked "toy"?
+- Is the approach consistent with how darktable's architecture is intended to work?
+
+Flag findings where the implementation shows signs of hacking rather than design: missing edge cases, hardcoded values where parameters belong, ignored colour science, or UI that contradicts darktable's interaction model.
+
 Read applicable `AGENTS.md` files. Use darktable's documentation to establish contracts, especially:
 
 - `dev-doc/pixelpipe_architecture.md`: pipe variants, hashes, cache invalidation, ROI, processing order
@@ -35,6 +44,15 @@ Read applicable `AGENTS.md` files. Use darktable's documentation to establish co
 - `dev-doc/GUI.md`: GUI/worker boundaries and widget lifecycle
 - `dev-doc/introspection.md`: parameter serialization and migration
 - `dev-doc/maths.md`: matrix convention, white points, and colour helpers
+- `src/iop/useless.c`: reference IOP boilerplate implementation
+- `src/iop/CMakeLists.txt`: IOP registration in the build
+- `tools/iop_dependencies.py`: IOP pixelpipe priority ordering
+
+Beyond the project's own docs, the [official Developer's Guide](https://github.com/darktable-org/darktable/wiki/Developer%27s-guide) covers:
+- Color management resources (Fairchild, ACES, handprint, Filmlight, etc.)
+- Writing efficient SIMD/vectorization/OpenMP code
+- Coding style conventions
+- Module structure and boilerplate
 
 Search nearby implementations and history for the intended invariant. A suspicious line is not a finding until reachability, state transition, and impact are established.
 
@@ -107,6 +125,48 @@ Treat `process()`, `process_cl()`, kernels, and tiling callbacks as implementati
 - For manual OpenMP partitioning, derive work ranges from loop iterations, not worker identity. Thread numbers are suitable only for indexing correctly sized per-thread scratch and can change under nesting or scheduling.
 - For OpenCL API findings, cite the relevant rule and show the device/path that reaches it. Formula differences alone are insufficient; establish an output, failure, or fallback difference.
 
+### Official Vectorization and Performance Guidelines
+
+The official developer's guide specifies how darktable code should be written for auto-vectorization and OpenMP efficiency. When reviewing `process()` loops, check for:
+
+- **Base-pointer + index addressing**, not implicit pointer increments. The address must depend only on loop counters, not on the previous iteration, to enable SIMD and parallelization:
+  ```c
+  // good — index-only addressing
+  float *const restrict image = (float *)in;
+  for(size_t k = 0; k < height * width; k++)
+    image[k] = whatever;
+
+  // bad — pointer carry prevents vectorization
+  float *pixel = (float *)in;
+  for(size_t i = 0; i < height; i++)
+    for(size_t j = 0; j < width; j++)
+      { *pixel = whatever; pixel++; }
+  ```
+- **Flat indexing** (`for(size_t k = 0; k < ch * width * height; k += ch)`) preferred over nested width/height/channel loops.
+- **No struct arguments inside loops** — unpack struct members into local scalars/arrays before the loop. Compilers cannot vectorize structures, only `float`/`int` arrays.
+- **`restrict`** on all image/pixel pointers to eliminate aliasing. `*out` must never alias `*in`.
+- **`const`** on input pointers and loop-invariant values to prevent false sharing in parallel regions.
+- **`#pragma omp simd`** + `#pragma omp declare simd` on inner helpers; use `reduction` clauses for accumulators.
+- **`collapse(2)`** on nested width/height loops so OpenMP splits iterations evenly.
+- **Alignment**: arrays on 64-byte boundaries, pixels on 16-byte boundaries (`DT_ALIGNED_PIXEL`).
+- **No type casts** in hot paths.
+- **Branches**: use ternary expressions (`(x > 0) ? x : -x`) that compile to SIMD mask instructions, not `if/else` that break vectorization.
+
+### Coding Style
+
+Review formatting against the official style, enforced by `tools/beautify_style.sh` (via `clang-format`):
+
+- American English spelling, especially for user-visible strings
+- Spaces, not tabs; `shiftwidth=2`
+- No trailing whitespace
+- Braces `{` and `}` on their own lines
+- Line length ≤ 90 characters
+- Function parameters each on their own line
+- Complex boolean operators (`||` / `&&`) at line start, one per line
+- SQL formatting preserved as multi-line string literals
+
+Style violations alone are not findings (per Finding Bar), but consistent disregard for project conventions is a signal of insufficient polish. When reviewing new IOPs, confirm they follow the module template at `src/iop/useless.c`.
+
 ### ROI, Buffer Layout, Image Classes, and Colour
 
 - Size and fill a temporary buffer from the same ROI and scale domain. Do not mix `piece->buf_in` dimensions with a zoomed `roi_in`, or cache transform scales in shared `piece->data` when GUI and processing paths can use different ROIs concurrently.
@@ -117,6 +177,12 @@ Treat `process()`, `process_cl()`, kernels, and tiling callbacks as implementati
 - Do not equate raw flags, `filters == 0`, "linear", or one classifier with a fixed buffer layout. Trace actual channel/format descriptors for 4-Bayer, sRaw/computational raw, monochrome, Bayer, X-Trans, and ordinary raster input.
 - Treat sensor active-area and crop metadata as coordinate claims, not automatically as the processing boundary. Confirm the boundary used by raw spatial filters excludes non-image sensor regions for the relevant loader and camera class.
 - Track declared and actual colourspace through every boundary. Check white point, chromatic adaptation, transposed matrix convention, profile absence, gamut handling, fourth-channel preservation, and CPU/OpenCL parity.
+- The official guide's color-management references cover the underlying science. Consult these to distinguish correct colour transforms from naive or incorrect ones:
+  - Fairchild, *Color Appearance Models*: colour appearance and chromatic adaptation
+  - ACEScentral: industry-standard colour encoding and interchange
+  - handprint.com: comprehensive colour science resource
+  - Filmlight white papers: standard colour spaces and scene-referred workflow
+  - VES *Cinematic Color*: colour management for visual effects pipelines
 - For NaN/negative containment changes, find every producer variant and the earliest operation that spreads invalid values. Compare CPU/OpenCL placement and prove downstream behavior; do not impose a universal clamp on image data whose valid domain permits negatives.
 - Before converting float geometry to an integer allocation or loop bound, validate the final derived value as finite and representable. Trace subsequent arithmetic for overflow using reachable parameter and image values.
 
