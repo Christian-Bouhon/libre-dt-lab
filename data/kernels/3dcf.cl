@@ -427,7 +427,7 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
           if(ur < 0.0f) t = fmin(t, -y / ur);
           if(vr > 0.0f) t = fmin(t, (1.0f - y) / vr);
           if(vr < 0.0f) t = fmin(t, -y / vr);
-          if(lc1 > 0.0f)
+          if(lc1 != 0.0f)
           {
             const float g_d = -(lc0 * ur + lc2 * vr) / lc1;
             if(g_d > 0.0f) t = fmin(t, (1.0f - y) / g_d);
@@ -436,7 +436,7 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
           t = fmax(t, 0.0f);
           rgb.x = y + t * ur;
           rgb.z = y + t * vr;
-          if(lc1 > 0.0f)
+          if(lc1 != 0.0f)
             rgb.y = y - (lc0 / lc1) * t * ur - (lc2 / lc1) * t * vr;
         }
       }

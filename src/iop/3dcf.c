@@ -1048,7 +1048,7 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
           if(ur < 0.0f) t = fminf(t, -y / ur);
           if(vr > 0.0f) t = fminf(t, (1.0f - y) / vr);
           if(vr < 0.0f) t = fminf(t, -y / vr);
-          if(lc[1] > 0.0f)
+          if(lc[1] != 0.0f)
           {
             const float g_d = -(lc[0] * ur + lc[2] * vr) / lc[1];
             if(g_d > 0.0f) t = fminf(t, (1.0f - y) / g_d);
@@ -1057,7 +1057,7 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
           t = fmaxf(t, 0.0f);
           rgb[0] = y + t * ur;
           rgb[2] = y + t * vr;
-          if(lc[1] > 0.0f)
+          if(lc[1] != 0.0f)
             rgb[1] = y - (lc[0] / lc[1]) * t * ur - (lc[2] / lc[1]) * t * vr;
         }
       }
@@ -1213,8 +1213,8 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
   ctx->hl_desat = fmaxf(p->hl_desaturation, 0.0f);
   ctx->hl_desat_threshold = fmaxf(p->hl_desat_threshold, 0.0f);
   ctx->hl_rotation = p->hl_hue_shift;
-  ctx->gamut_knee = p->gamut_knee;
-  ctx->gamut_steepness = p->gamut_steepness;
+  ctx->gamut_knee = fmaxf(p->gamut_knee, 0.0f);
+  ctx->gamut_steepness = fmaxf(p->gamut_steepness, 1e-6f);
   ctx->toe_power = fmaxf(p->toe_power, 0.0f);
   ctx->shoulder_power = fmaxf(p->shoulder_power, 0.0f);
   ctx->hl_detail_recovery = fmaxf(p->hl_detail_recovery, 0.0f);
