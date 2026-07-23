@@ -1788,6 +1788,17 @@ static void apply_postprocess(float *rgb, dt_iop_basecurve_data_t *const d,
     lab[2] *= (V_new * purity_comp * saturation_gate) / fmaxf(chroma, 1e-6f);
 
     oklab_to_rgb_cpu(lab, rgb_tmp);
+
+    // Highlight desaturation toward white (inspired by 3dcf.c st_desat_weight).
+    // V_new is the tonemapped luminance bounded [0,1] by ACES.
+    // Quadratic ramp: threshold at 0.85, full desaturation at 1.0.
+    {
+        const float hl_t = CLAMP((V_new - 0.85f) / 0.15f, 0.0f, 1.0f);
+        const float hl_desat = hl_t * hl_t;
+        for(int c = 0; c < 3; c++)
+            rgb_tmp[c] = rgb_tmp[c] * (1.0f - hl_desat) + hl_desat;
+    }
+
     r = rgb_tmp[0]; g = rgb_tmp[1]; b = rgb_tmp[2];
     y_out = lab[0];
   }

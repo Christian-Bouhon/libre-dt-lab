@@ -584,6 +584,16 @@ const float contrast_brilliance_power,
       lab.z *= chroma_scale;
 
       pixel.xyz = oklab_to_rgb(lab);
+
+      // Highlight desaturation toward white (inspired by 3dcf.c st_desat_weight).
+      // V_new is the tonemapped luminance bounded [0,1] by ACES.
+      // Quadratic ramp: threshold at 0.85, full desaturation at 1.0.
+      {
+          const float hl_t = clamp((V_new - 0.85f) / 0.15f, 0.0f, 1.0f);
+          const float hl_desat = hl_t * hl_t;
+          pixel.xyz = mix(pixel.xyz, (float3)(1.0f), hl_desat);
+      }
+
       y_out = lab.x;
     }
 
@@ -767,16 +777,16 @@ const float contrast_brilliance_power,
         else
           cd_r = s_c * sqrt(d_r - th_c + s_c*s_c*0.25f) - s_c * sqrt(s_c*s_c*0.25f) + th_c;
 
-        if(d_g < th_m)
+            // Compressed RGB
+    if(d_g < th_m)
           cd_g = d_g;
         else
           cd_g = s_m * sqrt(d_g - th_m + s_m*s_m*0.25f) - s_m * sqrt(s_m*s_m*0.25f) + th_m;
 
         if(d_b < th_y)
           cd_b = d_b;
-        else
-          cd_b = s_y * sqrt(d_b - th_y + s_y*s_y*0.25f) - s_y * sqrt(s_y*s_y*0.25f) + th_y;
-
+        // Compressed RGB
+        // Compressed RGB
         // Compressed RGB
         float comp_x = ac - cd_r * ac;
         float comp_y = ac - cd_g * ac;
