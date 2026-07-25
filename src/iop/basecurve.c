@@ -3750,11 +3750,11 @@ void gui_init(dt_iop_module_t *self)
   g->contrast_brilliance_power = dt_bauhaus_slider_from_params(self, "contrast_brilliance_power");
   dt_bauhaus_widget_set_label(g->contrast_brilliance_power, NULL, _("contrast"));
   dt_bauhaus_slider_set_soft_range(g->contrast_brilliance_power, 0.75, 1.25);
-  dt_bauhaus_slider_set_digits(g->contrast_brilliance_power, 2);
   dt_bauhaus_slider_set_default(g->contrast_brilliance_power, 1.0);
   dt_bauhaus_slider_set_format(g->contrast_brilliance_power, "%");
   dt_bauhaus_slider_set_factor(g->contrast_brilliance_power, 400.0);
   dt_bauhaus_slider_set_offset(g->contrast_brilliance_power, -400.0);
+  dt_bauhaus_slider_set_digits(g->contrast_brilliance_power, 0);
   gtk_widget_set_tooltip_text(g->contrast_brilliance_power, _("adjust the brilliance contrast in Oklab space for cinematic DRT."));
 
   g->node_x_slider = dt_bauhaus_slider_new_with_range(self, 0.0f, 1.0f, 0, 0.5f, 3);
