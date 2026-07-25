@@ -513,71 +513,73 @@ const float contrast_brilliance_power,
       else
         y_out = ACES_RRT_ODT_tonemap(x_scaled * 2.0f * exp2(EXPOSURE_BOOST_EV)) * k;
     }
-    else if(workflow_mode == 3)
+  else if(workflow_mode == 3)
     {
       // Mode 3: ACES RRTAndODTFit approximation Pure UCS (Oklab) - Pre-tonescale Brilliance
-      // Note: Oklab expects linear sRGB (D65) input per specification, but we feed
-      // the working space RGB directly as a pragmatic approximation.  Converting
-      // workspace → sRGB would clip saturated Rec.2020 colours (negative sRGB
-      // values) and distort hues after the Oklab cube-root clamp.  The relative
-      // chroma/purity operations in Mode 3 are robust to the approximation, and
-      // neutral greys (R=G=B) are unaffected.  Björn Ottosson acknowledges this
-      // usage as acceptable for non-sRGB working spaces.
-
       float3 lab = rgb_to_oklab(pixel.xyz);
 
       // 1. Balance Saturation UCS
       const float L_ok = lab.x;
       const float mask_ok = 1.0f / (1.0f + dtcl_exp((L_ok - 0.5f) * 10.0f));
       const float weight_ok = 2.0f * mask_ok - 1.0f;
-      // Boost saturation mostly in mid-tones (bell curve weight)
       const float mid_weight = 1.0f - weight_ok * weight_ok * (0.7f + 0.3f * L_ok);
-      // Vibrance logic: protect already saturated colors
+      
       float chroma = length(lab.yz);
       const float vibrance_weight = fmax(0.0f, 1.0f - chroma * 2.5f);
-      const float sat_mult = (1.0f + saturation_boost * mid_weight * vibrance_weight) * (1.0f + ucs_saturation_balance * (weight_ok * weight_ok * weight_ok));
+      const float sat_mult = (1.0f + saturation_boost * mid_weight * vibrance_weight) * 
+                             (1.0f + ucs_saturation_balance * (weight_ok * weight_ok * weight_ok));
       lab.y *= sat_mult;
       lab.z *= sat_mult;
 
-      // Soft chroma compression for gamut safety
+      // 2. Compression dynamique du Chroma (Gamut Safety)
       float chroma_sat = native_sqrt(lab.y * lab.y + lab.z * lab.z);
-      const float knee_sat = 0.30f;
+      const float max_chroma_at_L = fmax(0.01f, 0.32f * (1.0f - fmax(0.0f, L_ok - 0.2f)));
+      const float knee_sat = fmin(0.30f, max_chroma_at_L * 0.75f);
       const float knee_slope = 2.0f;
-      if(chroma_sat > knee_sat)
+
+      if(chroma_sat > knee_sat && chroma_sat > 1e-6f)
       {
         const float excess = chroma_sat - knee_sat;
         const float compressed = knee_sat + excess / (1.0f + knee_slope * excess);
-        const float scale = compressed / fmax(chroma_sat, 1e-6f);
+        const float scale = compressed / chroma_sat;
         lab.y *= scale;
         lab.z *= scale;
       }
 
-      // 2. OpenDRT-style Vector Norm & Purity Compression
+      // 3. OpenDRT-style Vector Norm & Purity Compression
       const float L_achromatic = lab.x;
       chroma = length(lab.yz);
 
-      // Calculate Vector Norm (total energy)
       float V_norm = native_sqrt(L_achromatic * L_achromatic + chroma * chroma);
       float purity = (V_norm > 1e-6f) ? (chroma / V_norm) : 0.0f;
 
-      // Knee-based purity compression: protects natural colors (purity < 0.5)
-      // and only tames extreme "neon" colors above the threshold.
       const float p_thresh = 0.5f;
       float purity_comp = (purity > p_thresh) ? p_thresh + (purity - p_thresh) / (1.0f + 0.2f * (purity - p_thresh)) : purity;
 
-      // Prepare Norm for tonemapping
-      float V_orig = fmax(0.0f, pow(V_norm, contrast_brilliance_power));
-      V_orig *= (1.189f + highlight_gain) * (1.0f - 0.5f * purity);
-      V_orig = fmax(0.0f, pow(V_orig, shadow_lift + 1.0f));
+      // --- APPLICATION DIRECTE DES CURSEURS SUR V_orig ---
+      
+      // A. Puissance / Contraste Brilliance (défaut = 1.0)
+      float V_orig = (contrast_brilliance_power != 1.0f && contrast_brilliance_power > 0.0f) 
+                     ? pow(fmax(0.0f, V_norm), contrast_brilliance_power) 
+                     : fmax(0.0f, V_norm);
 
+      // B. Gain Hautes Lumières & compensation de pureté
+      V_orig *= (highlight_gain + 1.189f) * (1.0f - 0.5f * purity);
+
+      // C. Relevé d'ombres / Shadow Lift (forcé à 0.0f en Mode 3 depuis le C)
+      if(shadow_lift != 0.0f)
+      {
+        V_orig = pow(V_orig, shadow_lift);
+      }
+      // D. Tonemapping ACES
       float V_new = ACES_RRT_ODT_tonemap(V_orig);
 
-      // 3. Highlight Hue Sat (Saturation Gate)
+      // 4. Highlight Hue Sat (Saturation Gate)
       float compression = (V_norm > 1e-4f) ? (V_new / V_norm) : 1.0f;
       float gate_power = 0.5f * (1.0f - highlight_corr);
       float saturation_gate = clamp(pow(compression, gate_power), 0.0f, 1.0f);
 
-      // Reconstruct L and Chroma
+      // Reconstitution de L et Chroma
       lab.x = V_new * native_sqrt(fmax(0.0f, 1.0f - purity_comp * purity_comp));
       float chroma_scale = (V_new * purity_comp * saturation_gate) / fmax(chroma, 1e-6f);
       lab.y *= chroma_scale;
@@ -585,18 +587,17 @@ const float contrast_brilliance_power,
 
       pixel.xyz = oklab_to_rgb(lab);
 
-      // Highlight desaturation toward white (inspired by 3dcf.c st_desat_weight).
-      // V_new is the tonemapped luminance bounded [0,1] by ACES.
-      // Quadratic ramp: threshold at 0.85, full desaturation at 1.0.
+      // 5. Désaturation progressive vers le blanc (Path to White)
+      if(V_new > 0.85f)
       {
-          const float hl_t = clamp((V_new - 0.85f) / 0.15f, 0.0f, 1.0f);
-          const float hl_desat = hl_t * hl_t;
-          pixel.xyz = mix(pixel.xyz, (float3)(1.0f), hl_desat);
+        const float hl_t = clamp((V_new - 0.85f) / 0.15f, 0.0f, 1.0f);
+        const float hl_desat = hl_t * hl_t * (3.0f - 2.0f * hl_t);
+        pixel.xyz = mix(pixel.xyz, (float3)(1.0f), hl_desat);
       }
 
       y_out = lab.x;
     }
-
+    
     float gain = y_out / fmax(y_in, 1e-6f);
     if(workflow_mode != 3) pixel.xyz *= gain;
 
