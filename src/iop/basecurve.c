@@ -823,7 +823,7 @@ void reload_defaults(dt_iop_module_t *self)
   {
     int def_work = dt_conf_get_int("plugins/darkroom/basecurve/default_workflow");
     if(!dt_conf_key_exists("plugins/darkroom/basecurve/default_workflow") || def_work < 1)
-      def_work = 2;
+      def_work = 3;
     d->workflow_mode = def_work;
     // Forcer 0.0f si le mode par défaut est le mode 3, sinon 1.0f
     d->shadow_lift = (d->workflow_mode == 3) ? 0.0f : 1.0f;
@@ -3533,7 +3533,7 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->look_opacity, p->look_opacity);
 
   int def_work = dt_conf_get_int("plugins/darkroom/basecurve/default_workflow");
-  if(!dt_conf_key_exists("plugins/darkroom/basecurve/default_workflow") || def_work < 1) def_work = 2;
+  if(!dt_conf_key_exists("plugins/darkroom/basecurve/default_workflow") || def_work < 1) def_work = 3;
   dt_bauhaus_combobox_set(g->default_workflow, def_work - 1);
 
   int display_idx = (g->selected >= 0) ? g->selected : g->last_selected;
