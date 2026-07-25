@@ -106,7 +106,7 @@ typedef struct dt_iop_basecurve_params_t
   int color_look;         // $DEFAULT: 0 $DESCRIPTION: "color look style"
   float look_opacity;     // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "look opacity"
   float use_rolloff;      // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "highlight roll-off"
-  float contrast_brilliance_power; // $MIN: 1.0 $MAX: 2.0 $DEFAULT: 1.1 $DESCRIPTION: "contrast correction"
+  float contrast_brilliance_power; // $MIN: 0.75 $MAX: 1.25 $DEFAULT: 1.0 $DESCRIPTION: "contrast"
   float purity_boost;  // $MIN: -0.5 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "purity boost"
   float gamut_threshold_c; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.15 $DESCRIPTION: "threshold cyan"
   float gamut_threshold_m; // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.15 $DESCRIPTION: "threshold magenta"
@@ -365,7 +365,7 @@ int legacy_params(dt_iop_module_t *self,
     const dt_iop_basecurve_params_v8_t *o = (dt_iop_basecurve_params_v8_t *)old_params;
     dt_iop_basecurve_params_t *n = calloc(1, sizeof(dt_iop_basecurve_params_t));
     memcpy(n, o, sizeof(dt_iop_basecurve_params_v8_t));
-    n->contrast_brilliance_power = 1.10f;
+    n->contrast_brilliance_power = 1.0f;
 
     *new_params = n;
     *new_params_size = sizeof(dt_iop_basecurve_params_t);
@@ -399,7 +399,7 @@ int legacy_params(dt_iop_module_t *self,
     const dt_iop_basecurve_params_v9_t *o = (dt_iop_basecurve_params_v9_t *)old_params;
     dt_iop_basecurve_params_t *n = calloc(1, sizeof(dt_iop_basecurve_params_t));
     memcpy(n, o, sizeof(dt_iop_basecurve_params_v9_t));
-    n->contrast_brilliance_power = 1.10f;
+    n->contrast_brilliance_power = 1.0f;
     n->purity_boost = 0.0f;
     *new_params = n;
     *new_params_size = sizeof(dt_iop_basecurve_params_t);
@@ -811,7 +811,7 @@ void reload_defaults(dt_iop_module_t *self)
   }
 
   d->color_space = 2;
-  d->contrast_brilliance_power = 1.10f;
+  d->contrast_brilliance_power = 1.0f;
   d->gamut_threshold_c = 0.15f;
   d->gamut_threshold_m = 0.15f;
   d->gamut_threshold_y = 0.15f;
@@ -2359,7 +2359,7 @@ void commit_params(dt_iop_module_t *self,
     // highlight_gain=0 (black image) or shadow_lift=2.0 (wrong gamma).
     d->shadow_lift            = 1.0f;
     d->highlight_gain         = 1.0f;
-    d->contrast_brilliance_power       = 1.10f;
+    d->contrast_brilliance_power       = 1.0f;
     d->purity_boost                    = 0.0f;
     d->gamut_threshold_c       = 0.15f;
     d->gamut_threshold_m       = 0.15f;
@@ -2691,7 +2691,7 @@ void init(dt_iop_module_t *self)
   d->basecurve_nodes[0] = 2;
   d->shadow_lift = 1.0f;
   d->highlight_gain = 1.0f;
-  d->contrast_brilliance_power = 1.10f;
+  d->contrast_brilliance_power = 1.0f;
   d->gamut_threshold_c = 0.15f;
   d->gamut_threshold_m = 0.15f;
   d->gamut_threshold_y = 0.15f;
@@ -3412,8 +3412,8 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
             dt_bauhaus_slider_set(g->shadow_lift, p->shadow_lift);
             p->highlight_gain = 1.0f;
           dt_bauhaus_slider_set(g->highlight_gain, 1.0f);
-          p->contrast_brilliance_power = 1.10f;
-          dt_bauhaus_slider_set(g->contrast_brilliance_power, 1.10f);
+          p->contrast_brilliance_power = 1.0f;
+          dt_bauhaus_slider_set(g->contrast_brilliance_power, 1.0f);
           p->ucs_saturation_balance = 0.2f;
           dt_bauhaus_slider_set(g->ucs_saturation_balance, 0.2f);
           p->saturation_boost = 0.0f;
@@ -3748,11 +3748,14 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_default(g->shadow_lift, 1.0);
 
   g->contrast_brilliance_power = dt_bauhaus_slider_from_params(self, "contrast_brilliance_power");
-  dt_bauhaus_widget_set_label(g->contrast_brilliance_power, NULL, _("contrast correction"));
-  dt_bauhaus_slider_set_soft_range(g->contrast_brilliance_power, 1.0, 2.0);
+  dt_bauhaus_widget_set_label(g->contrast_brilliance_power, NULL, _("contrast"));
+  dt_bauhaus_slider_set_soft_range(g->contrast_brilliance_power, 0.75, 1.25);
   dt_bauhaus_slider_set_digits(g->contrast_brilliance_power, 2);
-  dt_bauhaus_slider_set_default(g->contrast_brilliance_power, 1.10);
-  gtk_widget_set_tooltip_text(g->contrast_brilliance_power, _("adjust the brilliance (contrast) in Oklab space for cinematic DRT."));
+  dt_bauhaus_slider_set_default(g->contrast_brilliance_power, 1.0);
+  dt_bauhaus_slider_set_format(g->contrast_brilliance_power, "%");
+  dt_bauhaus_slider_set_factor(g->contrast_brilliance_power, 400.0);
+  dt_bauhaus_slider_set_offset(g->contrast_brilliance_power, -400.0);
+  gtk_widget_set_tooltip_text(g->contrast_brilliance_power, _("adjust the brilliance contrast in Oklab space for cinematic DRT."));
 
   g->node_x_slider = dt_bauhaus_slider_new_with_range(self, 0.0f, 1.0f, 0, 0.5f, 3);
   dt_bauhaus_widget_set_label(g->node_x_slider, NULL, _("node x position"));
