@@ -1801,7 +1801,12 @@ static void apply_postprocess(float *rgb, dt_iop_basecurve_data_t *const d,
 
     oklab_to_rgb_cpu(lab, out);
 
-    // 5. Désaturation progressive vers le blanc (Path to White)
+    // 5. Détail preservation: blend L* original dans L* compressé (25%)
+    lab[0] = lab[0] * 0.75f + L_achromatic * 0.25f;
+
+    oklab_to_rgb_cpu(lab, out);
+
+    // 6. Désaturation progressive vers le blanc (Path to White)
     if(V_new > 0.85f)
     {
       const float hl_t = CLAMP((V_new - 0.85f) / 0.15f, 0.0f, 1.0f);
