@@ -2451,6 +2451,16 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->chromatic_boost,
     _("Chromatic accentuation of midtones with a slight contrast in hue in the highlights"));
 
+  g->hl_hue_shift = dt_bauhaus_slider_from_params(self, "hl_hue_shift");
+  dt_bauhaus_slider_set_factor(g->hl_hue_shift, 100.0f);
+  dt_bauhaus_slider_set_format(g->hl_hue_shift, " %");
+  dt_bauhaus_slider_set_digits(g->hl_hue_shift, 0);
+  gtk_widget_set_tooltip_text(g->hl_hue_shift,
+    _("Abney rotation in highlights, modulated by pixel saturation. \n"
+      "Positive rotates toward cool (blue), negative toward warm (salmon). \n"
+      "Vibrance-negative desaturation: saturated pixels desaturate further. \n"
+      "Independent of highlight roll-off."));
+
   g->color_look = dt_bauhaus_combobox_from_params(self, "color_look");
   gtk_widget_set_tooltip_text(g->color_look, _("Apply a color style to the image."));
 
@@ -2487,16 +2497,6 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->hl_desat_threshold,
     _("Luminance threshold at which highlight desaturation begins. \n"
       "Lower values desaturate earlier (more protection), higher values preserve saturation longer."));
-
-  g->hl_hue_shift = dt_bauhaus_slider_from_params(self, "hl_hue_shift");
-  dt_bauhaus_slider_set_factor(g->hl_hue_shift, 100.0f);
-  dt_bauhaus_slider_set_format(g->hl_hue_shift, " %");
-  dt_bauhaus_slider_set_digits(g->hl_hue_shift, 0);
-  gtk_widget_set_tooltip_text(g->hl_hue_shift,
-    _("Abney rotation in highlights, modulated by pixel saturation. \n"
-      "Positive rotates toward cool (blue), negative toward warm (salmon). \n"
-      "Vibrance-negative desaturation: saturated pixels desaturate further. \n"
-      "Independent of highlight roll-off."));
 
   g->hl_detail_recovery = dt_bauhaus_slider_from_params(self, "hl_detail_recovery");
   dt_bauhaus_slider_set_factor(g->hl_detail_recovery, 100.0f);
