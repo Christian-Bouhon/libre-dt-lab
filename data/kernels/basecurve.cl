@@ -516,7 +516,6 @@ const float contrast_brilliance_power,
   else if(workflow_mode == 3)
     {
       // Mode 3: ACES RRTAndODTFit approximation Pure UCS (Oklab) - Pre-tonescale Brilliance
-      const float3 pixel_orig = pixel.xyz;
       float3 lab = rgb_to_oklab(pixel.xyz);
 
       // 1. Balance Saturation UCS
@@ -588,19 +587,16 @@ const float contrast_brilliance_power,
 
       pixel.xyz = oklab_to_rgb(lab);
 
-      // 5. Désaturation progressive vers le blanc (Path to White)
+      // 5. Détail preservation: blend L* original dans L* compressé (25%)
+      lab.x = lab.x * 0.75f + L_achromatic * 0.25f;
+      pixel.xyz = oklab_to_rgb(lab);
+
+      // 6. Désaturation progressive vers le blanc (Path to White)
       if(V_new > 0.85f)
       {
         const float hl_t = clamp((V_new - 0.85f) / 0.15f, 0.0f, 1.0f);
         const float hl_desat = hl_t * hl_t * (3.0f - 2.0f * hl_t);
         pixel.xyz = mix(pixel.xyz, (float3)(1.0f), hl_desat);
-      }
-
-      // 6. Détail preservation blend (15% ACES gain)
-      {
-        const float y_out_lin = pixel.x * r_coeff + pixel.y * g_coeff + pixel.z * b_coeff;
-        const float aces_gain = y_out_lin / fmax(y_in, 1e-6f);
-        pixel.xyz = mix(pixel_orig * aces_gain, pixel.xyz, (float3)(0.85f));
       }
 
       y_out = lab.x;
