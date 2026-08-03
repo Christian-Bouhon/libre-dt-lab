@@ -633,7 +633,7 @@ const float contrast_brilliance_power,
       else
       {
         xyz.x = 0.636958f * pixel.x + 0.144617f * pixel.y + 0.168881f * pixel.z;
-        xyz.y = y_in;
+        xyz.y = r_coeff * pixel.x + g_coeff * pixel.y + b_coeff * pixel.z;
         xyz.z = 0.000000f * pixel.x + 0.028073f * pixel.y + 1.060985f * pixel.z;
       }
 
