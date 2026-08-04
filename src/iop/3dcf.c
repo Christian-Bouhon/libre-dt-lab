@@ -122,7 +122,7 @@ typedef struct dt_iop_3dcf_params_t
   float hl_desat_threshold;  // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.50 $DESCRIPTION: "desaturation threshold"
   float gamut_knee;          // $MIN: 0 $MAX: 1 $DEFAULT: 0.20 $DESCRIPTION: "gamut knee"
   float gamut_steepness;     // $MIN: 0 $MAX: 1 $DEFAULT: 0.50 $DESCRIPTION: "gamut steepness"
-  dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "color space"
+  dt_iop_st_colorspace_t output_cs;  // $DEFAULT: DT_ST_CS_REC2020 $DESCRIPTION: "display target"
   dt_iop_st_look_t color_look;       // $DEFAULT: DT_ST_LOOK_NEUTRAL $DESCRIPTION: "color look"
   float look_opacity;          // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 1.0 $DESCRIPTION: "look opacity"
   float contrast_pivot;        // $MIN: 0.01 $MAX: 0.99 $DEFAULT: 0.5 $DESCRIPTION: "contrast pivot"
