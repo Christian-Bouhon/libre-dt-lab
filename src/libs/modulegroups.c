@@ -1467,7 +1467,7 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
 #define SNQA()                                                                                                    \
   {                                                                                                               \
     g_free(tx);                                                                                                   \
-    tx = g_strdup("1|0ꬹ0||");                                                                                   \
+    tx = g_strdup("1|0ꬹ0||");                                                                                     \
   }
 
 // start quick access
@@ -1477,34 +1477,34 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
     tx = g_strdup_printf("1|0ꬹ1||");                                                                              \
     if(is_scene_referred)                                                                                         \
     {                                                                                                             \
-      if(wf_filmic)												  \
-      {												  		  \
+      if(wf_filmic)                                                                                               \
+      {                                                                                                           \
         AM("filmicrgb/white relative exposure");                                                                  \
         AM("filmicrgb/black relative exposure");                                                                  \
         AM("filmicrgb/contrast");                                                                                 \
-      }														  \
-      else if(wf_sigmoid)											  \
-      {                                                                 					  \
-        AM("sigmoid/contrast");											  \
-        AM("sigmoid/skew");											  \
-      } 													  \
-      else if(wf_agx)												  \
-      {														  \
-        /*AM("agx/white relative exposure");*/						                          \
-        /*AM("agx/black relative exposure");*/						                          \
+      }                                                                                                           \
+      else if(wf_sigmoid)                                                                                         \
+      {                                                                                                           \
+        AM("sigmoid/contrast");                                                                                   \
+        AM("sigmoid/skew");                                                                                       \
+      }                                                                                                           \
+      else if(wf_agx)                                                                                             \
+      {                                                                                                           \
+        /*AM("agx/white relative exposure");*/                                                                    \
+        /*AM("agx/black relative exposure");*/                                                                    \
         AM("agx/auto tune levels");                                                                               \
         AM("agx/curve/contrast");                                                                                 \
         AM("agx/curve/shoulder power");                                                                           \
-        AM("agx/curve/toe power");	                                                                          \
-        AM("agx/look/saturation");	                                                                          \
-        AM("agx/look/preserve hue");	                                                                          \
-      }														  \
+        AM("agx/curve/toe power");                                                                                \
+        AM("agx/look/saturation");                                                                                \
+        AM("agx/look/preserve hue");                                                                              \
+      }                                                                                                           \
       else if(wf_basecurve)                                                                                       \
       {                                                                                                           \
-        AM("basecurve/workflow mode");                                                                        \
+        AM("basecurve/workflow mode");                                                                            \
         AM("basecurve/highlight gain");                                                                           \
         AM("basecurve/shadow correction");                                                                        \
-        AM("basecurve/contrast");                                                                        \
+        AM("basecurve/contrast");                                                                                 \
         AM("basecurve/color look");                                                                               \
       }                                                                                                           \
       else if(wf_3dcf)                                                                                            \
@@ -1538,9 +1538,9 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
       AM("temperature/temperature");                                                                              \
       AM("temperature/tint");                                                                                     \
     }                                                                                                             \
-    AM("colorequal/page");	                                             					  \
-    AM("colorequal/graph");                                                 					  \
-    AM("colorequal/node placement");                                           					  \
+    AM("colorequal/page");                                                                                        \
+    AM("colorequal/graph");                                                                                       \
+    AM("colorequal/node placement");                                                                              \
     AM("exposure/exposure");                                                                                      \
     if(!is_scene_referred) AM("colorbalancergb/contrast"); /* contrast is already in filmic/sigmoid */            \
     AM("colorbalancergb/global chroma");                                                                          \
@@ -1549,13 +1549,13 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
     AM("colorbalancergb/global brilliance");                                                                      \
     AM("ashift/rotation");                                                                                        \
     AM("denoiseprofile/strength");                                                                                \
-    AM("toneequal/graph");                                    						  	  \
-    AM("toneequal/mask exposure compensation");                       						  \
-    AM("toneequal/mask contrast compensation");                       						  \
+    AM("toneequal/graph");                                                                                        \
+    AM("toneequal/mask exposure compensation");                                                                   \
+    AM("toneequal/mask contrast compensation");                                                                   \
     AM("lens");                                                                                                   \
-    AM("contrast/micro contrast");                                                                                           \
-    AM("contrast/fine contrast");                                                                                           \
-    AM("contrast/local contrast");                                                                                           \
+    AM("contrast/micro contrast");                                                                                \
+    AM("contrast/fine contrast");                                                                                 \
+    AM("contrast/local contrast");                                                                                \
   }
 
 // start module group
