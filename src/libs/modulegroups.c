@@ -1501,24 +1501,30 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
       }														  \
       else if(wf_basecurve)                                                                                       \
       {                                                                                                           \
+        AM("basecurve/workflow mode");                                                                        \
         AM("basecurve/highlight gain");                                                                           \
-        AM("basecurve/shadow correction");                                                                              \
+        AM("basecurve/shadow correction");                                                                        \
+        AM("basecurve/contrast");                                                                        \
         AM("basecurve/color look");                                                                               \
       }                                                                                                           \
-      else if(wf_3dcf)                                                                                   \
+      else if(wf_3dcf)                                                                                            \
       {                                                                                                           \
-        AM("3dcf/contrast");                                                                             \
-        AM("3dcf/mid-tones");                                                                            \
-        AM("3dcf/vibrance");                                                                             \
-        AM("3dcf/spectral brilliance");                                                                  \
-        AM("3dcf/color look");                                                                           \
+        AM("3dcf/peak luminance");                                                                                \
+        AM("3dcf/contrast");                                                                                      \
+        AM("3dcf/contrast pivot");                                                                                \
+        AM("3dcf/shoulder power");                                                                                \
+        AM("3dcf/toe power");                                                                                     \
+        AM("3dcf/gamma");                                                                                         \
+        AM("3dcf/vibrance");                                                                                      \
+        AM("3dcf/chromatic boost");                                                                               \
+        AM("3dcf/color look");                                                                                    \
       }                                                                                                           \
-      else if(wf_aces20)                                                                                 \
+      else if(wf_aces20)                                                                                          \
       {                                                                                                           \
-        AM("aces20/odt");                                                                                \
-        AM("aces20/peak luminance (nits)");                                                               \
-        AM("aces20/exposure (EV)");                                                                      \
-        AM("aces20/gamut compression");                                                                  \
+        AM("aces20/odt");                                                                                         \
+        AM("aces20/peak luminance (nits)");                                                                       \
+        AM("aces20/exposure (EV)");                                                                               \
+        AM("aces20/gamut compression");                                                                           \
       }                                                                                                           \
       AM("channelmixerrgb/temperature");                                                                          \
       AM("channelmixerrgb/chroma");                                                                               \
@@ -1547,7 +1553,9 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
     AM("toneequal/mask exposure compensation");                       						  \
     AM("toneequal/mask contrast compensation");                       						  \
     AM("lens");                                                                                                   \
-    AM("bilat/detail");                                                                                           \
+    AM("contrast/micro contrast");                                                                                           \
+    AM("contrast/fine contrast");                                                                                           \
+    AM("contrast/local contrast");                                                                                           \
   }
 
 // start module group
