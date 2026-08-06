@@ -3014,9 +3014,139 @@ static const dt_action_def_t _action_def_cycle_module_groups
       _action_elements_cycle_module_groups,
       NULL, TRUE };
 
+// Rebuild the quick access panel exactly like the startup default but forced to
+// the requested tone mapper, without changing the default workflow setting.
+static void _basics_switch_to_workflow(dt_lib_module_t *self, const int selected)
+{
+  dt_lib_modulegroups_t *d = self->data;
+
+  gboolean wf_filmic = (selected == 1);
+  gboolean wf_sigmoid = (selected == 2);
+  gboolean wf_agx = (selected == 3);
+  gboolean wf_basecurve = (selected == 4);
+  gboolean wf_3dcf = (selected == 5);
+  gboolean wf_aces20 = (selected == 6);
+
+  _basics_hide(self);
+  for(GList *l = d->basics; l; l = g_list_next(l))
+    _basics_free_item(l->data);
+  g_list_free_full(d->basics, g_free);
+  d->basics = NULL;
+
+  const gboolean g_is_scene_referred = dt_is_scene_referred();
+
+  // build the same string as the default quick preset, forced to the chosen TM
+  gchar *tx = g_strdup_printf("1|0ꬹ1||");
+  #define AQ(n) dt_util_str_cat(&tx, "|%s", n)
+  if(g_is_scene_referred)
+  {
+    if(wf_filmic)
+    {
+      AQ("filmicrgb/white relative exposure");
+      AQ("filmicrgb/black relative exposure");
+      AQ("filmicrgb/contrast");
+    }
+    else if(wf_sigmoid)
+    {
+      AQ("sigmoid/contrast");
+      AQ("sigmoid/skew");
+    }
+    else if(wf_agx)
+    {
+      AQ("agx/auto tune levels");
+      AQ("agx/curve/contrast");
+      AQ("agx/curve/shoulder power");
+      AQ("agx/curve/toe power");
+      AQ("agx/look/saturation");
+      AQ("agx/look/preserve hue");
+    }
+    else if(wf_basecurve)
+    {
+      AQ("basecurve/workflow mode");
+      AQ("basecurve/highlight gain");
+      AQ("basecurve/shadow correction");
+      AQ("basecurve/contrast");
+      AQ("basecurve/color look");
+    }
+    else if(wf_3dcf)
+    {
+      AQ("3dcf/peak luminance");
+      AQ("3dcf/contrast");
+      AQ("3dcf/contrast pivot");
+      AQ("3dcf/shoulder power");
+      AQ("3dcf/toe power");
+      AQ("3dcf/gamma");
+      AQ("3dcf/vibrance");
+      AQ("3dcf/chromatic boost");
+      AQ("3dcf/color look");
+    }
+    else if(wf_aces20)
+    {
+      AQ("aces20/odt");
+      AQ("aces20/peak luminance (nits)");
+      AQ("aces20/exposure (EV)");
+      AQ("aces20/gamut compression");
+    }
+    AQ("channelmixerrgb/temperature");
+    AQ("channelmixerrgb/chroma");
+    AQ("channelmixerrgb/hue");
+    AQ("channelmixerrgb/illuminant");
+    AQ("channelmixerrgb/F source");
+    AQ("channelmixerrgb/LED source");
+  }
+  else
+  {
+    AQ("temperature/temperature");
+    AQ("temperature/tint");
+  }
+  AQ("colorequal/page");
+  AQ("colorequal/graph");
+  AQ("colorequal/node placement");
+  AQ("exposure/exposure");
+  if(!g_is_scene_referred) AQ("colorbalancergb/contrast");
+  AQ("colorbalancergb/global chroma");
+  AQ("colorbalancergb/global vibrance");
+  AQ("colorbalancergb/global saturation");
+  AQ("colorbalancergb/global brilliance");
+  AQ("ashift/rotation");
+  AQ("denoiseprofile/strength");
+  AQ("toneequal/graph");
+  AQ("toneequal/mask exposure compensation");
+  AQ("toneequal/mask contrast compensation");
+  AQ("lens");
+  AQ("contrast/micro contrast");
+  AQ("contrast/fine contrast");
+  AQ("contrast/local contrast");
+  #undef AQ
+
+  gchar **gr = g_strsplit(tx, "ꬹ", -1);
+  if(g_strv_length(gr) > 1 && gr[1])
+  {
+    gchar **gr2 = g_strsplit(gr[1], "|", -1);
+    d->basics_show = TRUE;
+    for(int j = 3; j < g_strv_length(gr2); j++)
+    {
+      dt_lib_modulegroups_basic_item_t *item = g_malloc0(sizeof(dt_lib_modulegroups_basic_item_t));
+      if(item)
+      {
+        item->id = g_strdup(gr2[j]);
+        _basics_init_item(item);
+        d->basics = g_list_append(d->basics, item);
+      }
+    }
+    g_strfreev(gr2);
+  }
+  g_strfreev(gr);
+  g_free(tx);
+
+  _basics_show(self);
+}
+
 static void _funnel_item_clicked(GtkWidget *widget, gpointer user_data)
 {
   const int selected = GPOINTER_TO_INT(user_data);
+  dt_lib_module_t *lib = g_object_get_data(G_OBJECT(widget), "modulegroups-lib");
+  if(lib) _basics_switch_to_workflow(lib, selected);
   dt_workflow_selector_set(selected);
 }
 
@@ -3042,6 +3172,7 @@ static gboolean _funnel_pressed(GtkWidget *widget,
     for(int i = 0; i < 7; i++)
     {
       GtkWidget *item = gtk_menu_item_new_with_label(items[i].label);
+      g_object_set_data(G_OBJECT(item), "modulegroups-lib", user_data);
       g_signal_connect(G_OBJECT(item), "activate",
                        G_CALLBACK(_funnel_item_clicked), GINT_TO_POINTER(items[i].idx));
       gtk_menu_shell_append(GTK_MENU_SHELL(pop), item);
