@@ -24,12 +24,72 @@ Built upon the proof-of-concept algorithm proposed by WileCoyote:
 https://discuss.pixls.us/t/experiments-with-a-scene-referred-local-contrast-module-proof-of-concept/55402
 
 ### Enhanced module, Basecurve (scene-referred workflow)
-Extended basecurve with an adaptive ACES tone mapping shoulder based on JzAzBz perceptual luminance.
+Extended basecurve with an adaptive tone-mapping engine layered on top of the
+reference curve, selectable through four workflows:
 
-- **ACES 1.0** (Narkowicz 2016) and **ACES 2.0** (Narkowicz/Filiberto 2021) rational approximations
-- Luminance-adaptive shoulder: `k = 1 + α × Jz²` avoids highlight crushing on already-bright areas
-- UCS saturation balance, gamut compression, highlight hue/saturation correction
-- Color look matrix (10 presets)
+- **display** — the classic display-referred curve
+- **kinematic** — ACES 1.0 curve (Narkowicz 2016) with a luminance-adaptive
+  shoulder `k = 1 + α × Jz²` (JzAzBz) that protects already-bright areas from
+  highlight crushing
+- **dynamic** — ACES RRT/ODT approximation (BakingLab RRTAndODTFit) with the same
+  adaptive JzAzBz shoulder
+- **cinematic DRT** — an OpenDRT-inspired colour appearance pipeline in Oklab:
+  UCS saturation balance, gamut-safe chroma compression, vector-norm/purity
+  grading (contrast-brilliance, highlight gain, shadow lift) and highlight
+  hue/saturation correction
+
+Additional tools:
+
+- Lightness-independent gamut compression with separate cyan/magenta/yellow
+  thresholds and limits
+- Color look matrix (11 presets) with look opacity
+- Luminance reference selectable between sRGB/Rec.709, AdobeRGB and Rec. 2020
+- Highlight roll-off control
+
+### New module, 3DCF (3D Colorimetric Film)
+A global tone mapping module built on the official **ACES 2.0 SSTS** (Single-Stage
+Tone Scale), the "texture of light" of the ACES 2.0 reference rendering, combined
+with a spectral-gamut film simulation.
+
+- **ACES 2.0 SSTS**, Michaelis-Menten parametric curve with flare compensation
+- Spectral film gamut handling in CIE xy chromaticity space (Spektrafilm-inspired),
+  preserving perceived hue while smoothly compressing out-of-gamut colors
+- Full parameter set: contrast, contrast pivot, gamma, toe/shoulder power, vibrance,
+  chromatic boost, peak luminance, input exposure, Abney rotation (hue roll-off),
+  highlight desaturation with threshold, gamut knee/steepness, detail recovery
+- Display targets: sRGB, Rec. 2020, Display P3, ProPhoto RGB, Adobe RGB
+- 11 color looks (neutral to authentic cinema), with look opacity
+- CPU and OpenCL GPU implementations
+
+### New module, ACES 2.0 Reference Rendering
+The ACES 2.0 CAM DRT (colour appearance model display rendering transform),
+faithful to the official ACES 2.0 reference output transform (April 2025).
+
+- Working-space agnostic: converts from/to the pipe's profile internally via ACES AP1 (D60)
+- CAT16-based JMh pipeline: `pipe RGB → AP1 → XYZ → ×100 nits → CAT16 JMh`
+- Tone mapping in JMh (display-J tonescale) + chroma compression, then double gamut
+  compression (JMh and AP1)
+- AP0/AP1 matrices per SMPTE ST 2065-1
+
+### Tone-mapping (TM) selector
+A tone-mapping workflow selector in the bottom toolchain modulegroups that swaps
+the active tone mapper with one click, while keeping all other modules untouched:
+
+- none · filmic · sigmoid · AgX · basecurve · 3DCF · ACES 2.0
+
+Selecting an entry automatically disables the other tone mappers, loads and enables
+the chosen one, expands it and switches to its module group. The selector is
+synchronized with the quick-access preset panel and stored in the workflow
+setting.
+
+### Detachable modules
+Module headers can show a **detach button** (enable via *preferences → darkroom →
+modules → "show detach button in module headers"*), which moves the entire module
+panel into a separate window.
+
+- The detached window keeps the module's enable/disable toggle in its header
+- The module keeps a placeholder in the panel; clicking detach again re-attaches it
+- Uses the same settings and history as the in-place module
 
 ### Native sidecar format :`.lab.xmp`
 Libre DT-Lab writes sidecars as `image.ext.lab.xmp` instead of `image.ext.xmp`.
@@ -46,7 +106,7 @@ Configuration and cache are stored in `~/.config/libre-dt-lab/` and `~/.cache/li
 
 ## Download
 
-Pre-built packages are available in the [Releases](https://github.com/Christian-Bouhon/libre-dt-lab/releases/tag/nightly) section.
+Pre-built packages are available in the [Releases](https://github.com/Christian-Bouhon/libre-dt-lab/releases/tag/Main) section.
 
 ### Linux AppImage
 ```bash
