@@ -2067,6 +2067,9 @@ static void _add_exposure_box(dt_iop_module_t *self, dt_iop_agx_gui_data_t *g, d
     _("exposure compensation applied before tone mapping.\n"
       "positive values brighten, negative values darken."));
 
+  // hidden because it duplicates the pivot relative exposure control
+  gtk_widget_hide(g->input_exposure);
+
   GtkWidget *white_slider = dt_bauhaus_slider_from_params(self, "range_white_relative_ev");
   g->white_exposure_picker = dt_color_picker_new(self, DT_COLOR_PICKER_AREA | DT_COLOR_PICKER_DENOISE, white_slider);
   dt_bauhaus_slider_set_soft_range(g->white_exposure_picker, 1.f, 10.f);
@@ -2278,7 +2281,11 @@ void gui_update(dt_iop_module_t *self)
 
   dt_bauhaus_slider_set(g->input_exposure, p->input_exposure);
 
-  _update_redraw_dynamic_gui(self, g, p);
+  if(g->input_exposure)
+  {
+    dt_bauhaus_slider_set(g->input_exposure, p->input_exposure);
+    gtk_widget_hide(g->input_exposure);
+  }
 
   gui_changed(self, NULL, NULL);
 }

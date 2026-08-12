@@ -691,9 +691,9 @@ static void spatial_contrast_process(dt_iop_module_t *self,
         if(d->local_scale != 1.0f || g->mask_display == DT_LC_MASK_local)
           compute_smoothed_luminance_mask(in, luminance_smoothed, width, height, d, d->radius, base_eps * fmaxf(d->f_mult_local, 0.5f));
         if(d->fine_scale != 1.0f || g->mask_display == DT_LC_MASK_FINE)
-          compute_smoothed_luminance_mask(in, luminance_smoothed_fine, width, height, d, d->radius_fine, base_eps * fmaxf(d->f_mult_fine, 0.5f));
+          compute_smoothed_luminance_mask(in, luminance_smoothed_fine, width, height, d, d->radius_fine, base_eps * d->f_mult_fine);
         if(d->micro_scale != 1.0f || g->mask_display == DT_LC_MASK_MICRO)
-          compute_smoothed_luminance_mask(in, luminance_smoothed_micro, width, height, d, d->radius_micro, base_eps * fmaxf(d->f_mult_micro, 0.5f));
+          compute_smoothed_luminance_mask(in, luminance_smoothed_micro, width, height, d, d->radius_micro, base_eps * d->f_mult_micro);
         hash_set_get(&hash, &g->ui_preview_hash, &self->gui_lock);
 
         // Mark the cache valid for this (full) pipe as well. Previously only the
@@ -725,40 +725,31 @@ static void spatial_contrast_process(dt_iop_module_t *self,
         if(d->local_scale != 1.0f || g->mask_display == DT_LC_MASK_local)
         compute_smoothed_luminance_mask(in, luminance_smoothed, width, height, d, d->radius, base_eps * fmaxf(d->f_mult_local, 0.5f));
         if(d->fine_scale != 1.0f || g->mask_display == DT_LC_MASK_FINE)
-        compute_smoothed_luminance_mask(in, luminance_smoothed_fine, width, height, d, d->radius_fine, base_eps * fmaxf(d->f_mult_fine, 0.5f));
+        compute_smoothed_luminance_mask(in, luminance_smoothed_fine, width, height, d, d->radius_fine, base_eps * d->f_mult_fine);
         if(d->micro_scale != 1.0f || g->mask_display == DT_LC_MASK_MICRO)
-        compute_smoothed_luminance_mask(in, luminance_smoothed_micro, width, height, d, d->radius_micro, base_eps * fmaxf(d->f_mult_micro, 0.5f));
+        compute_smoothed_luminance_mask(in, luminance_smoothed_micro, width, height, d, d->radius_micro, base_eps * d->f_mult_micro);
         g->luminance_valid = TRUE;
         dt_iop_gui_leave_critical_section(self);
         dt_dev_pixelpipe_cache_invalidate_later(piece->pipe, self->iop_order, "contrast: ");
       }
     }
-    else
-    {
-        // Chemin B : pipe avec GUI attaché mais type non reconnu (ex. export depuis chambre noire ouverte).
-        // Les guards incluent g->mask_display pour garantir que le buffer est calculé
-        // même quand scale == 1.0, si l'utilisateur a activé la visualisation du masque.
-        compute_pixel_luminance_mask(in, luminance_pixel, width, height, d->method);
-        if(d->coarse_scale != 1.0f || g->mask_display == DT_LC_MASK_coarse)
-          compute_smoothed_luminance_mask(in, luminance_smoothed_coarse, width, height, d, d->radius_coarse, base_eps * fmaxf(d->f_mult_coarse, 0.5f));
-        if(d->broad_scale != 1.0f  || g->mask_display == DT_LC_MASK_broad)
-          compute_smoothed_luminance_mask(in, luminance_smoothed_broad,  width, height, d, d->radius_broad,  base_eps * fmaxf(d->f_mult_broad,  0.5f));
-        if(d->local_scale != 1.0f  || g->mask_display == DT_LC_MASK_local)
-          compute_smoothed_luminance_mask(in, luminance_smoothed,        width, height, d, d->radius,        base_eps * fmaxf(d->f_mult_local,  0.5f));
-        if(d->fine_scale != 1.0f   || g->mask_display == DT_LC_MASK_FINE)
-          compute_smoothed_luminance_mask(in, luminance_smoothed_fine,   width, height, d, d->radius_fine,   base_eps * fmaxf(d->f_mult_fine,   0.5f));
-        if(d->micro_scale != 1.0f  || g->mask_display == DT_LC_MASK_MICRO)
-          compute_smoothed_luminance_mask(in, luminance_smoothed_micro,  width, height, d, d->radius_micro,  base_eps * fmaxf(d->f_mult_micro,  0.5f));
-    }
   }
   else
   {
+    // Non-interactive path (no GUI, or GUI-attached pipe of another type than FULL/PREVIEW).
+    // The pixel luminance is always needed, but each EIGF pass only runs when the
+    // scale is active (scale != 1.0) or its mask is being displayed.
     compute_pixel_luminance_mask(in, luminance_pixel, width, height, d->method);
-    compute_smoothed_luminance_mask(in, luminance_smoothed_coarse, width, height, d, d->radius_coarse, base_eps * fmaxf(d->f_mult_coarse, 0.5f));
-    compute_smoothed_luminance_mask(in, luminance_smoothed_broad,  width, height, d, d->radius_broad,  base_eps * fmaxf(d->f_mult_broad,  0.5f));
-    compute_smoothed_luminance_mask(in, luminance_smoothed,        width, height, d, d->radius,        base_eps * fmaxf(d->f_mult_local,  0.5f));
-    compute_smoothed_luminance_mask(in, luminance_smoothed_fine,   width, height, d, d->radius_fine,   base_eps * fmaxf(d->f_mult_fine,   0.5f));
-    compute_smoothed_luminance_mask(in, luminance_smoothed_micro,  width, height, d, d->radius_micro,  base_eps * fmaxf(d->f_mult_micro,  0.5f));
+    if(d->coarse_scale != 1.0f || (g && g->mask_display == DT_LC_MASK_coarse))
+      compute_smoothed_luminance_mask(in, luminance_smoothed_coarse, width, height, d, d->radius_coarse, base_eps * fmaxf(d->f_mult_coarse, 0.5f));
+    if(d->broad_scale != 1.0f || (g && g->mask_display == DT_LC_MASK_broad))
+      compute_smoothed_luminance_mask(in, luminance_smoothed_broad, width, height, d, d->radius_broad,  base_eps * fmaxf(d->f_mult_broad,  0.5f));
+    if(d->local_scale != 1.0f || (g && g->mask_display == DT_LC_MASK_local))
+      compute_smoothed_luminance_mask(in, luminance_smoothed,       width, height, d, d->radius,        base_eps * fmaxf(d->f_mult_local,  0.5f));
+    if(d->fine_scale != 1.0f || (g && g->mask_display == DT_LC_MASK_FINE))
+      compute_smoothed_luminance_mask(in, luminance_smoothed_fine,  width, height, d, d->radius_fine,   base_eps * d->f_mult_fine);
+    if(d->micro_scale != 1.0f || (g && g->mask_display == DT_LC_MASK_MICRO))
+      compute_smoothed_luminance_mask(in, luminance_smoothed_micro, width, height, d, d->radius_micro,  base_eps * d->f_mult_micro);
   }
 
   // Display output
@@ -897,15 +888,17 @@ int process_cl(dt_iop_module_t *self,
         err = dt_opencl_enqueue_copy_buffer_to_buffer(devid, dev_lum, buf, 0, 0, bsize); \
         if(err != CL_SUCCESS) goto cleanup;                                           \
         err = fast_eigf_surface_blur_cl(devid, &gd->eigf, buf, width, height,         \
-                                        (float)(radius), base_eps * fmaxf((fmult), 0.5f), \
+                                        (float)(radius), base_eps * (fmult),          \
                                         d->iterations, DT_GF_BLENDING_LINEAR);        \
         if(err != CL_SUCCESS) goto cleanup;                                           \
       }                                                                               \
     } while(0)
 
-  ST_BLUR_SCALE(dev_coarse, d->coarse_scale != 1.0f, d->radius_coarse, d->f_mult_coarse);
-  ST_BLUR_SCALE(dev_broad,  d->broad_scale  != 1.0f, d->radius_broad,  d->f_mult_broad);
-  ST_BLUR_SCALE(dev_local,  d->local_scale  != 1.0f, d->radius,        d->f_mult_local);
+  // The clamp (floor 0.5) is preserved for local/broad/coarse (they never reach
+  // it anyway, so it stays a no-op); micro/fine get their full slider range.
+  ST_BLUR_SCALE(dev_coarse, d->coarse_scale != 1.0f, d->radius_coarse, fmaxf(d->f_mult_coarse, 0.5f));
+  ST_BLUR_SCALE(dev_broad,  d->broad_scale  != 1.0f, d->radius_broad,  fmaxf(d->f_mult_broad,  0.5f));
+  ST_BLUR_SCALE(dev_local,  d->local_scale  != 1.0f, d->radius,        fmaxf(d->f_mult_local,  0.5f));
   ST_BLUR_SCALE(dev_fine,   d->fine_scale   != 1.0f, d->radius_fine,   d->f_mult_fine);
   ST_BLUR_SCALE(dev_micro,  d->micro_scale  != 1.0f, d->radius_micro,  d->f_mult_micro);
   #undef ST_BLUR_SCALE
@@ -1038,8 +1031,11 @@ void commit_params(dt_iop_module_t *self,
   
   // The multipliers determine how the base epsilon for the guided filter is scaled for each detail level.
   // The multiplier coefficients were determined following a series of empirical tests.
-  d->f_mult_micro    = (1.0f / fmaxf(p->f_mult_micro,    1e-6f)) * 0.50f;
-  d->f_mult_fine     = (1.0f / fmaxf(p->f_mult_fine,     1e-6f)) * 0.75f;
+  // micro/fine are floored at their natural value for the max slider position (p == 2.0)
+  // so their whole slider range stays active; local/broad/coarse never reach the former
+  // 0.5 clamp floor and are left untouched.
+  d->f_mult_micro    = fmaxf((1.0f / fmaxf(p->f_mult_micro,    1e-6f)) * 0.50f, 0.25f);
+  d->f_mult_fine     = fmaxf((1.0f / fmaxf(p->f_mult_fine,     1e-6f)) * 0.75f, 0.375f);
   d->f_mult_local    = (1.0f / fmaxf(p->f_mult_local,    1e-6f)) * 1.0f;
   d->f_mult_broad    = (1.0f / fmaxf(p->f_mult_broad,    1e-6f)) * 1.60f;
   d->f_mult_coarse   = (1.0f / fmaxf(p->f_mult_coarse,   1e-6f)) * 2.25f;
