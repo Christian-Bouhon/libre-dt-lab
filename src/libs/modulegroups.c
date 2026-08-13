@@ -1509,7 +1509,7 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
       }                                                                                                           \
       else if(wf_3dcf)                                                                                            \
       {                                                                                                           \
-        AM("3dcf/peak luminance");                                                                                \
+        AM("3dcf/auto-adjust");                                                                                \
         AM("3dcf/contrast");                                                                                      \
         AM("3dcf/contrast pivot");                                                                                \
         AM("3dcf/shoulder power");                                                                                \
@@ -3070,7 +3070,7 @@ static void _basics_switch_to_workflow(dt_lib_module_t *self, const int selected
     }
     else if(wf_3dcf)
     {
-      AQ("3dcf/peak luminance");
+      AQ("3dcf/auto-adjust");
       AQ("3dcf/contrast");
       AQ("3dcf/contrast pivot");
       AQ("3dcf/shoulder power");

@@ -64,6 +64,7 @@
 #include "develop/tiling.h"
 #include "develop/imageop_gui.h"
 #include "gui/accelerators.h"
+#include "gui/color_picker_proxy.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
 #include "iop/iop_api.h"
@@ -76,8 +77,9 @@
 DT_MODULE_INTROSPECTION(9, dt_iop_3dcf_params_t)
 
 /* Type definitions for the ACES 2.0 SSTS pipeline context.
- * spectral_tone_data.c and spectral_tone_pipeline.c have been merged into 3dcf.c
- * into this single translation unit for Windows/MinGW compatibility. */
+   spectral_tone_data.c and spectral_tone_pipeline.c have been merged into
+   3dcf.c into this single translation unit for Windows/MinGW
+   compatibility. */
 
 typedef enum dt_iop_st_colorspace_t
 {
@@ -88,12 +90,12 @@ typedef enum dt_iop_st_colorspace_t
   DT_ST_CS_ADOBERGB,      // $DESCRIPTION: "Adobe RGB"
 } dt_iop_st_colorspace_t;
 
-/* MUST be a proper enum, NOT int.
- * dt_bauhaus_combobox_from_params uses introspection: for a plain int it creates
- * an empty combobox and immediately tries to set the default index on it.
- * Setting index 0 on an empty combobox is a silent no-op on Linux/GTK but
- * an assertion failure or out-of-bounds access on Windows/GTK → crash at
- * module mount, before any image is loaded. */
+/* MUST be a proper enum, NOT int. dt_bauhaus_combobox_from_params uses
+   introspection: for a plain int it creates an empty combobox and
+   immediately tries to set the default index on it. Setting index 0 on an
+   empty combobox is a silent no-op on Linux/GTK but an assertion failure or
+   out-of-bounds access on Windows/GTK -- crash at module mount, before any
+   image is loaded. */
 typedef enum dt_iop_st_look_t
 {
   DT_ST_LOOK_NEUTRAL = 0,    // $DESCRIPTION: "neutral"
@@ -108,6 +110,13 @@ typedef enum dt_iop_st_look_t
   DT_ST_LOOK_CINEMA,         // $DESCRIPTION: "authentic cinema"
   DT_ST_LOOK_BRIGHT,         // $DESCRIPTION: "bright atmosphere"
 } dt_iop_st_look_t;
+
+typedef enum dt_iop_st_auto_mode_t
+{
+  DT_ST_AUTO_CONTRASTY = 0,
+  DT_ST_AUTO_NEUTRAL,
+  DT_ST_AUTO_SOFT,
+} dt_iop_st_auto_mode_t;
 
 typedef struct dt_iop_3dcf_params_t
 {
@@ -178,10 +187,11 @@ typedef struct dt_iop_3dcf_data_t
   dt_st_context_t ctx;
 } dt_iop_3dcf_data_t;
 
-/* GPU-side context — MUST match dt_st_cl_params_t in 3dcf.cl byte for
- * byte. Only 4-byte members (float / int) are used so host and device layouts
- * are identical (no padding); the struct is passed to the kernel by value. The
- * SSTS parameters are double in dt_st_context_t but narrowed to float here. */
+/* GPU-side context -- MUST match dt_st_cl_params_t in 3dcf.cl byte for
+   byte. Only 4-byte members (float / int) are used so host and device
+   layouts are identical (no padding); the struct is passed to the kernel by
+   value. The SSTS parameters are double in dt_st_context_t but narrowed to
+   float here. */
 typedef struct dt_st_cl_params_t
 {
   float input_matrix[9];
@@ -250,6 +260,33 @@ typedef struct dt_iop_3dcf_gui_data_t
   GtkAllocation allocation;
   PangoRectangle ink;
   GtkStyleContext *context;
+  /* GUI-only combobox, not a module parameter. Also carries the live
+     grey-point picker via its quad icon (see color_picker_apply below) and
+     selects the contrast rendering that picker uses. Changing the selection
+     alone triggers nothing. */
+  GtkWidget *auto_mode_combo;
+  /* Set by color_picker_apply() on each live sample, consumed in process().
+     Written from the GUI thread, read from the pixelpipe thread; not
+     otherwise synchronized. */
+  gboolean auto_apply_requested;
+  /* Preset read from auto_mode_combo when the flag above is set. */
+  dt_iop_st_auto_mode_t auto_requested_mode;
+  /* Picked grey-point luminance (scene-referred Y, module working space).
+     0 = no pick, the estimator falls back to the scene average.
+     Deliberately not a module parameter: only the resulting sliders
+     (input_exposure, contrast...) are recorded in history, so editing stays
+     reproducible; only the picked point itself is lost on reopen. */
+  float picked_grey_y;
+  /* Last picked_grey_y value actually sent to auto_adjust_3dcf_params().
+     Performance guard: skips a full-image scan when the picked value hasn't
+     changed meaningfully since the last computation (see
+     color_picker_apply()). */
+  float picked_grey_y_last_applied;
+  /* Last image id seen by gui_update(). gui_update() fires far more often
+     than on image change alone, so picked_grey_y is reset here only when
+     the displayed image actually changed. 0 (NO_IMGID) on the first call is
+     distinct from any real id, so the initial reset happens naturally. */
+  dt_imgid_t last_imgid;
 } dt_iop_3dcf_gui_data_t;
 
 /* Conversion matrices */
@@ -288,10 +325,10 @@ const double dt_st_cat_d65_to_d50[9] = {
 };
 
 /* Pre-computed combined matrices for output gamut protection:
- *   gamut_fwd[cs]  : Rec.2020 D65 RGB -> Target D65 RGB
- *   gamut_inv[cs]  : Target D65 RGB -> Rec.2020 D65 RGB
- * Indexed by dt_iop_st_colorspace_t. Slot REC2020 is identity (unused).
- * Round-trip verified: fwd @ inv = I to within ~3e-16. */
+     gamut_fwd[cs]  : Rec.2020 D65 RGB -> Target D65 RGB
+     gamut_inv[cs]  : Target D65 RGB -> Rec.2020 D65 RGB
+   Indexed by dt_iop_st_colorspace_t. Slot REC2020 is identity (unused).
+   Round-trip verified: fwd @ inv = I to within ~3e-16. */
 static const float st_gamut_fwd[5][9] = {
   /* DT_ST_CS_REC709 — sRGB (same primaries) */
   { 1.6604910021084340e+00f, -5.8764113878854918e-01f, -7.2849863319884856e-02f,
@@ -348,22 +385,22 @@ static const float *st_get_luma_coeff(dt_iop_st_colorspace_t cs)
 }
 
 /* ========================================================================
- * ACES 2.0 SSTS (Single-Stage Tone Scale) and spectral pipeline functions
- * ======================================================================== */
+   ACES 2.0 SSTS (Single-Stage Tone Scale) and spectral pipeline functions
+   ======================================================================== */
 
-/* ACES 2.0 SSTS (Single-Stage Tone Scale) — official ACES 2.0 RRT tone scale
- *
- * Parametric MM (Michaelis-Menten) curve with flare compensation.
- * Reference: aces-core/lib/Lib.Academy.Tonescale.ctl
- *
- *   f = m_2 * (x / (x + s_2))^g
- *   h = f^2 / (f + t_1)
- *   Y = h * n_r          (output: display luminance in cd/m^2)
- *
- * The SSTS defines the "texture of light" — the character of the tone
- * reproduction from scene-linear to display. Its shape is determined by
- * the peak luminance of the target display.
- */
+/* ACES 2.0 SSTS (Single-Stage Tone Scale) -- official ACES 2.0 RRT tone
+   scale.
+
+   Parametric MM (Michaelis-Menten) curve with flare compensation.
+   Reference: aces-core/lib/Lib.Academy.Tonescale.ctl
+
+     f = m_2 * (x / (x + s_2))^g
+     h = f^2 / (f + t_1)
+     Y = h * n_r          (output: display luminance in cd/m^2)
+
+   The SSTS defines the "texture of light" -- the character of the tone
+   reproduction from scene-linear to display. Its shape is determined by
+   the peak luminance of the target display. */
 void dt_st_ssts_init(dt_st_ssts_params_t *p, double peak_luminance)
 {
   /* --- Fixed SSTS design constants --- */
@@ -433,7 +470,7 @@ float dt_st_compute_y_tm(float y_scene, const dt_st_context_t *ctx)
   y_tm = powf(fmaxf(y_tm, 0.0f), 1.0f / 2.4f);
 
   /* Clamp to [0, 1] before contrast curve: the shoulder formula assumes
-   * y_tm ∈ [0,1] and produces NaN/Inf when y_tm > 1 (powf(0, negative)). */
+     y_tm in [0,1] and produces NaN/Inf when y_tm > 1 (powf(0, negative)). */
   y_tm = fminf(y_tm, 1.0f);
 
   if(ctx->contrast != 1.0f || ctx->toe_power != 1.0f || ctx->shoulder_power != 1.0f)
@@ -460,13 +497,484 @@ float dt_st_compute_y_tm(float y_scene, const dt_st_context_t *ctx)
   return y_tm;
 }
 
-/* Desaturation weight for highlights
- *
- * Desaturation activates above a scene luminance threshold (in SSTS-exposed space)
- * and ramps up quadratically as luminance increases.
- * hl_desat controls the strength: 0 = off, 1 = full desat well above threshold,
- * > 1 = faster desaturation.
- */
+/* ========================================================================
+   Auto-adjustment: derive tone/contrast params from scene content
+   ========================================================================
+
+   Known issue with the peak_luminance slider: its tooltip says "Higher
+   values give more highlight headroom with a gentler roll-off," but
+   dt_st_compute_y_tm() normalizes by ctx->ssts.n_r, a CONSTANT (100.0, set
+   in dt_st_ssts_init), instead of ctx->ssts.n (the actual chosen peak). For
+   a fixed scene value, y_tm grows with peak_luminance, so a higher
+   peak_luminance clips EARLIER, not later. The likely fix is to divide by
+   ctx->ssts.n instead of ctx->ssts.n_r in dt_st_compute_y_tm() -- not done
+   here, out of scope for this function. The code below works with the
+   slider's current (unfixed) behavior; fixing dt_st_compute_y_tm() requires
+   flipping the bisection direction below (see the comment at that spot).
+
+   Computation domains:
+   - Scene Y: linear luminance, Rec.2020 D50 weighting -- reuses the Y row
+     of dt_st_rec2020_d50_to_xyz (not Rec.709, not st_luma_rec2020, which
+     are the Rec.2020 D65 coefficients used for the OUTPUT space, a
+     different space).
+   - peak_luminance (param): percentage [-100,100], 0% = 200 nits, converted
+     to nits via peak_nits = 200*(1+p/100), see st_compute_context(). Solved
+     by bisection to bring the scene's high percentile just under clipping
+     in the actual y_tm domain, rather than assigning a linear scene value
+     to a field that represents a nits target.
+   - contrast_pivot (param): the pipeline uses it inverted
+     (ctx->contrast_pivot = 1 - p->contrast_pivot), in the y_tm domain (post
+     SSTS + 1/2.4 gamma), not the scene domain. So this computes where scene
+     middle grey (0.18) lands after SSTS+gamma with the peak_luminance
+     determined above, then inverts it.
+
+   Runs in ~220ms on a 24MP image, single-threaded. The contrast-pass
+   constants (target_std_dev, bounds, toe/shoulder thresholds) are
+   reasonable starting points, not calibrated against real images with this
+   module. */
+
+#define ST_AUTO_HIST_BINS      2048
+#define ST_AUTO_HIST_EV_MIN    (-20.0)
+#define ST_AUTO_HIST_EV_MAX    (16.0)
+#define ST_AUTO_HL_PERCENTILE  0.99   /* high percentile rather than raw max: robust to hot/specular pixels */
+#define ST_AUTO_HEADROOM       0.92f  /* target margin under clipping in the y_tm domain (1.0 = hard clip) */
+
+/* --- Contrast rendering presets for the auto-adjust picker ----------------
+
+   These presets modulate ONLY the contrast rendering. The scene
+   measurements (exposure, peak_luminance, contrast_pivot) are identical in
+   all three cases -- they describe the scene, not a look, and have no
+   reason to change with the chosen rendering.
+
+   DT_ST_AUTO_CONTRASTY: sustained master contrast. Shadows harden further
+   as they spread out (backlit / high-dynamic-range scenes), highlights
+   soften further as they spread out. Suited to landscapes and
+   wide-dynamic-range scenes.
+
+   DT_ST_AUTO_SOFT: never hardens on either side; both toe and shoulder only
+   soften as their side spreads out, capped at 1.0.
+
+   DT_ST_AUTO_NEUTRAL: interpolates between the two extremes. Not validated
+   against real images -- a constructed midpoint, not a measured setting.
+
+   toe_base: the toe/shoulder value for a lightly spread side (>1.0 =
+   hardens). toe_amplitude/shoulder_amplitude: how much that side moves away
+   from toe_base as it spreads out; sign decides the direction (positive =
+   softens as it spreads, negative = hardens as it spreads). Shadows on a
+   backlit scene benefit from extra punch as they get more spread out, hence
+   toe_amplitude is negative for contrasty/neutral; highlights instead need
+   a gentler rolloff as they spread out (the SSTS has already compressed
+   them heavily), hence shoulder_amplitude stays positive for all three
+   presets. soft's toe_amplitude stays positive too, since it must never
+   harden either side. */
+typedef struct dt_st_auto_preset_t
+{
+  float target_sd;       /* scene spread (in stops) that receives the module's default contrast */
+  float gain;            /* factor applied to the computed contrast; 1.0 = the "contrasty" reference */
+  float contrast_min;    /* bounds applied to the master contrast */
+  float contrast_max;
+  float toe_base;             /* toe/shoulder value for a lightly spread side (>1.0 = hardens) */
+  float toe_amplitude;        /* shadow-side response to spread; see header comment for sign */
+  float shoulder_amplitude;   /* highlight-side response to spread; always softens (positive) */
+} dt_st_auto_preset_t;
+
+/* The three presets share the same response shape (linear ratio, same
+   target_sd) and differ only by a multiplicative gain and their bounds.
+   This is deliberate: a multiplicative gain guarantees soft < neutral <
+   contrasty at every scene spread, which varying the target and a damping
+   exponent per preset does not. */
+static const dt_st_auto_preset_t st_auto_presets[3] = {
+  /* CONTRASTY -- gain 1.0, the reference rendering. toe_amplitude negative:
+     shadows harden (up to 1.55) as they spread out. */
+  { 1.8f, 1.00f, 0.6f, 3.5f, 1.15f, -0.40f, 0.40f },
+  /* NEUTRAL -- interpolated between the two extremes. Same shadow-hardening
+     direction as contrasty, smaller magnitude (up to 1.43). */
+  { 1.8f, 0.88f, 0.7f, 3.1f, 1.08f, -0.35f, 0.35f },
+  /* SOFT -- never hardens on either side (toe_amplitude stays positive). */
+  { 1.8f, 0.78f, 0.8f, 2.8f, 1.00f, -0.30f, 0.30f },
+};
+
+/* Reproduces exactly the "tone mapping" part of dt_st_compute_y_tm(),
+   without the contrast S-curve, to evaluate where a given scene value lands
+   in the y_tm domain for a given peak_luminance (in nits). */
+static float st_auto_eval_y_tm(float y_scene, double peak_nits)
+{
+  dt_st_ssts_params_t ssts;
+  dt_st_ssts_init(&ssts, peak_nits);
+  float y_tm = dt_st_ssts_fwd(&ssts, y_scene) / (float)ssts.n_r;
+  y_tm = powf(fmaxf(y_tm, 0.0f), 1.0f / 2.4f);
+  return fminf(y_tm, 1.0f);
+}
+
+/* Matches st_compute_context(): hp = peak_luminance/100; peak = 200*(1+hp). */
+static inline double st_auto_percent_to_nits(float percent) { return 200.0 * (1.0 + (double)percent / 100.0); }
+static inline float  st_auto_nits_to_percent(double nits)   { return (float)((nits / 200.0 - 1.0) * 100.0); }
+
+/**
+   Computes a set of tone/contrast settings from scene content and writes
+   them into params.
+
+   @param in      Linear RGB buffer, module working space (Rec.2020 D50) --
+                   the buffer BEFORE 3DCF processing, i.e. exactly what
+                   process() receives in ivoid.
+   @param width   roi_in->width
+   @param height  roi_in->height
+   @param ch      piece->colors (3 or 4; only R,G,B are read)
+   @param params  Module parameters to update
+   @param mode    Contrast rendering preset (see st_auto_presets[]). Affects
+                   ONLY contrast and toe/shoulder; exposure, peak_luminance
+                   and contrast_pivot are identical across all three modes.
+   @param picked_grey_y  Picked mid-grey luminance Y (scene, module working
+                   space). > 0: used as a direct exposure anchor (no bias),
+                   instead of the trimmed geometric mean. <= 0: trimmed
+                   geometric mean (automatic behavior). */
+static void auto_adjust_3dcf_params(const float *in, int width, int height, int ch,
+                                     dt_iop_3dcf_params_t *params,
+                                     dt_iop_st_auto_mode_t mode,
+                                     float picked_grey_y)
+{
+  const size_t total_pixels = (size_t)width * (size_t)height;
+  if(!in || total_pixels == 0 || !params || ch < 3) return;
+
+  /* Defensive bound: an out-of-range preset would index past the array. */
+  const int mode_idx = (mode >= DT_ST_AUTO_CONTRASTY && mode <= DT_ST_AUTO_SOFT)
+                         ? (int)mode : (int)DT_ST_AUTO_NEUTRAL;
+  const dt_st_auto_preset_t *preset = &st_auto_presets[mode_idx];
+
+  /* Y row of dt_st_rec2020_d50_to_xyz (Rec.2020 D50 RGB -> XYZ D50): the
+     actual luminance coefficients for the module's working space, not the
+     Rec.2020 D65 coefficients (st_luma_rec2020) used elsewhere for the
+     output space. */
+  const double luma_r = dt_st_rec2020_d50_to_xyz[3];
+  const double luma_g = dt_st_rec2020_d50_to_xyz[4];
+  const double luma_b = dt_st_rec2020_d50_to_xyz[5];
+
+  const size_t step = (total_pixels > 1000000) ? 4 : 1;
+
+  /* -----------------------------------------------------------------
+     PASS 1: EV histogram, used both for the trimmed geometric mean
+     (exposure) and the high percentile (peak_luminance).
+     ----------------------------------------------------------------- */
+  size_t sample_count = 0;
+  uint32_t hist[ST_AUTO_HIST_BINS] = { 0 };
+  const double hist_scale = ST_AUTO_HIST_BINS / (ST_AUTO_HIST_EV_MAX - ST_AUTO_HIST_EV_MIN);
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) \
+    reduction(+:sample_count) reduction(+:hist[:ST_AUTO_HIST_BINS])
+#endif
+  for(size_t i = 0; i < total_pixels; i += step)
+  {
+    const float r = in[ch * i + 0];
+    const float g = in[ch * i + 1];
+    const float b = in[ch * i + 2];
+    const float y = (float)(luma_r * r + luma_g * g + luma_b * b);
+
+    if(y > 1e-6f)
+    {
+      sample_count++;
+
+      const double ev = log2((double)y);
+      long bin = (long)((ev - ST_AUTO_HIST_EV_MIN) * hist_scale);
+      if(bin < 0) bin = 0;
+      if(bin >= ST_AUTO_HIST_BINS) bin = ST_AUTO_HIST_BINS - 1;
+      hist[bin]++;
+    }
+  }
+
+  if(sample_count == 0) return;
+
+  const float target_middle_grey = 0.18f;
+
+  /* -----------------------------------------------------------------
+     1.1 Exposure: trimmed geometric mean of the scene, in EV, rather than
+         the median. The median ignores pixel VALUE (only rank matters): a
+         large flat area near the 50th percentile (sky, wall, blurred
+         background...) can pull it far from the actual subject with no
+         indication. The trimmed geometric mean instead weights each pixel
+         in the [15%, 95%] rank range by its actual EV value -- the 15%
+         darkest (noise, background, vignetting) and 5% brightest
+         (speculars) are excluded, but the rest of the frame contributes
+         by its real weight, not just its rank.
+
+     1.2 High percentile (peak_luminance): from the same histogram (hi_bin
+         = first bin where the cumulative count reaches 99%).
+     ----------------------------------------------------------------- */
+  const size_t low_trim_count  = (size_t)((double)sample_count * 0.15);
+  const size_t high_trim_count = (size_t)((double)sample_count * 0.95);
+  const size_t hl_count = (size_t)((double)sample_count * ST_AUTO_HL_PERCENTILE);
+
+  double sum_ev_trimmed = 0.0;
+  size_t count_trimmed = 0;
+  int hi_bin = ST_AUTO_HIST_BINS - 1;
+  gboolean hi_bin_found = FALSE;
+  {
+    size_t cumulative = 0;
+    for(int b = 0; b < ST_AUTO_HIST_BINS; b++)
+    {
+      const uint32_t bin_count = hist[b];
+      if(bin_count == 0) continue;
+
+      const size_t cum_start = cumulative;
+      cumulative += bin_count;
+      const size_t cum_end = cumulative;
+
+      /* This bin's contribution to the trimmed mean: only the part of
+         bin_count that falls in [low_trim_count, high_trim_count). */
+      if(cum_end > low_trim_count && cum_start < high_trim_count)
+      {
+        size_t valid_in_bin = bin_count;
+        if(cum_start < low_trim_count) valid_in_bin -= (low_trim_count - cum_start);
+        if(cum_end > high_trim_count)  valid_in_bin -= (cum_end - high_trim_count);
+
+        const double ev_center = ST_AUTO_HIST_EV_MIN + ((double)b + 0.5) / hist_scale;
+        sum_ev_trimmed += (double)valid_in_bin * ev_center;
+        count_trimmed += valid_in_bin;
+      }
+
+      if(!hi_bin_found && cum_end >= hl_count) { hi_bin = b; hi_bin_found = TRUE; }
+    }
+  }
+
+  /* Exposure anchor: the picked grey point if there is one -- used
+     directly, with no correction bias, since the user designated THE point
+     they want at 18% (semantic information, not statistical) -- otherwise
+     the trimmed geometric mean above. */
+  const gboolean use_picked = (picked_grey_y > 1e-6f);
+  float scene_grey_y;
+  if(use_picked)
+    scene_grey_y = picked_grey_y;
+  else if(count_trimmed > 0)
+    scene_grey_y = exp2f((float)(sum_ev_trimmed / (double)count_trimmed));
+  else
+    scene_grey_y = target_middle_grey; /* safety fallback: degenerate scene */
+
+  const float ev_shift = log2f(target_middle_grey / scene_grey_y);
+  params->input_exposure = fmaxf(fminf(ev_shift, 2.0f), -2.0f); /* slider bound */
+
+  /* High percentile of the scene (before exposure), re-expressed in linear
+     AFTER the exposure shift just set. */
+  {
+    const double ev_high_scene = ST_AUTO_HIST_EV_MIN + ((double)hi_bin + 0.5) / hist_scale;
+    const float y_high_shifted = exp2f((float)ev_high_scene + ev_shift);
+
+    /* Bisection on peak_luminance (in nits). See the section header comment:
+       with dt_st_compute_y_tm()'s current behavior (normalization by
+       constant n_r), y_tm GROWS with peak_nits for a fixed scene value, so
+       reducing clipping means LOWERING peak_nits. If dt_st_compute_y_tm()
+       is fixed to normalize by ctx->ssts.n, flip the two branches below
+       (and the y_tm_at_hi/y_tm_at_lo test). */
+    double nits_lo = 1.0, nits_hi = 400.0; /* upper bound = peak_luminance param at +100% */
+    const float y_tm_at_lo = st_auto_eval_y_tm(y_high_shifted, nits_lo);
+    const float y_tm_at_hi = st_auto_eval_y_tm(y_high_shifted, nits_hi);
+
+    double peak_nits;
+    if(y_tm_at_hi <= ST_AUTO_HEADROOM)
+    {
+      /* No clipping risk even at the max allowed nits: leave the default
+         setting (0% = 200 nits) rather than saturate the slider. */
+      peak_nits = 200.0;
+    }
+    else if(y_tm_at_lo >= ST_AUTO_HEADROOM)
+    {
+      /* Already clipping even at the minimum nits (extreme highlight): the
+         best value reachable within the slider's range. */
+      peak_nits = nits_lo;
+    }
+    else
+    {
+      for(int it = 0; it < 24; it++)
+      {
+        const double mid = 0.5 * (nits_lo + nits_hi);
+        const float y_tm = st_auto_eval_y_tm(y_high_shifted, mid);
+        if(y_tm > ST_AUTO_HEADROOM) nits_hi = mid; else nits_lo = mid;
+      }
+      peak_nits = 0.5 * (nits_lo + nits_hi);
+    }
+    params->peak_luminance = fmaxf(fminf(st_auto_nits_to_percent(peak_nits), 100.0f), -100.0f);
+  }
+
+  /* 1.3 Contrast pivot: where the middle grey point, exactly as exposed
+     (target_middle_grey -- ev_shift lands it exactly on 0.18 by
+     construction, see above), lands in the y_tm domain with the
+     peak_luminance determined above. The pipeline uses this parameter
+     inverted (ctx->contrast_pivot = 1 - p->contrast_pivot). Anchoring the
+     pivot on anything other than the actually-exposed point misaligns the
+     S-curve from the subject. */
+  {
+    const double peak_nits = st_auto_percent_to_nits(params->peak_luminance);
+    const float y_tm_grey = st_auto_eval_y_tm(target_middle_grey, peak_nits);
+    params->contrast_pivot = fmaxf(fminf(1.0f - y_tm_grey, 0.99f), 0.01f);
+  }
+
+  /* -----------------------------------------------------------------
+     PASS 2: standard deviation in EV (log2) of the re-exposed luminance,
+     for contrast. The constants below are not calibrated against real
+     images with this module.
+     ----------------------------------------------------------------- */
+  double sum_sq_diff = 0.0;
+  size_t var_count = 0;
+  double sum_sq_shadow = 0.0, sum_sq_highlight = 0.0;
+  size_t shadow_count = 0, highlight_count = 0;
+  const float log_pivot = log2f(target_middle_grey);
+  const float exposure_factor = exp2f(ev_shift);
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static) \
+    reduction(+:sum_sq_diff, var_count, sum_sq_shadow, sum_sq_highlight, shadow_count, highlight_count)
+#endif
+  for(size_t i = 0; i < total_pixels; i += step)
+  {
+    const float r = in[ch * i + 0];
+    const float g = in[ch * i + 1];
+    const float b = in[ch * i + 2];
+    const float y = (float)(luma_r * r + luma_g * g + luma_b * b) * exposure_factor;
+
+    if(y > 1e-3f)
+    {
+      const float diff = log2f(y) - log_pivot;
+      sum_sq_diff += (double)diff * (double)diff;
+      var_count++;
+
+      if(diff < 0.0f) { sum_sq_shadow    += (double)diff * (double)diff; shadow_count++;    }
+      else             { sum_sq_highlight += (double)diff * (double)diff; highlight_count++; }
+    }
+  }
+
+  const float std_dev = (var_count > 0) ? sqrtf((float)(sum_sq_diff / (double)var_count)) : 1.5f;
+  /* std_dev computed separately for each side of the pivot. Falls back to
+     the preset's target if one side is empty -- should only happen on a
+     degenerate scene (uniformly above or below the exposed grey point). */
+  const float std_dev_shadow    = (shadow_count > 0)    ? sqrtf((float)(sum_sq_shadow    / (double)shadow_count))    : preset->target_sd;
+  const float std_dev_highlight = (highlight_count > 0) ? sqrtf((float)(sum_sq_highlight / (double)highlight_count)) : preset->target_sd;
+
+  /* 2.1 Master contrast. Parameter range: [0.25,4.25], default 2.25. The
+     constants come from the chosen preset (see st_auto_presets[]):
+     target_sd sets which scene spread receives the module's default
+     contrast, gain scales the whole thing toward soft (< 1.0) without
+     distorting the curve shape. */
+  const float contrast_factor =
+    preset->gain * 2.25f * (preset->target_sd / fmaxf(std_dev, 0.4f));
+  params->contrast = fminf(fmaxf(contrast_factor, preset->contrast_min), preset->contrast_max);
+
+  /* 2.2 Toe/Shoulder -- asymmetric, computed separately from the spread
+     (std_dev) of EACH side of the pivot, not a single shared std_dev.
+
+     Meaning: 1.0 = master contrast applied as-is in that zone; below =
+     softened; above = hardened on top of the master contrast. The two
+     sides move in OPPOSITE directions as their spread grows: shadows
+     harden further on contrasty/neutral (useful on a backlit /
+     wide-dynamic-range scene, where master contrast is low and shadow
+     detail needs extra punch), while highlights always soften further
+     (the SSTS has already compressed them heavily, so a harder highlight
+     rolloff there would clip). soft never hardens on either side. The
+     sign is baked into toe_amplitude/shoulder_amplitude per preset -- see
+     st_auto_presets[]. */
+  const float t_shadow    = fminf(fmaxf((std_dev_shadow    - 1.2f) / (2.5f - 1.2f), 0.0f), 1.0f);
+  const float t_highlight = fminf(fmaxf((std_dev_highlight - 1.2f) / (2.5f - 1.2f), 0.0f), 1.0f);
+  params->toe_power      = preset->toe_base - preset->toe_amplitude * t_shadow;
+  params->shoulder_power = preset->toe_base - preset->shoulder_amplitude * t_highlight;
+}
+
+/* ------------------------------------------------------------------------
+   GUI <-> process() wiring for the live auto-adjust picker. Placed here
+   (before process()) because process() consumes _st_auto_result_t and
+   _auto_apply_to_gui -- the declaration must precede use in C.
+   ------------------------------------------------------------------------ */
+
+/* Single entry point for an auto-adjust request, called from
+   color_picker_apply() on each live picker sample (see below). Computes
+   nothing itself: runs on the GUI thread and has no access to the
+   pixelpipe's input buffer (ivoid only exists in process()). Sets a flag
+   plus the requested preset, and triggers a preview recompute; process()
+   reads both, computes on ivoid, and hands back to the GUI thread via
+   g_idle_add(). */
+static void _auto_request(dt_iop_module_t *self, dt_iop_st_auto_mode_t mode)
+{
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  if(!g) return;
+
+  g->auto_requested_mode = mode;
+  g->auto_apply_requested = TRUE;
+  dt_dev_reprocess_preview(self->dev);
+}
+
+/* Changing the combobox selection doesn't move the picker's sampled area:
+   the framework (_record_point_area() in gui/color_picker_proxy.c) only
+   calls color_picker_apply() again when the sampled position/area changes,
+   so the new mode would never be read while the picker sits still -- hence
+   this dedicated handler. Triggers nothing if this module's picker isn't
+   currently armed (the combobox alone does nothing); otherwise re-runs
+   immediately with the last picked point (or 0 if none, in which case the
+   auto-adjust falls back to the automatic estimate) and the new mode, so
+   contrasty/neutral/soft can be compared on the same area without
+   re-dragging the picker. */
+static void _auto_mode_changed(GtkWidget *widget, dt_iop_module_t *self)
+{
+  (void)widget;
+  if(self->request_color_pick == DT_REQUEST_COLORPICK_OFF) return;
+
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  if(!g) return;
+
+  const int combo_idx = dt_bauhaus_combobox_get(g->auto_mode_combo);
+  const dt_iop_st_auto_mode_t mode =
+    (combo_idx >= DT_ST_AUTO_CONTRASTY && combo_idx <= DT_ST_AUTO_SOFT)
+    ? (dt_iop_st_auto_mode_t)combo_idx : DT_ST_AUTO_NEUTRAL;
+
+  g->picked_grey_y_last_applied = g->picked_grey_y;
+  _auto_request(self, mode);
+}
+
+/* Passed to g_idle_add() to hand the result computed in process() (pixelpipe
+   thread) back to the GTK widgets (GUI thread). */
+typedef struct _st_auto_result_t
+{
+  dt_iop_module_t *self;
+  dt_iop_3dcf_params_t params;
+} _st_auto_result_t;
+static gboolean _auto_apply_to_gui(gpointer user_data)
+{
+  _st_auto_result_t *res = (_st_auto_result_t *)user_data;
+  dt_iop_module_t *self = res->self;
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+
+  if(g)
+  {
+    memcpy(self->params, &res->params, sizeof(dt_iop_3dcf_params_t));
+
+    /* Targeted update, not dt_iop_gui_update(self): same pattern as
+       _exposure_set_white()/_exposure_set_black() in iop/exposure.c, which
+       only touch the widget(s) their picker concerns rather than
+       resyncing the whole panel. A full dt_iop_gui_update() here would
+       disarm the picker on every drag frame instead of it staying active
+       for a continuous drag. DT_ENTER_GUI_UPDATE()/DT_LEAVE_GUI_UPDATE():
+       standard darktable guard so dt_bauhaus_slider_set() doesn't cascade
+       into gui_changed() during a programmatic update. */
+    DT_ENTER_GUI_UPDATE();
+    dt_bauhaus_slider_set(g->contrast, res->params.contrast);
+    dt_bauhaus_slider_set(g->contrast_pivot, res->params.contrast_pivot);
+    dt_bauhaus_slider_set(g->toe_power, res->params.toe_power);
+    dt_bauhaus_slider_set(g->shoulder_power, res->params.shoulder_power);
+    dt_bauhaus_slider_set(g->input_exposure, res->params.input_exposure);
+    dt_bauhaus_slider_set(g->peak_luminance, res->params.peak_luminance);
+    DT_LEAVE_GUI_UPDATE();
+
+    dt_dev_add_history_item(darktable.develop, self, TRUE);
+
+    gtk_widget_queue_draw(GTK_WIDGET(g->graph));
+  }
+
+  free(res);
+  return G_SOURCE_REMOVE;
+}
+
+/* Desaturation weight for highlights.
+
+   Desaturation activates above a scene luminance threshold (in SSTS-exposed
+   space) and ramps up quadratically as luminance increases. hl_desat
+   controls the strength: 0 = off, 1 = full desat well above threshold,
+   > 1 = faster desaturation. */
 static inline float st_desat_weight(float y_norm, float hl_desat, float threshold)
 {
   if(hl_desat <= 0.0f || y_norm <= threshold) return 0.0f;
@@ -477,37 +985,35 @@ static inline float st_desat_weight(float y_norm, float hl_desat, float threshol
 }
 
 /* Hue-preserving gamut compression: smoothly pull out-of-[0,1] channels back
- * in range with a Reinhard-style soft knee, blending toward the PIXEL'S OWN
- * luma rather than a fixed white point.
- *
- * Why this matters (ACES 2.0-inspired principle, applied without needing a
- * JMh/CAM conversion): blending toward a fixed neutral like (1,1,1) is a
- * *compound* of desaturation and a genuine brightening — the more a pixel is
- * pushed toward white, the more its perceived luma rises too, which is what
- * makes strongly saturated highlights look like they "wash out" rather than
- * gently losing saturation. Blending toward the pixel's own luma instead is a
- * pure desaturation along the true hue-preserving axis: hue and luma stay
- * put, only chroma is reduced. This mirrors what ACES 2.0's gamut_compress
- * achieves via cusp/JMh geometry (compress chroma while leaving the
- * lightness axis alone), just done directly in RGB.
- *
- * The response is also no longer strictly linear in the excess: mild
- * excursions (t << 1) are barely touched, and only pixels close to the true
- * minimal-correction boundary (t -> 1) get pulled hard — a soft knee instead
- * of a uniform blend, which was making even mild out-of-gamut pixels lose a
- * large, constant fraction of their saturation.
- */
+   in range with a Reinhard-style soft knee, blending toward the PIXEL'S OWN
+   luma rather than a fixed white point.
+
+   Why this matters (ACES 2.0-inspired principle, applied without needing a
+   JMh/CAM conversion): blending toward a fixed neutral like (1,1,1) is a
+   compound of desaturation and a genuine brightening -- the more a pixel is
+   pushed toward white, the more its perceived luma rises too, which is what
+   makes strongly saturated highlights look like they "wash out" rather than
+   gently losing saturation. Blending toward the pixel's own luma instead is
+   a pure desaturation along the true hue-preserving axis: hue and luma stay
+   put, only chroma is reduced. This mirrors what ACES 2.0's gamut_compress
+   achieves via cusp/JMh geometry (compress chroma while leaving the
+   lightness axis alone), just done directly in RGB.
+
+   The response is also not linear in the excess: mild excursions (t << 1)
+   are barely touched, and only pixels close to the true minimal-correction
+   boundary (t -> 1) get pulled hard -- a soft knee instead of a uniform
+   blend, which would make even mild out-of-gamut pixels lose a large,
+   constant fraction of their saturation. */
 static inline void st_gamut_compress(float rgb[3], const float luma_coeff[3])
 {
   const float luma = luma_coeff[0] * rgb[0] + luma_coeff[1] * rgb[1] + luma_coeff[2] * rgb[2];
-  /* Guard against a degenerate (near-black) luma: falls back to the old
-   * anchor (1,1,1) only in this edge case, where "hue-preserving" is moot. */
+  /* Guard against a degenerate (near-black) luma: falls back to the fixed
+     anchor (1,1,1) only in this edge case, where "hue-preserving" is moot. */
   const float anchor = (luma > 1e-4f) ? luma : 1.0f;
 
   /* Minimal blend-toward-anchor amount `t` needed to bring every channel
-   * back into [0,1] -- same guarantee as before (the worst channel reaches
-   * exactly its boundary at t=1), just measured against `anchor` instead of
-   * against a fixed 1.0/0.0. */
+     back into [0,1]: the worst channel reaches exactly its boundary at
+     t=1, measured against `anchor` instead of a fixed 1.0/0.0. */
   float t = 0.0f;
   for(int c = 0; c < 3; c++)
   {
@@ -531,10 +1037,10 @@ static inline void st_gamut_compress(float rgb[3], const float luma_coeff[3])
     rgb[c] = (1.0f - blend) * rgb[c] + blend * anchor;
 }
 
-/* Output gamut protection: convert from Rec.2020 D65 to the target color space,
- * hard-clamp negative (out-of-gamut) channels to zero, then convert back.
- * Called after st_gamut_compress() as an additional safety net when the user
- * selects a colour space narrower than Rec. 2020. */
+/* Output gamut protection: convert from Rec.2020 D65 to the target color
+   space, hard-clamp negative (out-of-gamut) channels to zero, then convert
+   back. Called after st_gamut_compress() as an additional safety net when
+   the user selects a colour space narrower than Rec. 2020. */
 static inline void st_output_gamut_protect(float rgb[3],
                                             const float fwd[9],
                                             const float inv[9])
@@ -553,10 +1059,11 @@ static inline void st_output_gamut_protect(float rgb[3],
   rgb[2] = inv[6]*t[0] + inv[7]*t[1] + inv[8]*t[2];
 }
 
-/* Spectral locus CIE 1931 2-degree xy at 5 nm (380–700 nm) + endpoint at 780 nm.
- * From 700 nm onward the coordinates plateau at (0.734690, 0.265310).
- * Used to build the angle→max-distance lookup table for automatic non-spectral
- * colour detection.  Purple-line interpolation is added at precompute time. */
+/* Spectral locus CIE 1931 2-degree xy at 5 nm (380-700 nm) + endpoint at
+   780 nm. From 700 nm onward the coordinates plateau at (0.734690,
+   0.265310). Used to build the angle-to-max-distance lookup table for
+   automatic non-spectral colour detection. Purple-line interpolation is
+   added at precompute time. */
 #define SPECTRAL_LOCUS_N 66
 static const float st_spectral_locus_xy[SPECTRAL_LOCUS_N][2] =
 {
@@ -628,10 +1135,10 @@ static const float st_spectral_locus_xy[SPECTRAL_LOCUS_N][2] =
   { 0.734690f, 0.265310f },  /* 780 nm (plateau) */
 };
 
-/* Build 360-bin lookup table: for each integer degree angle (0–359) from the
- * D50 white point, store the maximum CIE xz distance of the spectral locus
- * (including the purple line).  The table is used by st_spectral_gamut() to
- * detect and smoothly roll off non-spectral chromaticities. */
+/* Build 360-bin lookup table: for each integer degree angle (0-359) from the
+   D50 white point, store the maximum CIE xz distance of the spectral locus
+   (including the purple line). The table is used by st_spectral_gamut() to
+   detect and smoothly roll off non-spectral chromaticities. */
 static void st_compute_spectral_boundary(float boundary[360],
                                           float white_x_ratio,
                                           float white_z_ratio)
@@ -666,10 +1173,10 @@ static void st_compute_spectral_boundary(float boundary[360],
   }
 
   /* Purple line: interpolate N segments between endpoints 780 nm and 380 nm
-   * in CIE XYZ space (not xy), so the interpolation follows the physical
-   * mixture of two monochromatic lights rather than a straight line in xy
-   * chromaticity space. The two spectral endpoints converted with Y=1 give
-   * the correct tristimulus for linear mixing. */
+     in CIE XYZ space (not xy), so the interpolation follows the physical
+     mixture of two monochromatic lights rather than a straight line in xy
+     chromaticity space. The two spectral endpoints converted with Y=1 give
+     the correct tristimulus for linear mixing. */
   {
     const float x_r = st_spectral_locus_xy[SPECTRAL_LOCUS_N - 1][0];  /* 780 nm */
     const float y_r = st_spectral_locus_xy[SPECTRAL_LOCUS_N - 1][1];
@@ -735,28 +1242,28 @@ static void st_compute_spectral_boundary(float boundary[360],
 }
 
 /* ====================================================================
- * ACES 2.0-derived per-hue chroma shape (RC1-style static tables)
- *
- * Ported from the verified aces20.c implementation:
- *   - st_gamut_reach[360]: AP1-limited, AP0-reach M table at a fixed 100
- *     nits reference, generated offline from the corrected cusp/reach
- *     table-generation algorithm (AP1 limiting primaries; any_below_zero()
- *     gamut test only, no upper-bound check — see aces20.c history).
- *   - st_chroma_norm(): the exact trigonometric polynomial approximation
- *     of the AP1 gamut cusp M by hue, verified term-for-term against the
- *     official aces-core Lib.Academy.OutputTransform.ctl.
- *
- * Both are expressed in CAM16/JMh hue space in their origin. 3DCF has no
- * CAM/JMh conversion, so here they are deliberately re-purposed: the hue
- * fed in is the CIE xy chromaticity angle already computed in
- * st_spectral_gamut() (atan2 of the (dz,dx) offset from white), NOT a true
- * CAM16 hue. This means st_reach_from_table()/st_chroma_norm() are used
- * here purely as a smooth, plausible per-hue *shape* for how the display
- * gamut's chroma extent varies with hue — not as numerically exact ACES 2.0
- * reach/Mnorm values. This is an explicit, deliberate trade-off (see
- * conversation) favouring 3DCF's lightweight, RGB/xy-native architecture
- * over a full CAM16 hue computation.
- * ==================================================================== */
+   ACES 2.0-derived per-hue chroma shape (RC1-style static tables)
+
+   Ported from the verified aces20.c implementation:
+   - st_gamut_reach[360]: AP1-limited, AP0-reach M table at a fixed 100 nits
+     reference, generated offline from the corrected cusp/reach
+     table-generation algorithm (AP1 limiting primaries; any_below_zero()
+     gamut test only, no upper-bound check).
+   - st_chroma_norm(): the exact trigonometric polynomial approximation of
+     the AP1 gamut cusp M by hue, verified term-for-term against the
+     official aces-core Lib.Academy.OutputTransform.ctl.
+
+   Both are expressed in CAM16/JMh hue space in their origin. 3DCF has no
+   CAM/JMh conversion, so here they are deliberately re-purposed: the hue
+   fed in is the CIE xy chromaticity angle already computed in
+   st_spectral_gamut() (atan2 of the (dz,dx) offset from white), not a true
+   CAM16 hue. This means st_reach_from_table()/st_chroma_norm() are used
+   here purely as a smooth, plausible per-hue shape for how the display
+   gamut's chroma extent varies with hue -- not as numerically exact
+   ACES 2.0 reach/Mnorm values, trading numerical exactness for 3DCF's
+   lightweight, RGB/xy-native architecture over a full CAM16 hue
+   computation.
+   ==================================================================== */
 
 static const float st_gamut_reach[360] =
 {
@@ -846,8 +1353,8 @@ static inline float st_chroma_norm(float h)
 }
 
 /* Mean of st_reach_from_table(h)/st_chroma_norm(h) over h=0..359, precomputed
- * offline from the table above, used to normalise the shape factor below to
- * ~1.0 on average. */
+   offline from the table above, used to normalise the shape factor below to
+   ~1.0 on average. */
 #define ST_GAMUT_SHAPE_REF  2.090563f
 
 static inline void st_spectral_gamut(
@@ -875,9 +1382,10 @@ static inline void st_spectral_gamut(
   float dz = cie_z - white_cie_z;
   float chroma_sq = dx * dx + dz * dz;
 
-  /* Spectral locus boundary check — automatic detection of non-spectral colours.
-   * Runs before the user knee to catch colours whose chromaticity ratios lie
-   * outside the visible spectrum (e.g. laser primaries, narrow-band LEDs). */
+  /* Spectral locus boundary check -- automatic detection of non-spectral
+     colours. Runs before the user knee to catch colours whose chromaticity
+     ratios lie outside the visible spectrum (e.g. laser primaries,
+     narrow-band LEDs). */
   if(spectral_boundary)
   {
     const float angle = atan2f(dz, dx);
@@ -914,9 +1422,9 @@ static inline void st_spectral_gamut(
     }
   }
 
-  /* Existing knee — smooth circular roll-off controlled by user sliders,
-   * modulated by a hue-dependent shape factor (reach/chroma_norm normalised
-   * to mean=1, with sqrt to temper extreme values). */
+  /* User-controlled knee: smooth circular roll-off controlled by user
+     sliders, modulated by a hue-dependent shape factor (reach/chroma_norm
+     normalised to mean=1, with sqrt to temper extreme values). */
   {
     const float angle = atan2f(dz, dx);
     float angle_deg = angle * (180.0f / (float)M_PI);
@@ -948,20 +1456,19 @@ static inline void st_spectral_gamut(
 }
 
 /* Complete spectral tone mapping pipeline for one pixel.
- *
- * Pipeline order:
- *   1. D50-adapted Rec.2020 RGB -> D50 XYZ (precise matrix)
- *   2. ACES 2.0 SSTS on luminance Y only (spectral tone scale)
- *   3. BT.1886 OETF + contrast S-curve
- *   4. Mid-tone gamma adjustment
- *   5. Chromaticity ratio scaling: x = ratio * Y
- *   6. Spectral gamut: film-like chromaticity roll-off in CIE xy
- *   7. XYZ -> output RGB via output matrix
- *   8. Highlight desaturation (blend toward achromatic luma)
- *   9. Vibrance (saturation with high-sat protection)
- *  10. Gamut compression safety net
- *  11. Clamp to [0, inf)
- */
+
+   Pipeline order:
+   1. D50-adapted Rec.2020 RGB -> D50 XYZ (precise matrix)
+   2. ACES 2.0 SSTS on luminance Y only (spectral tone scale)
+   3. BT.1886 OETF + contrast S-curve
+   4. Mid-tone gamma adjustment
+   5. Chromaticity ratio scaling: x = ratio * Y
+   6. Spectral gamut: film-like chromaticity roll-off in CIE xy
+   7. XYZ -> output RGB via output matrix
+   8. Highlight desaturation (blend toward achromatic luma)
+   9. Vibrance (saturation with high-sat protection)
+   10. Gamut compression safety net
+   11. Clamp to [0, inf) */
 void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
                           const dt_st_context_t *ctx)
 {
@@ -1016,10 +1523,10 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
 
   /* Step 8: Film-print highlight desaturation toward white */
   {
-    /* Abney hue rotation tied to SSTS compression ratio.
-     * weight = 1.0 for extreme highlights, 0 for midtones/shadows.
-     * hl_hue_shift controls the exponent: +1 → weight = 1 everywhere,
-     * 0 → weight = sqrt(comp_factor), -1 → weight = comp_factor. */
+    /* Abney hue rotation tied to SSTS compression ratio. weight = 1.0 for
+       extreme highlights, 0 for midtones/shadows. hl_hue_shift controls the
+       exponent: +1 -> weight = 1 everywhere, 0 -> weight =
+       sqrt(comp_factor), -1 -> weight = comp_factor. */
     const float y_exposed = y_abs * ctx->exposure_factor;
     float hl_weight = 0.0f;
     if(ctx->hl_rotation != 0.0f && y_abs > 1e-10f)
@@ -1207,7 +1714,7 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
   ctx->luma_coeff[2] = lc[2];
 
   ctx->contrast = fmaxf(p->contrast, 0.001f);
-  /* Inversion du pivot pour que 'droite' (valeur élevée) éclaircisse l'image */
+  /* Pivot inverted so that 'right' (higher value) brightens the image */
   ctx->contrast_pivot = 1.0f - fmaxf(fminf(p->contrast_pivot, 0.99f), 0.01f);
 
   ctx->hl_desat = fmaxf(p->hl_desaturation, 0.0f);
@@ -1259,7 +1766,7 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
                                 ctx->white_chroma_x,
                                 ctx->white_chroma_z);
 
-  /* Mid-tone gamma adjustment - Inversion pour que 'droite' éclaircisse (Gamma < 1.0) */
+  /* Mid-tone gamma adjustment, inverted so that 'right' brightens (gamma < 1.0) */
   ctx->gamma = -fmaxf(fminf(p->gamma, 1.0f), -1.0f);
   ctx->gamma_power = exp2f(ctx->gamma);
 
@@ -1552,8 +2059,8 @@ void init_pipe(dt_iop_module_t *self, dt_dev_pixelpipe_t *pipe,
   memset(d, 0, sizeof(dt_iop_3dcf_data_t));
   memcpy(&d->params, self->default_params, sizeof(dt_iop_3dcf_params_t));
   
-  /* Initialise le contexte avec les params par défaut MAINTENANT, 
-     pas plus tard au commit. Évite les race conditions sous Windows. */
+  /* Initialize the context with the default params NOW, not later at
+     commit, to avoid race conditions on Windows. */
   st_compute_context(&d->params, &d->ctx);
 }
 
@@ -1575,6 +2082,18 @@ void commit_params(dt_iop_module_t *self, dt_iop_params_t *p1,
 
   st_compute_context(p, &d->ctx);
   memcpy(&d->params, p, sizeof(dt_iop_3dcf_params_t));
+
+  /* A pending "auto" request needs a histogram/variance pass over the host
+     float buffer (auto_adjust_3dcf_params()), which only process() performs
+     -- process_cl() has no GPU equivalent. Left alone, the flag set by the
+     picker callback is simply never consumed when OpenCL handles the
+     preview pipe. Force this preview run through the CPU path instead, same
+     pattern as channelmixerrgb.c's run_profile/checker_ready handling. */
+  {
+    const dt_iop_3dcf_gui_data_t *g = self->gui_data;
+    if(g && g->auto_apply_requested && dt_pipe_is_preview(pipe))
+      piece->process_cl_ready = FALSE;
+  }
 }
 
 void tiling_callback(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
@@ -1584,8 +2103,8 @@ void tiling_callback(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   const dt_iop_3dcf_data_t *d = piece->data;
 
   /* HL detail recovery allocates one extra full-size guide buffer plus two
-   * single-channel buffers (luminance + smoothed base). Account for that
-   * extra memory so tiling doesn't under-estimate on very large images. */
+     single-channel buffers (luminance + smoothed base). Account for that
+     extra memory so tiling doesn't under-estimate on very large images. */
   const gboolean hl_active = d && d->ctx.hl_detail_recovery > 0.0f;
 
   tiling->factor = hl_active ? 3.5f : 2.0f;
@@ -1608,17 +2127,42 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   const size_t npixels = (size_t)width * height;
 
   /* Safety guard: ctx.ssts.n = 0 means commit_params() has not yet fired
-   * (init_pipe only zeroes the struct). Pass the image through unchanged
-   * rather than dividing by zero or crashing. Hits only on the very first
-   * preview render on startup; commit_params() corrects this immediately. */
+     (init_pipe only zeroes the struct). Pass the image through unchanged
+     rather than dividing by zero or crashing. Hits only on the very first
+     preview render on startup; commit_params() corrects this immediately. */
   if(!d || d->ctx.ssts.n <= 0.0)
   {
     memcpy(ovoid, ivoid, sizeof(float) * npixels * ch);
     return;
   }
 
-  /* Bounds check: color_looks has 11 entries (0–10).
-   * Clamp defensively in case a stale preset carries an out-of-range value. */
+  /* Auto-adjust: triggered by color_picker_apply() via a flag on gui_data.
+     self->gui_data is NULL outside darkroom (export, thumbnails), so this
+     path never runs outside an interactive session. ivoid here is the
+     module's INPUT buffer (before 3DCF processing), in the Rec.2020 D50
+     working space -- exactly what auto_adjust_3dcf_params() expects. */
+  {
+    dt_iop_3dcf_gui_data_t *g = self->gui_data;
+    if(g && g->auto_apply_requested)
+    {
+      const dt_iop_st_auto_mode_t mode = g->auto_requested_mode;
+      const float picked_grey = g->picked_grey_y;
+      g->auto_apply_requested = FALSE;
+
+      _st_auto_result_t *res = (_st_auto_result_t *)malloc(sizeof(_st_auto_result_t));
+      if(res)
+      {
+        res->self = self;
+        memcpy(&res->params, &d->params, sizeof(dt_iop_3dcf_params_t));
+        auto_adjust_3dcf_params((const float *)ivoid, width, height, ch, &res->params,
+                                mode, picked_grey);
+        g_idle_add(_auto_apply_to_gui, res); /* passe la main au thread GUI */
+      }
+    }
+  }
+
+  /* Bounds check: color_looks has 11 entries (0-10). Clamp defensively in
+     case a stale preset carries an out-of-range value. */
   const int look_idx = (d->params.color_look > 0 && d->params.color_look <= 10)
                        ? d->params.color_look : 0;
 
@@ -1638,15 +2182,15 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     lum_orig_g = new_gray_image(width, height);
     base_orig_g = new_gray_image(width, height);
 
-    /* Sanitized copy of the full image — brilliance-adjusted — used as
-     * the guided-filter GUIDE. The brilliance exposure factor is baked in
-     * here so that the guided filter's base is in the same perceptual
-     * domain as the tone-mapped output, preventing the gain
-     * (lum_tm / lum_orig) from exploding when perceptual brilliance is
-     * high. Negative/NaN channels (CA fringing, sharpening halos) MUST
-     * be cleared here too: the guide feeds the local mean/variance
-     * regression, and a single stray NaN corrupts the entire filter
-     * window. Allocated/freed with dt_alloc_align/dt_free_align. */
+    /* Sanitized copy of the full image, brilliance-adjusted, used as the
+       guided-filter GUIDE. The brilliance exposure factor is baked in here
+       so that the guided filter's base is in the same perceptual domain as
+       the tone-mapped output, preventing the gain (lum_tm / lum_orig) from
+       exploding when perceptual brilliance is high. Negative/NaN channels
+       (CA fringing, sharpening halos) must be cleared here too: the guide
+       feeds the local mean/variance regression, and a single stray NaN
+       corrupts the entire filter window. Allocated/freed with
+       dt_alloc_align/dt_free_align. */
     guide_sanitized = (float *)dt_alloc_aligned(sizeof(float) * (size_t)npixels * ch);
     if(!guide_sanitized)
       fprintf(stderr, "[3dcf] failed to allocate guide_sanitized (%zu bytes), detail recovery disabled\n",
@@ -1704,18 +2248,18 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     float rgb_in[3] = { in[idx], in[idx + 1], in[idx + 2] };
     float rgb_out[3];
 
-    /* Sanitize input: clamp negative (from CA / sharpening halos) to 0
-     * and zero any NaN/Inf. Negatives reachable after demosaic + lens. */
+    /* Sanitize input: clamp negative (from CA / sharpening halos) to 0 and
+       zero any NaN/Inf. Negatives reachable after demosaic + lens. */
     for(int c = 0; c < 3; c++)
       rgb_in[c] = isfinite(rgb_in[c]) ? fmaxf(rgb_in[c], 0.0f) : 0.0f;
 
     /* Save original luminance for detail recovery BEFORE the safety net
-     * desaturates rgb_in below. Captured from the already-sanitized values
-     * so CA fringing / NaN never reach the detail computation. This MUST
-     * happen at this exact point to match the GPU kernel (kernel_3dcf,
-     * "before safety net modifies rgb_in") — capturing it later from the
-     * raw "in" buffer, as the previous version did, silently diverged from
-     * OpenCL on any pixel with negative/NaN input channels. */
+       desaturates rgb_in below. Captured from the already-sanitized values
+       so CA fringing / NaN never reach the detail computation. This must
+       happen at this exact point to match the GPU kernel (kernel_3dcf,
+       "before safety net modifies rgb_in") -- capturing it later from the
+       raw "in" buffer would silently diverge from OpenCL on any pixel with
+       negative/NaN input channels. */
     float lum_orig = 0.0f;
     if(hl_detail_recovery > 0.0f)
     {
@@ -1723,12 +2267,12 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       lum_orig = (lc[0] * rgb_in[0] + lc[1] * rgb_in[1] + lc[2] * rgb_in[2]) * d->ctx.exposure_factor;
     }
 
-    /* Pre-pipeline safety net: sigmoid rolloff toward luma-gray.
-     * Track the desaturation factor so the detail recovery below can
-     * attenuate proportionally — a pixel that was heavily desaturated
-     * (e.g. out-of-gamut blue → white) would otherwise receive a huge
-     * gain boost from the pre-desat luminance vs post-tm luminance
-     * mismatch, creating a halo outside the object. */
+    /* Pre-pipeline safety net: sigmoid rolloff toward luma-gray. Track the
+       desaturation factor so the detail recovery below can attenuate
+       proportionally -- a pixel that was heavily desaturated (e.g.
+       out-of-gamut blue to white) would otherwise receive a huge gain
+       boost from the pre-desat luminance vs post-tm luminance mismatch,
+       creating a halo outside the object. */
     float hl_desat_factor = 0.0f;
     {
       const float lum = fmaxf(fmaxf(rgb_in[0], rgb_in[1]), rgb_in[2]);
@@ -1762,11 +2306,11 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       for(int i = 0; i < 3; i++) rgb_out[i] = fmaxf(rgb_out[i], 0.0f);
     }
 
-    /* HL detail recovery: re-inject guided-filter detail with gain compensation.
-     * lum_orig was captured right after sanitization, above — same value
-     * and same pipeline point as the GPU kernel.
-     * guide_ok ensures we skip this when the guided-filter pre-pass failed
-     * (e.g. OOM on guide_sanitized), preventing use of uninitialized base. */
+    /* HL detail recovery: re-inject guided-filter detail with gain
+       compensation. lum_orig was captured right after sanitization, above
+       -- same value and same pipeline point as the GPU kernel. guide_ok
+       ensures we skip this when the guided-filter pre-pass failed (e.g. OOM
+       on guide_sanitized), preventing use of an uninitialized base. */
     if(hl_detail_recovery > 0.0f && guide_ok)
     {
       const float *lc = d->ctx.luma_coeff;
@@ -1775,9 +2319,9 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
       {
         float detail = lum_orig - base_orig_g.data[k];
         /* Soft clamp detail amplitude: the threshold tightens as the
-         * slider increases, allowing more micro-contrast at low settings
-         * while preventing halos at high settings. Same soft shoulder
-         * formula as the spectral gamut and knee. */
+           slider increases, allowing more micro-contrast at low settings
+           while preventing halos at high settings. Same soft shoulder
+           formula as the spectral gamut and knee. */
         {
           const float t = fminf(hl_detail_recovery, 1.0f);
           const float detail_frac = 0.10f * (1.0f - t * 0.50f);
@@ -1821,8 +2365,8 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
 }
 
 #ifdef HAVE_OPENCL
-/* Pack the precomputed CPU context (+ active color look) into the GPU struct.
- * Mirrors exactly what process() reads from d->ctx and d->params. */
+/* Pack the precomputed CPU context (+ active color look) into the GPU
+   struct. Mirrors exactly what process() reads from d->ctx and d->params. */
 static void st_fill_cl_params(const dt_iop_3dcf_data_t *d,
                               dt_st_cl_params_t *clp)
 {
@@ -1885,8 +2429,9 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   const int width = roi_in->width;
   const int height = roi_in->height;
 
-  /* Safety guard mirroring process(): if commit_params() has not yet run the
-   * context is all-zero — fall back to the CPU path (which copies through). */
+  /* Safety guard mirroring process(): if commit_params() has not yet run,
+     the context is all-zero -- fall back to the CPU path (which copies
+     through). */
   if(!d || d->ctx.ssts.n <= 0.0)
     return DT_OPENCL_PROCESS_CL;
 
@@ -1905,9 +2450,9 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     dev_lum = dt_opencl_alloc_device(devid, width, height, sizeof(float));
     dev_base = dt_opencl_alloc_device(devid, width, height, sizeof(float));
     /* Sanitized RGBA copy of dev_in, used as the guided-filter GUIDE instead
-     * of the raw dev_in. Mirrors the CPU's guide_sanitized buffer: negative/
-     * NaN channels from CA fringing must not reach the filter's local
-     * mean/variance regression on either platform. */
+       of the raw dev_in. Mirrors the CPU's guide_sanitized buffer:
+       negative/NaN channels from CA fringing must not reach the filter's
+       local mean/variance regression on either platform. */
     dev_in_sanitized = dt_opencl_alloc_device(devid, width, height, sizeof(float) * 4);
     if(!dev_lum || !dev_base || !dev_in_sanitized)
     {
@@ -2013,9 +2558,65 @@ void init_presets(dt_iop_module_so_t *self)
 void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker,
                         dt_dev_pixelpipe_t *pipe)
 {
-  (void)self;
-  (void)picker;
   (void)pipe;
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  if(!g || picker != g->auto_mode_combo) return;
+
+  /* self->picked_color[] holds the average of the sampled area, in the
+     module's INPUT space (Rec.2020 D50 scene-linear), the same space as the
+     ivoid buffer auto_adjust_3dcf_params() reads. dt_color_picker_new() in
+     gui_init() must be configured in AREA mode for the average to be
+     computed; in POINT mode the value is a single pixel, much noisier on a
+     RAW. */
+  const double luma_r = dt_st_rec2020_d50_to_xyz[3];
+  const double luma_g = dt_st_rec2020_d50_to_xyz[4];
+  const double luma_b = dt_st_rec2020_d50_to_xyz[5];
+
+  const float y = (float)(luma_r * (double)self->picked_color[0]
+                        + luma_g * (double)self->picked_color[1]
+                        + luma_b * (double)self->picked_color[2]);
+
+  /* A sample on pure black (or an invalid value) would give an infinite
+     ev_shift: ignored rather than producing an aberrant exposure. */
+  if(!(y > 1e-6f) || !isfinite(y)) return;
+
+  g->picked_grey_y = y;
+
+  /* Live trigger: this callback fires continuously while the user drags the
+     sampled area (once per pipe update as long as the position/area
+     changed -- see _record_point_area() in gui/color_picker_proxy.c, which
+     filters out redundant calls and rules out any reprocess loop: our own
+     dt_dev_reprocess_preview() below only causes a single "echo" pass that
+     self-terminates, since the area hasn't moved during that echo). */
+  const int combo_idx = dt_bauhaus_combobox_get(g->auto_mode_combo);
+  const dt_iop_st_auto_mode_t mode =
+    (combo_idx >= DT_ST_AUTO_CONTRASTY && combo_idx <= DT_ST_AUTO_SOFT)
+    ? (dt_iop_st_auto_mode_t)combo_idx : DT_ST_AUTO_NEUTRAL;
+
+  /* Re-triggers if the picked value changed meaningfully (dragged to a new
+     area) OR the rendering preset changed (comparing contrasty/neutral/soft
+     on the SAME area without moving the picker) -- auto_requested_mode
+     holds the last mode actually sent, so this comparison doesn't
+     re-trigger needlessly when neither changed (e.g. echo calls). */
+  const float delta = fabsf(y - g->picked_grey_y_last_applied);
+  if(delta > 1e-4f || mode != g->auto_requested_mode)
+  {
+    g->picked_grey_y_last_applied = y;
+    _auto_request(self, mode);
+  }
+}
+
+void gui_reset(dt_iop_module_t *self)
+{
+  /* The module's reset button goes through dt_iop_gui_reset() (which calls
+     this hook if it exists) BEFORE dt_iop_gui_update() -- see
+     _gui_reset_callback() in develop/imageop.c. This clears the picker's
+     armed/picked state on an explicit module reset, in addition to the
+     image-change case handled in gui_update(). */
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  g->picked_grey_y = 0.0f;
+  g->picked_grey_y_last_applied = 0.0f;
+  dt_iop_color_picker_reset(self, TRUE);
 }
 
 void gui_update(dt_iop_module_t *self)
@@ -2042,12 +2643,30 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_combobox_set(g->color_look, p->color_look);
   dt_bauhaus_slider_set(g->look_opacity, p->look_opacity);
 
+  /* The grey-point picker is transient module state, not a parameter (see
+     the note at picked_grey_y's declaration): it must not survive an image
+     change, or the auto-adjust would anchor on a luminance picked from a
+     different photo.
+
+     gui_update() fires far more often than on image change alone, so an
+     unconditional reset here would clear the picked value almost
+     immediately, making the picker unusable. Reset only when the displayed
+     image actually changed (see last_imgid). */
+  const dt_imgid_t current_imgid = self->dev->image_storage.id;
+  if(g->last_imgid != current_imgid)
+  {
+    g->picked_grey_y = 0.0f;
+    g->picked_grey_y_last_applied = 0.0f;
+    dt_iop_color_picker_reset(self, TRUE);
+    g->last_imgid = current_imgid;
+  }
+
   gui_changed(self, NULL, NULL);
 }
 
 /* ========================================================================
- * Curve drawing callback — calibrated on AGX pattern
- * ======================================================================== */
+   Curve drawing callback -- calibrated on AGX pattern
+   ======================================================================== */
 static gboolean _draw_curve(GtkWidget *widget, cairo_t *crf,
                             const dt_iop_module_t *self)
 {
@@ -2373,6 +2992,39 @@ void gui_init(dt_iop_module_t *self)
   /* === TONE section === */
   dt_gui_box_add(GTK_BOX(main_vbox), dt_ui_section_label_new(C_("section", "tone")));
 
+  /* Preset combobox and live picker, in the SAME widget: the scene
+     measurements (exposure, peak_luminance, pivot) are identical whatever
+     the chosen preset, only the contrast rendering depends on it (see
+     st_auto_presets[]). The combobox only selects the preset -- it
+     triggers nothing on its own; it's the picker, dragged over the image,
+     that computes and applies live (see color_picker_apply()).
+
+     The picker is attached to the combobox via its "quad" icon, exactly
+     like g->exposure in iop/exposure.c (dt_color_picker_new() wraps the
+     widget and adds the icon rather than creating a separate widget). Every
+     bauhaus widget reserves the same quad-icon column internally whether it
+     shows an icon there or not, so this keeps the row the same width as the
+     sliders below it. */
+  g->auto_mode_combo = dt_color_picker_new(self, DT_COLOR_PICKER_AREA, dt_bauhaus_combobox_new(self));
+  dt_bauhaus_widget_set_label(g->auto_mode_combo, NULL, N_("auto-adjust"));
+  dt_bauhaus_combobox_add(g->auto_mode_combo, _("contrasty"));
+  dt_bauhaus_combobox_add(g->auto_mode_combo, _("neutral"));
+  dt_bauhaus_combobox_add(g->auto_mode_combo, _("soft"));
+  dt_bauhaus_combobox_set(g->auto_mode_combo, DT_ST_AUTO_CONTRASTY);
+  gtk_widget_set_tooltip_text(g->auto_mode_combo,
+    _("Contrast rendering used by the grey-point picker (icon on the right).\n"
+      "Selecting an entry here does nothing on its own. While the picker\n"
+      "is active, switching entries re-applies immediately on the same\n"
+      "picked area, so you can compare renderings without re-picking."));
+  dt_bauhaus_widget_set_quad_tooltip(g->auto_mode_combo,
+    _("Click, then drag over a mid-grey reference in the image: tone\n"
+      "settings analyze and apply live as you move the picker, using the\n"
+      "contrast rendering selected above. Click again to stop.\n"
+      "Useful on wide dynamic range scenes, where the automatic estimate\n"
+      "can be pulled off by large bright or dark areas."));
+  g_signal_connect(G_OBJECT(g->auto_mode_combo), "value-changed", G_CALLBACK(_auto_mode_changed), self);
+  dt_gui_box_add(main_vbox, g->auto_mode_combo);
+
   g->input_exposure = dt_bauhaus_slider_from_params(self, "input_exposure");
   dt_bauhaus_slider_set_format(g->input_exposure, _(" EV"));
   dt_bauhaus_slider_set_digits(g->input_exposure, 2);
@@ -2386,7 +3038,8 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->peak_luminance,
     _("Peak luminance: controls SSTS peak luminance via the tone scale character. \n"
       "0% = 200 nits (ACES 2.0 reference). -100% = 0 nits (soft), +100% = 400 nits.\n"
-      "Higher values give more highlight headroom with a gentler roll-off."));
+      "Lower values give more highlight headroom with a gentler roll-off;\n"
+      "higher values clip earlier."));
 
   g->contrast = dt_bauhaus_slider_from_params(self, "contrast");
   dt_bauhaus_slider_set_factor(g->contrast, 50.0f);
@@ -2535,15 +3188,15 @@ void gui_init(dt_iop_module_t *self)
   self->widget = main_vbox;
 }
 
-/* NOTE: no gui_cleanup() is needed.
- * IOP_GUI_ALLOC() allocates gui_data via dt_calloc_aligned() → dt_alloc_aligned(),
- * which on Windows is _aligned_malloc() (and posix_memalign() on Linux/macOS).
- * The framework already frees it for us in dt_iop_gui_cleanup_module() with the
- * matching dt_free_align(). Freeing it here with free()/g_free() would release an
- * _aligned_malloc() block with the wrong deallocator → heap corruption (c0000374)
- * at module load on Windows. The gui_data struct only holds GtkWidget* and an
- * embedded collapsible_section (no separately-owned resources), so the default
- * widget destruction is sufficient. */
+/* NOTE: no gui_cleanup() is needed. IOP_GUI_ALLOC() allocates gui_data via
+   dt_calloc_aligned() -> dt_alloc_aligned(), which on Windows is
+   _aligned_malloc() (and posix_memalign() on Linux/macOS). The framework
+   already frees it for us in dt_iop_gui_cleanup_module() with the matching
+   dt_free_align(). Freeing it here with free()/g_free() would release an
+   _aligned_malloc() block with the wrong deallocator -- heap corruption
+   (c0000374) at module load on Windows. The gui_data struct only holds
+   GtkWidget* and an embedded collapsible_section (no separately-owned
+   resources), so the default widget destruction is sufficient. */
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
