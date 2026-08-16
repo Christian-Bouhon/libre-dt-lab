@@ -129,6 +129,7 @@ FILE(GLOB SOURCE_FILES
   "develop/masks/masks.c"
   "develop/masks/path.c"
   "develop/pixelpipe.c"
+  "develop/preview_data.c"
   "develop/tiling.c"
   "dtgtk/button.c"
   "dtgtk/culling.c"
