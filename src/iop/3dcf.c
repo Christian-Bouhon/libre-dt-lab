@@ -501,16 +501,14 @@ float dt_st_compute_y_tm(float y_scene, const dt_st_context_t *ctx)
    Auto-adjustment: derive tone/contrast params from scene content
    ========================================================================
 
-   Known issue with the peak_luminance slider: its tooltip says "Higher
-   values give more highlight headroom with a gentler roll-off," but
-   dt_st_compute_y_tm() normalizes by ctx->ssts.n_r, a CONSTANT (100.0, set
-   in dt_st_ssts_init), instead of ctx->ssts.n (the actual chosen peak). For
-   a fixed scene value, y_tm grows with peak_luminance, so a higher
-   peak_luminance clips EARLIER, not later. The likely fix is to divide by
-   ctx->ssts.n instead of ctx->ssts.n_r in dt_st_compute_y_tm() -- not done
-   here, out of scope for this function. The code below works with the
-   slider's current (unfixed) behavior; fixing dt_st_compute_y_tm() requires
-   flipping the bisection direction below (see the comment at that spot).
+   Note on the peak_luminance slider's direction: dt_st_compute_y_tm()
+   normalizes by ctx->ssts.n_r, a CONSTANT (100.0, set in dt_st_ssts_init),
+   instead of ctx->ssts.n (the actual chosen peak). For a fixed scene value,
+   y_tm grows with peak_luminance, so a higher peak_luminance clips EARLIER,
+   not later -- the tooltip and the bisection below are both written to
+   match this actual, verified behavior. If dt_st_compute_y_tm() is ever
+   changed to normalize by ctx->ssts.n instead, the bisection direction
+   below must flip accordingly (see the comment at that spot).
 
    Computation domains:
    - Scene Y: linear luminance, Rec.2020 D50 weighting -- reuses the Y row
@@ -759,11 +757,10 @@ static void auto_adjust_3dcf_params(const float *in, int width, int height, int 
     const float y_high_shifted = exp2f((float)ev_high_scene + ev_shift);
 
     /* Bisection on peak_luminance (in nits). See the section header comment:
-       with dt_st_compute_y_tm()'s current behavior (normalization by
-       constant n_r), y_tm GROWS with peak_nits for a fixed scene value, so
-       reducing clipping means LOWERING peak_nits. If dt_st_compute_y_tm()
-       is fixed to normalize by ctx->ssts.n, flip the two branches below
-       (and the y_tm_at_hi/y_tm_at_lo test). */
+       y_tm GROWS with peak_nits for a fixed scene value, so reducing
+       clipping means LOWERING peak_nits. If dt_st_compute_y_tm() is ever
+       changed to normalize by ctx->ssts.n instead of ctx->ssts.n_r, flip
+       the two branches below (and the y_tm_at_hi/y_tm_at_lo test). */
     double nits_lo = 1.0, nits_hi = 400.0; /* upper bound = peak_luminance param at +100% */
     const float y_tm_at_lo = st_auto_eval_y_tm(y_high_shifted, nits_lo);
     const float y_tm_at_hi = st_auto_eval_y_tm(y_high_shifted, nits_hi);
@@ -2140,10 +2137,18 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
      self->gui_data is NULL outside darkroom (export, thumbnails), so this
      path never runs outside an interactive session. ivoid here is the
      module's INPUT buffer (before 3DCF processing), in the Rec.2020 D50
-     working space -- exactly what auto_adjust_3dcf_params() expects. */
+     working space -- exactly what auto_adjust_3dcf_params() expects.
+
+     Restricted to the preview pipe, matching commit_params()'s own
+     dt_pipe_is_preview() check for this same flag: _auto_request() only
+     invalidates the preview pipe (dt_dev_reprocess_preview()), so this scan
+     is meant to run on that small buffer, not on whichever pipe happens to
+     call process() first while the flag is set. Left unguarded, the full
+     pipe could consume the flag and run this scan against the full-
+     resolution buffer instead. */
   {
     dt_iop_3dcf_gui_data_t *g = self->gui_data;
-    if(g && g->auto_apply_requested)
+    if(g && g->auto_apply_requested && dt_pipe_is_preview(piece->pipe))
     {
       const dt_iop_st_auto_mode_t mode = g->auto_requested_mode;
       const float picked_grey = g->picked_grey_y;
@@ -2181,6 +2186,9 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   {
     lum_orig_g = new_gray_image(width, height);
     base_orig_g = new_gray_image(width, height);
+    if(!lum_orig_g.data || !base_orig_g.data)
+      fprintf(stderr, "[3dcf] failed to allocate detail-recovery luminance buffers, "
+                      "detail recovery disabled\n");
 
     /* Sanitized copy of the full image, brilliance-adjusted, used as the
        guided-filter GUIDE. The brilliance exposure factor is baked in here
@@ -2221,7 +2229,8 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
         if(ch == 4) guide_sanitized[idx + 3] = in[idx + 3];
       }
 
-      lum_orig_g.data[k] = lc[0] * r + lc[1] * g + lc[2] * b;
+      if(lum_orig_g.data)
+        lum_orig_g.data[k] = lc[0] * r + lc[1] * g + lc[2] * b;
     }
 
     /* Normalize guided filter radius to sensor resolution (ref: 36 MP 3:2 K1) */
@@ -2229,7 +2238,7 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
                             + (float)piece->iheight * piece->iheight);
     const int gf_radius = fmaxf(4.0f, 8.0f * diag / 8848.0f);
 
-    if(guide_sanitized)
+    if(guide_sanitized && lum_orig_g.data && base_orig_g.data)
     {
       guided_filter(guide_sanitized, lum_orig_g.data, base_orig_g.data,
                     width, height, ch, gf_radius, 0.05f, 1.0f, 0.0f, FLT_MAX);
@@ -3010,7 +3019,7 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_combobox_add(g->auto_mode_combo, _("contrasty"));
   dt_bauhaus_combobox_add(g->auto_mode_combo, _("neutral"));
   dt_bauhaus_combobox_add(g->auto_mode_combo, _("soft"));
-  dt_bauhaus_combobox_set(g->auto_mode_combo, DT_ST_AUTO_CONTRASTY);
+  dt_bauhaus_combobox_set(g->auto_mode_combo, DT_ST_AUTO_NEUTRAL);
   gtk_widget_set_tooltip_text(g->auto_mode_combo,
     _("Contrast rendering used by the grey-point picker (icon on the right).\n"
       "Selecting an entry here does nothing on its own. While the picker\n"
