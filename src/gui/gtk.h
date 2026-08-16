@@ -470,6 +470,11 @@ void dt_gui_apply_theme();                 // apply the loaded theme to darktabl
 // reload GUI scalings
 void dt_configure_ppd_dpi(dt_gui_gtk_t *gui);
 
+// return a copy of the bauhaus font description, for GUI code that needs
+// to draw text (e.g. on-canvas overlays) without depending on bauhaus
+// internals directly; caller owns the result (pango_font_description_free()).
+PangoFontDescription *dt_gui_get_font(void);
+
 // translate key press events to remove any modifiers used to produce the keyval
 // for example when the shift key is used to create the asterisk character
 guint dt_gui_translated_key_state(const GdkEventKey *event);
