@@ -27,6 +27,7 @@
 
 #include "common/imagebuf.h"
 #include "develop/develop.h"
+#include "iop/iop_api.h"
 
 DT_MODULE_INTROSPECTION(2, dt_iop_mask_manager_params_t)
 

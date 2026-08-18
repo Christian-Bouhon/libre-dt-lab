@@ -4,6 +4,7 @@
 #include "common/math.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/chromatic_adaptation.h"
+#include "common/iop_profile.h"
 
 static inline float Delta_H(const float h_1, const float h_2)
 {
