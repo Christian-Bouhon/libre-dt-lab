@@ -19,6 +19,7 @@
 
 #include <glib.h>            // for inline
 #include <math.h>            // for log, logf, powf
+#include "common/math.h"     // for dt_isnan, sqf
 
 #pragma once
 
