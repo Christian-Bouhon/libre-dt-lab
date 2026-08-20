@@ -1994,23 +1994,11 @@ static void switch_cursors(dt_iop_module_t *self)
     // do nothing and let the app decide
     return;
   }
-  else if((self->dev->full.pipe->processing
-           || self->dev->full.pipe->status == DT_DEV_PIXELPIPE_DIRTY
-           || self->dev->preview_pipe->status == DT_DEV_PIXELPIPE_DIRTY)
-          && g->cursor_valid)
+  else if(g->cursor_valid)
   {
-    // if pipe is busy or dirty but cursor is on preview,
-    // display waiting cursor while pipe reprocesses
-    GdkCursor *const cursor = gdk_cursor_new_from_name(gdk_display_get_default(), "wait");
-    gdk_window_set_cursor(gtk_widget_get_window(widget), cursor);
-    g_object_unref(cursor);
-
-    dt_control_queue_redraw_center();
-  }
-  else if(g->cursor_valid && !self->dev->full.pipe->processing)
-  {
-    // if pipe is clean and idle and cursor is on preview,
-    // hide GTK cursor because we display our custom one
+    // if cursor is on the preview, hide GTK cursor because we display
+    // our custom one.  We do this whether or not the pipe is still
+    // (re)computing, so no busy animation appears while hovering.
     dt_control_change_cursor("none");
     dt_control_hinter_message(_("scroll over image to change tone exposure\n"
                                 "shift+scroll for large steps; "
@@ -2252,27 +2240,16 @@ static inline gboolean _init_drawing(dt_iop_module_t *const restrict self,
 
 // The on-canvas correction cursor itself (crosshair, wedge, circles, text
 // label) is shared with other modules via dt_draw_correction_cursor() in
-// gui/draw.h; only the exposure-specific grey shades fed into it stay here.
+// gui/draw.h.  The shared helper derives the frame line color (white over
+// dark content, black over bright content) from the pixel sampled under
+// the cursor; the exposure-specific grey shades of the two circles that
+// convey the before/after luminance stay module specific.
 
 static float _shade_from_luminance(const float luminance)
 {
   // TODO: fetch screen gamma from ICC display profile
   const float gamma = 1.0f / 2.2f;
   return powf(luminance, gamma);
-}
-
-static void _match_color_to_background(float rgb[3], const float exposure)
-{
-  float shade = 0.0f;
-  // TODO: put that as a preference in darktablerc
-  const float contrast = 1.0f;
-
-  if(exposure > -2.5f)
-    shade = (fminf(exposure * contrast, 0.0f) - 2.5f);
-  else
-    shade = (fmaxf(exposure / contrast, -5.0f) + 2.5f);
-
-  rgb[0] = rgb[1] = rgb[2] = _shade_from_luminance(exp2f(shade));
 }
 
 
@@ -2344,15 +2321,42 @@ void gui_post_expose(dt_iop_module_t *self,
   else
     snprintf(text, sizeof(text), "? EV");
 
-  float frame_color[3];
-  _match_color_to_background(frame_color, exposure_out);
+  // Sample the pixel under the cursor from the preview pipe backbuf: the
+  // shared helper derives the frame line color (wedge, crosshair,
+  // outlines) from it — white over dark content, black over bright
+  // content.  The circles keep the exposure-specific shades below to
+  // convey the before/after luminance.
+  uint8_t *backbuf = dev->preview_pipe->backbuf;
+  const int buf_w = dev->preview_pipe->backbuf_width;
+  const int buf_h = dev->preview_pipe->backbuf_height;
+  float cr_f = 0.5f, cg_f = 0.5f, cb_f = 0.5f; // fallback mid-grey
+  if(backbuf && buf_w > 0 && buf_h > 0)
+  {
+    const int px = CLAMP((int)x_pointer, 0, buf_w - 1);
+    const int py = CLAMP((int)y_pointer, 0, buf_h - 1);
+    dt_pthread_mutex_lock(&dev->preview_pipe->backbuf_mutex);
+    const size_t idx = (size_t)py * buf_w * 4 + px * 4;
+    // backbuf is CAIRO_FORMAT_ARGB32: B, G, R, A byte order on little-endian
+    cb_f = backbuf[idx + 0] / 255.0f;
+    cg_f = backbuf[idx + 1] / 255.0f;
+    cr_f = backbuf[idx + 2] / 255.0f;
+    dt_pthread_mutex_unlock(&dev->preview_pipe->backbuf_mutex);
+  }
+  const float sampled_color[3] = { cr_f, cg_f, cb_f };
+
+  // Circle shades: outer = luminance before the correction, inner =
+  // luminance after it, so the pointer shows how the correction lightens
+  // or darkens the pixel under it.
   const float outer_shade = _shade_from_luminance(luminance_in);
   const float inner_shade = _shade_from_luminance(luminance_out);
   const float outer_color[3] = { outer_shade, outer_shade, outer_shade };
   const float inner_color[3] = { inner_shade, inner_shade, inner_shade };
 
-  dt_draw_correction_cursor(cr, x_pointer, y_pointer, zoom_scale, correction,
-                            frame_color,
+  // The wedge normalizes the correction to ±1 (full ±90°); tone equalizer
+  // corrections are expressed in EV and regularly exceed ±1 EV, so halve
+  // the value here: the wedge then reaches its full ±90° at ±2 EV.
+  dt_draw_correction_cursor(cr, x_pointer, y_pointer, zoom_scale, 0.5f * correction,
+                            sampled_color,
                             outer_color, log2f(luminance_in) > 0.0f,
                             inner_color, log2f(luminance_out) > 0.0f,
                             text);
