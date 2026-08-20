@@ -29,6 +29,7 @@ void dt_preview_data_alloc(dt_preview_data_t *pd,
   pd->buf = NULL;
   pd->width = 0;
   pd->height = 0;
+  pd->components = 1;
   pd->hash = DT_INVALID_HASH;
   pd->module = module;
 }
@@ -42,6 +43,7 @@ void dt_preview_data_free(dt_preview_data_t *pd)
   }
   pd->width = 0;
   pd->height = 0;
+  pd->components = 1;
   pd->hash = DT_INVALID_HASH;
   pd->module = NULL;
 }
@@ -61,9 +63,10 @@ void dt_preview_data_store(dt_preview_data_t *pd,
   dt_iop_gui_enter_critical_section((dt_iop_module_t *)pd->module);
 
   gboolean can_fill = TRUE;
+  const size_t nelems = width * height * pd->components;
   if(pd->width != width || pd->height != height)
   {
-    float *const new_buf = dt_alloc_align_float(width * height);
+    float *const new_buf = dt_alloc_align_float(nelems);
     if(new_buf)
     {
       dt_free_align(pd->buf);
@@ -80,7 +83,7 @@ void dt_preview_data_store(dt_preview_data_t *pd,
 
   if(can_fill && pd->buf)
   {
-    fill(user_data, pd->buf, (size_t)width * height);
+    fill(user_data, pd->buf, nelems);
     pd->hash = dt_dev_pixelpipe_piece_hash((dt_dev_pixelpipe_iop_t *)piece,
                                            &piece->processed_roi_out, TRUE);
   }
@@ -102,9 +105,10 @@ float *dt_preview_data_resize(dt_preview_data_t *pd,
   dt_iop_gui_enter_critical_section((dt_iop_module_t *)pd->module);
 
   gboolean ok = TRUE;
+  const size_t nelems = width * height * pd->components;
   if(pd->width != width || pd->height != height)
   {
-    float *const new_buf = dt_alloc_align_float(width * height);
+    float *const new_buf = dt_alloc_align_float(nelems);
     if(new_buf)
     {
       dt_free_align(pd->buf);
@@ -140,6 +144,7 @@ void dt_preview_data_set_hash(dt_preview_data_t *pd,
 gboolean dt_preview_data_get(dt_preview_data_t *pd,
                              const size_t x,
                              const size_t y,
+                             const size_t comp,
                              float *value)
 {
   if(!pd || !pd->module || !value) return FALSE;
@@ -150,9 +155,9 @@ gboolean dt_preview_data_get(dt_preview_data_t *pd,
   float v = 0.f;
   // The bounds check and the buffer read must both happen under the
   // GUI lock: the pipe thread may resize pd->buf between the two.
-  if(pd->buf && x < pd->width && y < pd->height)
+  if(pd->buf && x < pd->width && y < pd->height && comp < pd->components)
   {
-    const size_t idx = (size_t)y * pd->width + (size_t)x;
+    const size_t idx = ((size_t)y * pd->width + (size_t)x) * pd->components + comp;
     v = pd->buf[idx];
     ok = TRUE;
   }
