@@ -895,7 +895,10 @@ static gboolean _scrolled(GtkWidget *widget,
 static gboolean
 _borders_scrolled(GtkWidget *widget, GdkEventScroll *event, const gpointer user_data)
 {
-  // pass the scroll event to the matching side panel
+  // pass the scroll event to the matching side panel.
+  // guard against forwarding to a widget being torn down: fast scrolling
+  // can deliver events to an unrealized widget (Gtk-CRITICAL).
+  if(!gtk_widget_get_realized(GTK_WIDGET(user_data))) return TRUE;
   gtk_widget_event(GTK_WIDGET(user_data), (GdkEvent *)event);
 
   return TRUE;
@@ -4806,7 +4809,9 @@ static gboolean _scroll_sidebar(GtkEventControllerScroll* controller,
   {
     // FIXME: do we need to even check if in left/right panel? will this break if mouse over a widget within a GtkScrolledWindow within the panel GtkScrolledWindow?
     GtkWidget *const sw = gtk_widget_get_ancestor(widget, GTK_TYPE_SCROLLED_WINDOW);
-    if(sw)
+    // only forward when the target is realized, else the event would be
+    // delivered to a widget being torn down (Gtk-CRITICAL on fast scrolling)
+    if(sw && gtk_widget_get_realized(sw))
     {
       gtk_widget_event(sw, event);
       return TRUE;

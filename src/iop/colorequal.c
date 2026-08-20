@@ -3432,7 +3432,12 @@ static gboolean _area_scrolled_callback(GtkWidget *widget,
 
   // Alt+scroll: switch page (original behavior unchanged)
   if(dt_modifier_is(event->state, GDK_MOD1_MASK))
+  {
+    // guard against forwarding to a widget that is being torn down:
+    // fast scrolling can deliver events to an unrealized widget
+    if(!gtk_widget_get_realized(GTK_WIDGET(g->notebook))) return TRUE;
     return gtk_widget_event(GTK_WIDGET(g->notebook), (GdkEvent*)event);
+  }
 
   // The Gaussian mode below weights around the hue under the cursor on the
   // graph itself (g->graph_cursor_x, tracked by _area_motion_notify_callback),

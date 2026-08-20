@@ -2273,7 +2273,6 @@ void gui_post_expose(dt_iop_module_t *self,
 
   const gboolean fail = !g->cursor_valid
                      || !g->interpolation_valid
-                     || dev->full.pipe->processing
                      || !g->has_focus;
 
   dt_iop_gui_leave_critical_section(self);
@@ -2284,8 +2283,10 @@ void gui_post_expose(dt_iop_module_t *self,
     if(!_init_drawing(self, self->widget, g))
       return;
 
-  // re-read the exposure in case it has changed
-  if(g->luminance_valid && self->enabled)
+  // Re-read the exposure in case it has changed.  While the pipe is busy
+  // the module buffer may be mid-recompute, so keep the last value and
+  // stay drawing the indicator (no blinking cursor during reprocess).
+  if(g->luminance_valid && self->enabled && !dev->full.pipe->processing)
     g->cursor_exposure = log2f(_luminance_from_module_buffer(self));
 
   dt_iop_gui_enter_critical_section(self);
