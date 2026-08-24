@@ -2324,26 +2324,14 @@ void gui_post_expose(dt_iop_module_t *self,
 
   // Sample the pixel under the cursor from the preview pipe backbuf: the
   // shared helper derives the frame line color (wedge, crosshair,
-  // outlines) from it — white over dark content, black over bright
+  // outlines) from the mean luminance of a dynamic area matching the
+  // cursor footprint — white over dark content, black over bright
   // content.  The circles keep the exposure-specific shades below to
   // convey the before/after luminance.
-  uint8_t *backbuf = dev->preview_pipe->backbuf;
-  const int buf_w = dev->preview_pipe->backbuf_width;
-  const int buf_h = dev->preview_pipe->backbuf_height;
-  float cr_f = 0.5f, cg_f = 0.5f, cb_f = 0.5f; // fallback mid-grey
-  if(backbuf && buf_w > 0 && buf_h > 0)
-  {
-    const int px = CLAMP((int)x_pointer, 0, buf_w - 1);
-    const int py = CLAMP((int)y_pointer, 0, buf_h - 1);
-    dt_pthread_mutex_lock(&dev->preview_pipe->backbuf_mutex);
-    const size_t idx = (size_t)py * buf_w * 4 + px * 4;
-    // backbuf is CAIRO_FORMAT_ARGB32: B, G, R, A byte order on little-endian
-    cb_f = backbuf[idx + 0] / 255.0f;
-    cg_f = backbuf[idx + 1] / 255.0f;
-    cr_f = backbuf[idx + 2] / 255.0f;
-    dt_pthread_mutex_unlock(&dev->preview_pipe->backbuf_mutex);
-  }
-  const float sampled_color[3] = { cr_f, cg_f, cb_f };
+  float bg_rgb[3];
+  float frame_color[3];
+  dt_draw_backbuf_contrast(dev, x_pointer, y_pointer, bg_rgb, frame_color,
+                           16.0f / (zoom_scale * width));
 
   // Circle shades: outer = luminance before the correction, inner =
   // luminance after it, so the pointer shows how the correction lightens
@@ -2357,7 +2345,7 @@ void gui_post_expose(dt_iop_module_t *self,
   // corrections are expressed in EV and regularly exceed ±1 EV, so halve
   // the value here: the wedge then reaches its full ±90° at ±2 EV.
   dt_draw_correction_cursor(cr, x_pointer, y_pointer, zoom_scale, 0.5f * correction,
-                            sampled_color,
+                            frame_color,
                             outer_color, log2f(luminance_in) > 0.0f,
                             inner_color, log2f(luminance_out) > 0.0f,
                             text);

@@ -159,6 +159,84 @@ static inline void _dt_draw_cursor_circle(cairo_t *cr,
 }
 
 /**
+ * dt_draw_backbuf_contrast — sample the display pixel under the cursor
+ * from the preview pipe backbuf at normalized image position (x, y)
+ * into rgb[] exactly (the color equalizer shows it as the in/out circle
+ * fill, so a tiny detail spanning a few pixels must report its true
+ * color), and derive frame_color[] used for the overlay lines
+ * (crosshair, wedge outline, circle outlines): white over dark content,
+ * black over bright content, so they stay legible on any background.
+ * The black/white switch is decided from the mean luminance of a square
+ * area covering the drawn cursor instead of a single pixel, so detailed
+ * textures don't flip the lines at every pixel; callers pass
+ * that area's normalized half-size, e.g. outer_radius / (zoom_scale *
+ * width) to match dt_draw_correction_cursor()'s circle.  Falls back to
+ * mid-grey when no backbuf is available.  Shared by all modules drawing
+ * the correction cursor so they use identical colors.
+ */
+static inline void dt_draw_backbuf_contrast(const dt_develop_t *dev,
+                                            const float x_norm,
+                                            const float y_norm,
+                                            float rgb[3],
+                                            float frame_color[3],
+                                            const float area_half_norm)
+{
+  float r = 0.5f, g = 0.5f, b = 0.5f;   // exact pixel fallback: mid-grey
+  float luma_sum = 0.0f;
+  int samples = 0;
+
+  if(dev && dev->preview_pipe)
+  {
+    uint8_t *backbuf = dev->preview_pipe->backbuf;
+    const int buf_w = dev->preview_pipe->backbuf_width;
+    const int buf_h = dev->preview_pipe->backbuf_height;
+
+    if(backbuf && buf_w > 0 && buf_h > 0)
+    {
+      const int px = CLAMP((int)(x_norm * buf_w), 0, buf_w - 1);
+      const int py = CLAMP((int)(y_norm * buf_h), 0, buf_h - 1);
+      // the window tracks the cursor footprint and stays an odd size so
+      // px/py remain its exact center and rgb[] the true sampled pixel
+      const int rad = CLAMP((int)lroundf(area_half_norm * buf_w), 1, 48);
+      const int x0 = MAX(px - rad, 0), x1 = MIN(px + rad, buf_w - 1);
+      const int y0 = MAX(py - rad, 0), y1 = MIN(py + rad, buf_h - 1);
+
+      dt_pthread_mutex_lock(&dev->preview_pipe->backbuf_mutex);
+      for(int iy = y0; iy <= y1; iy++)
+        for(int ix = x0; ix <= x1; ix++)
+        {
+          const size_t idx = ((size_t)iy * buf_w + ix) * 4;
+          // backbuf is CAIRO_FORMAT_ARGB32: B, G, R, A byte order on little-endian
+          const float pr = backbuf[idx + 2] / 255.0f;
+          const float pg = backbuf[idx + 1] / 255.0f;
+          const float pb = backbuf[idx + 0] / 255.0f;
+          if(ix == px && iy == py)
+          {
+            r = pr;
+            g = pg;
+            b = pb;
+          }
+          luma_sum += 0.3f * pr + 0.59f * pg + 0.11f * pb;
+          samples++;
+        }
+      dt_pthread_mutex_unlock(&dev->preview_pipe->backbuf_mutex);
+    }
+  }
+
+  rgb[0] = r;
+  rgb[1] = g;
+  rgb[2] = b;
+
+  // Rec.601 mean luminance of the window: the plain switch keeps maximal
+  // contrast, the averaging alone is what removes the texture flicker
+  const float bg_luma = samples > 0 ? luma_sum / samples : 0.5f;
+  const float shade = (bg_luma > 0.5f) ? 0.0f : 1.0f; // black over bright, white over dark
+  frame_color[0] = shade;
+  frame_color[1] = shade;
+  frame_color[2] = shade;
+}
+
+/**
  * dt_draw_correction_cursor — the on-canvas cursor shown by iop modules
  * that let the user adjust a per-pixel correction by hovering/scrolling
  * over the image (tone equalizer, color equalizer, ...): a crosshair
@@ -171,10 +249,10 @@ static inline void _dt_draw_cursor_circle(cairo_t *cr,
  * correction_norm: signed magnitude of the correction, roughly in
  *   [-1 ; 1] (values are clamped to that range here — pre-scale if your
  *   natural range is larger); drives the wedge's angular span, up to ±90°.
- * bg_color: the pixel color under the cursor, used to derive the frame
- *   color (wedge outline, crosshair/ground-level lines and the outline
- *   stroked around both circles): white over dark content, black over
- *   bright content, so the pointer stays legible everywhere.
+ * frame_color: color of the wedge outline, the crosshair/ground-level
+ *   lines, and the outline stroked around both circles — white over dark
+ *   content, black over bright content, so the pointer stays legible
+ *   everywhere.  Typically obtained from dt_draw_backbuf_contrast().
  * outer_color, inner_color: fill colors of the outer (radius 16) and
  *   inner (radius 8) circles — pass the same color for both for a plain
  *   single-color dot, or two different colors to show e.g. a value
@@ -189,7 +267,7 @@ static inline void dt_draw_correction_cursor(cairo_t *cr,
                                              const double pointery,
                                              const float zoom_scale,
                                              const float correction_norm,
-                                             const float bg_color[3],
+                                             const float frame_color[3],
                                              const float outer_color[3],
                                              const gboolean outer_hatch,
                                              const float inner_color[3],
@@ -201,12 +279,6 @@ static inline void dt_draw_correction_cursor(cairo_t *cr,
   const double padding = 4.0; // matches the bauhaus quad padding (kept in sync manually)
   const double setting_offset_x = (outer_radius + 4.0 * padding) / zoom_scale;
   const double fill_width = DT_PIXEL_APPLY_DPI(4.0 / zoom_scale);
-
-  // frame color derived from the background luminance: white over dark
-  // content, black over bright content (shared by all modules)
-  const float bg_luma = 0.3f * bg_color[0] + 0.59f * bg_color[1] + 0.11f * bg_color[2];
-  const float frame_shade = (bg_luma > 0.5f) ? 0.0f : 1.0f;
-  const float frame_color[3] = { frame_shade, frame_shade, frame_shade };
 
   // wedge showing the magnitude/direction of the correction.
   // Opens up to ±90° (M_PI_2) at full magnitude (|correction_norm| = 1),
