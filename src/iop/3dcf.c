@@ -3508,6 +3508,14 @@ void gui_init(dt_iop_module_t *self)
       "symmetric position (0% = symmetric, the stored 50%)."));
   g_signal_connect_after(G_OBJECT(g->chroma_x_pivot), "value-changed",
                          G_CALLBACK(_chroma_x_changed), self);
+  /* Reset quad on the X pivot slider: same mechanism as the padlock and the
+     balance reset quad, so it is exactly the same size and sits at the right
+     edge of the slider. The X pivot is only shown while unlocked, whereas the
+     balance (with its own reset quad) is only shown while locked, so together
+     the reset icon is always available. */
+  dt_bauhaus_widget_set_quad(g->chroma_x_pivot, self, dtgtk_cairo_paint_reset,
+                             FALSE, _chroma_reset_clicked,
+                             _("Reset the X/Z chroma sliders (contrast and pivot) to their default values."));
 
   /* X/Z balance: transient slider (not a module parameter), shown only while
      X and Z are locked. It pans the shared contrast level between the two
