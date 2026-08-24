@@ -1654,19 +1654,21 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
 
   /* Step 8: Film-print highlight desaturation toward white */
   {
-    /* Abney hue rotation tied to SSTS compression ratio. weight = 1.0 for
-       extreme highlights, 0 for midtones/shadows. hl_hue_shift controls the
-       exponent: +1 -> weight = 1 everywhere, 0 -> weight =
-       sqrt(comp_factor), -1 -> weight = comp_factor. */
+    /* Abney hue rotation tied to SSTS compression ratio. weight = pow(comp_factor, 0.6)
+       ramps up as soon as compression begins (progressive onset, midtones still 0
+       since pow(0, .6) = 0) up to 1 at full compression (clipped highlights):
+       midtones/shadows are never touched while the rotation stays clearly visible
+       on highlights. hl_hue_shift controls only the rotation angle:
+       angle = hl_hue_shift * max_angle * weight
+       (max_angle = 0.4 rad ~= 23 deg at full excursion on clipped highlights). */
     const float y_exposed = y_abs * ctx->exposure_factor;
     float hl_weight = 0.0f;
     if(ctx->hl_rotation != 0.0f && y_abs > 1e-10f)
     {
       const float compression = fminf(y_tm / (y_abs * ctx->exposure_factor), 1.0f);
       const float comp_factor = 1.0f - compression;
-      const float exp_power = fmaxf(1.0f * (1.0f - fabsf(ctx->hl_rotation)), 0.1f);
-      hl_weight = powf(fmaxf(comp_factor, 1e-10f), exp_power);
-      const float max_angle = 1.0f; //CB
+      hl_weight = powf(comp_factor, 0.6f);
+      const float max_angle = 0.4f; //CB
       const float angle = ctx->hl_rotation * max_angle * hl_weight;
       const float ca = cosf(angle);
       const float sa = sinf(angle);
@@ -3572,9 +3574,10 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->hl_hue_shift, " %");
   dt_bauhaus_slider_set_digits(g->hl_hue_shift, 0);
   gtk_widget_set_tooltip_text(g->hl_hue_shift,
-    _("Abney rotation in highlights, modulated by pixel saturation. \n"
+    _("Abney rotation in highlights, tied to the SSTS compression ratio. \n"
       "Positive rotates toward cool (blue), negative toward warm (salmon). \n"
-      "Vibrance-negative desaturation: saturated pixels desaturate further. \n"
+      "Ramps up progressively as highlights compress (power 0.6), up to ~23 deg \n"
+      "on clipped highlights; midtones and shadows stay untouched. \n"
       "Independent of highlight roll-off."));
 
   /* Apply the initial show/hide for the lock-dependent chroma widgets. */
