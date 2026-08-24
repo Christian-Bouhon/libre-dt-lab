@@ -3311,6 +3311,29 @@ static void _chroma_balance_changed(GtkWidget *slider, dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->chroma_x_contrast, newx);
 }
 
+/* Reset quad on the X/Z balance slider: restores the four X/Z chroma sliders
+   (contrast and pivot on both axes) to their defaults. The padlock state
+   (chroma_linked) is a GUI preference and is deliberately left untouched, so
+   the user keeps their locked/unlocked choice. A single undoable history step
+   records the reset. */
+static void _chroma_reset_clicked(GtkWidget *quad, dt_iop_module_t *self)
+{
+  dt_iop_3dcf_params_t *p = self->params;
+  (void)quad;
+
+  if(p->chroma_x_contrast == 0.0f && p->chroma_z_contrast == 0.0f
+     && p->chroma_x_pivot == 50.0f && p->chroma_z_pivot == 50.0f)
+    return;
+
+  p->chroma_x_contrast = 0.0f;
+  p->chroma_z_contrast = 0.0f;
+  p->chroma_x_pivot = 50.0f;
+  p->chroma_z_pivot = 50.0f;
+
+  dt_iop_gui_update(self);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
 void gui_init(dt_iop_module_t *self)
 {
   dt_iop_3dcf_gui_data_t *g = IOP_GUI_ALLOC(3dcf);
@@ -3501,6 +3524,14 @@ void gui_init(dt_iop_module_t *self)
       "Only available while X and Z are locked together (padlock)."));
   g_signal_connect(G_OBJECT(g->chroma_balance), "value-changed",
                    G_CALLBACK(_chroma_balance_changed), self);
+  /* Reset quad on the balance slider (same mechanism as the padlock quad on
+     the X contrast slider, so it is exactly the same size and sits at the
+     right edge of the slider): restores the four X/Z chroma sliders to their
+     defaults. As it lives inside the balance widget, it shares the same
+     visibility (shown only while the axes are locked). */
+  dt_bauhaus_widget_set_quad(g->chroma_balance, self, dtgtk_cairo_paint_reset,
+                             FALSE, _chroma_reset_clicked,
+                             _("Reset the X/Z chroma sliders (contrast and pivot) to their default values."));
   dt_gui_box_add(main_vbox, g->chroma_balance);
 
   g->chroma_z_contrast = dt_bauhaus_slider_from_params(self, "chroma_z_contrast");
