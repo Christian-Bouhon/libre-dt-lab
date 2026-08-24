@@ -168,6 +168,7 @@ GNU General Public License v3.0, see [LICENSE](LICENSE) for details.
 
 - [darktable project](https://www.darktable.org/) and all its contributors
 - [WileCoyote, original local contrast proof-of-concept](https://discuss.pixls.us/t/experiments-with-a-scene-referred-local-contrast-module-proof-of-concept/55402)
+- [XYZ sigmoid curve (GIMP 3 plug-in), inspiration for the 3DCF X/Z chroma contrast](https://discuss.pixls.us/t/python-plug-in-for-gimp3-xyz-sigmoid-curve/60096)
 - Christian Bouhon, Libre DT-Lab fork, Contrast & Texture module, basecurve enhancements
 
 *Greetings from Luberon, Provence* 🌿

@@ -49,6 +49,13 @@
     - Rec.2020 colour space : ITU-R BT.2020 ultra-high definition television
       standard, used as the working space for wide-gamut spectral processing.
 
+    - XYZ sigmoid curve (GIMP 3 Python plug-in) : discuss.pixls.us (2025).
+      Inspiration for the X/Z chroma contrast feature — applying independent
+      sigmoid contrast curves on the CIE X and Z chromaticity axes (with the
+      X/Z balance slider and the default X↔Z link) to steer the asymmetry of
+      the chromatic response.
+      https://discuss.pixls.us/t/python-plug-in-for-gimp3-xyz-sigmoid-curve/60096
+
     ---------------------------------------------------------------------------
 
     */
@@ -60,6 +67,7 @@
 #include "common/imagebuf.h"
 #include "common/math.h"
 #include "common/matrices.h"
+#include "dtgtk/paint.h"
 #include "develop/imageop.h"
 #include "develop/tiling.h"
 #include "develop/imageop_gui.h"
@@ -75,7 +83,7 @@
 #include <stdio.h>
 #include <string.h>
 
-DT_MODULE_INTROSPECTION(9, dt_iop_3dcf_params_t)
+DT_MODULE_INTROSPECTION(10, dt_iop_3dcf_params_t)
 
 /* Type definitions for the ACES 2.0 SSTS pipeline context.
    spectral_tone_data.c and spectral_tone_pipeline.c have been merged into
@@ -139,6 +147,15 @@ typedef struct dt_iop_3dcf_params_t
   float toe_power;             // $MIN: 0.25 $MAX: 3.0 $DEFAULT: 1.0 $DESCRIPTION: "toe power"
   float shoulder_power;        // $MIN: 0.25 $MAX: 3.0 $DEFAULT: 1.0 $DESCRIPTION: "shoulder power"
   float hl_detail_recovery;    // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.20 $DESCRIPTION: "detail recovery"
+
+  /* Chroma contrast — independent sigmoid on the CIE-xz offset from white,
+     inserted between chromaticity scaling (step 5) and spectral gamut
+     roll-off (step 6). Operates on the same normalized chroma axes used by
+     st_spectral_gamut(), not on raw XYZ. Default 0.0 = no-op. */
+  float chroma_x_contrast;     // $MIN: 0.0 $MAX: 10.0 $DEFAULT: 0.0 $STEP: 0.01 $DESCRIPTION: "X-axis chroma contrast"
+  float chroma_x_pivot;        // $MIN: 25.0 $MAX: 75.0 $DEFAULT: 50.0 $STEP: 0.1 $DESCRIPTION: "X-axis contrast pivot"
+  float chroma_z_contrast;     // $MIN: 0.0 $MAX: 10.0 $DEFAULT: 0.0 $STEP: 0.01 $DESCRIPTION: "Z-axis chroma contrast"
+  float chroma_z_pivot;        // $MIN: 25.0 $MAX: 75.0 $DEFAULT: 50.0 $STEP: 0.1 $DESCRIPTION: "Z-axis contrast pivot"
 } dt_iop_3dcf_params_t;
 
 /* SSTS (ACES 2.0 Single-Stage Tone Scale) precomputed parameters */
@@ -180,6 +197,17 @@ typedef struct
   float gamut_inv[9];
   int   gamut_enable;
   dt_st_ssts_params_t ssts;
+
+  /* Chroma contrast sigmoid — precomputed at commit time so the per-pixel
+     kernel only does one exp() per axis instead of three. */
+  float chroma_x_gain;         // = max(chroma_x_contrast, 1e-4)
+  float chroma_x_shift;        // = chroma_x_pivot / 100
+  float chroma_x_sig0;         // = sigmoid(0, gain, shift)
+  float chroma_x_inv_range;    // = 1 / (sigmoid(1, gain, shift) - sig0)
+  float chroma_z_gain;
+  float chroma_z_shift;
+  float chroma_z_sig0;
+  float chroma_z_inv_range;
 } dt_st_context_t;
 
 typedef struct dt_iop_3dcf_data_t
@@ -226,6 +254,14 @@ typedef struct dt_st_cl_params_t
   float look_opacity;
   float hl_detail_recovery;
   float spectral_boundary[360];
+  float chroma_x_gain;
+  float chroma_x_shift;
+  float chroma_x_sig0;
+  float chroma_x_inv_range;
+  float chroma_z_gain;
+  float chroma_z_shift;
+  float chroma_z_sig0;
+  float chroma_z_inv_range;
   int   look_idx;
   int   gamut_enable;
 } dt_st_cl_params_t;
@@ -250,6 +286,13 @@ typedef struct dt_iop_3dcf_gui_data_t
   GtkWidget *hl_desaturation;
   GtkWidget *hl_desat_threshold;
   GtkWidget *hl_hue_shift;
+  GtkWidget *chroma_x_contrast;
+  GtkWidget *chroma_x_pivot;
+  GtkWidget *chroma_z_contrast;
+  GtkWidget *chroma_z_pivot;
+  /* Transient slider (not a module parameter) shown only while the X and Z
+     axes are locked together; pans the shared contrast between the two axes. */
+  GtkWidget *chroma_balance;
   GtkWidget *hl_detail_recovery;
   GtkWidget *gamut_knee;
   GtkWidget *gamut_steepness;
@@ -257,6 +300,8 @@ typedef struct dt_iop_3dcf_gui_data_t
   GtkWidget *color_space;
   GtkWidget *color_look;
   GtkWidget *look_opacity;
+  gboolean chroma_linked;
+  gboolean chroma_syncing;
   GtkDrawingArea *graph;
   GtkAllocation allocation;
   PangoRectangle ink;
@@ -1355,6 +1400,83 @@ static inline float st_chroma_norm(float h)
    ~1.0 on average. */
 #define ST_GAMUT_SHAPE_REF  2.090563f
 
+/* Independent sigmoid contrast on the CIE-xz offset from white, applied
+   BEFORE st_spectral_gamut() so its knee compression absorbs any excursion
+   this creates. Operates on chroma normalized by the spectral locus radius
+   for the pixel's hue angle -- NOT on raw x_tm/z_tm, whose absolute scale
+   depends on y_tm and would make the contrast luminance-dependent instead
+   of saturation-dependent. Y is intentionally left untouched (handled by
+   SSTS + toe/shoulder already).
+
+   Normalization mirrors sigmoidAdj() from Ohnishi Yasuo's XYZ sigmoid curve
+   GIMP plug-in (GPLv3): the sigmoid is rescaled so f(0)=0, f(1)=1 exactly,
+   here applied per-axis to the [-1,1]-normalized chroma offset instead of
+   to a raw channel value. */
+static inline void st_chroma_contrast_sigmoid(
+  float *x_tm, float *z_tm, const float y_tm,
+  const float white_x_ratio, const float white_z_ratio,
+  const float gain_x, const float shift_x, const float sig0_x, const float inv_range_x,
+  const float gain_z, const float shift_z, const float sig0_z, const float inv_range_z,
+  const float *spectral_boundary)
+{
+  if(y_tm <= 0.0f) return;
+  if(!isfinite(*x_tm) || !isfinite(*z_tm)) return;
+
+  const float sum = *x_tm + y_tm + *z_tm;
+  if(sum <= 0.0f) return;
+  const float cie_x = *x_tm / sum;
+  const float cie_z = *z_tm / sum;
+
+  const float wy = 1.0f;
+  const float wsum = white_x_ratio + wy + white_z_ratio;
+  const float white_cie_x = white_x_ratio / wsum;
+  const float white_cie_z = white_z_ratio / wsum;
+
+  const float dx = cie_x - white_cie_x;
+  const float dz = cie_z - white_cie_z;
+
+  if(!spectral_boundary) return;
+
+  const float angle = atan2f(dz, dx);
+  float angle_deg = angle * (180.0f / (float)M_PI);
+  if(angle_deg < 0.0f) angle_deg += 360.0f;
+  if(angle_deg >= 360.0f) angle_deg -= 360.0f;
+  const int bin = (int)angle_deg;
+  const int next = (bin + 1) % 360;
+  const float frac = angle_deg - (float)bin;
+  const float max_dist = spectral_boundary[bin]
+                        + frac * (spectral_boundary[next] - spectral_boundary[bin]);
+  if(max_dist <= 0.0f) return;
+
+  /* Normalize each axis independently to [-1, 1] by the spectral radius,
+     remap to [0, 1] for the sigmoid, then back. */
+  const float u = fminf(fmaxf(dx / max_dist, -1.0f), 1.0f);
+  const float w = fminf(fmaxf(dz / max_dist, -1.0f), 1.0f);
+
+  const float u01 = 0.5f * (u + 1.0f);
+  const float w01 = 0.5f * (w + 1.0f);
+
+  const float sig_u = 1.0f / (1.0f + expf(-gain_x * (u01 - shift_x)));
+  const float sig_w = 1.0f / (1.0f + expf(-gain_z * (w01 - shift_z)));
+
+  const float u01_new = (sig_u - sig0_x) * inv_range_x;
+  const float w01_new = (sig_w - sig0_z) * inv_range_z;
+
+  const float u_new = 2.0f * u01_new - 1.0f;
+  const float w_new = 2.0f * w01_new - 1.0f;
+
+  const float cie_x_new = white_cie_x + u_new * max_dist;
+  const float cie_z_new = white_cie_z + w_new * max_dist;
+  const float y_new = 1.0f - cie_x_new - cie_z_new;
+
+  if(y_new > 0.0f)
+  {
+    const float S_new = y_tm / y_new;
+    *x_tm = cie_x_new * S_new;
+    *z_tm = cie_z_new * S_new;
+  }
+}
+
 static inline void st_spectral_gamut(
   float *x_tm, float *z_tm, float y_tm,
   const float white_x_ratio, const float white_z_ratio,
@@ -1461,6 +1583,7 @@ static inline void st_spectral_gamut(
    3. BT.1886 OETF + contrast S-curve
    4. Mid-tone gamma adjustment
    5. Chromaticity ratio scaling: x = ratio * Y
+   5b. Chroma contrast: independent sigmoid on CIE-xz offset from white (X/Z only)
    6. Spectral gamut: film-like chromaticity roll-off in CIE xy
    7. XYZ -> output RGB via output matrix
    8. Highlight desaturation (blend toward achromatic luma)
@@ -1503,6 +1626,16 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
   /* Step 5: Scale chromaticity with tone-mapped luminance */
   float x_tm = x_ratio * y_tm;
   float z_tm = z_ratio * y_tm;
+
+  /* Step 5b: Chroma contrast — independent sigmoid, X/Z axes only (Y is
+     left untouched, see st_chroma_contrast_sigmoid() documentation) */
+  st_chroma_contrast_sigmoid(&x_tm, &z_tm, y_tm,
+                              ctx->white_chroma_x, ctx->white_chroma_z,
+                              ctx->chroma_x_gain, ctx->chroma_x_shift,
+                              ctx->chroma_x_sig0, ctx->chroma_x_inv_range,
+                              ctx->chroma_z_gain, ctx->chroma_z_shift,
+                              ctx->chroma_z_sig0, ctx->chroma_z_inv_range,
+                              ctx->spectral_boundary);
 
   /* Step 6: Spectral gamut — film-like chromaticity roll-off in CIE xy */
   st_spectral_gamut(&x_tm, &z_tm, y_tm,
@@ -1723,6 +1856,30 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
   ctx->toe_power = fmaxf(p->toe_power, 0.0f);
   ctx->shoulder_power = fmaxf(p->shoulder_power, 0.0f);
   ctx->hl_detail_recovery = fmaxf(p->hl_detail_recovery, 0.0f);
+
+  /* Chroma contrast sigmoid — precompute gain/shift/normalization per axis.
+     Mirrors sigmoidAdj() from Ohnishi's XYZ sigmoid curve GIMP plug-in:
+     gain guarded away from 0 to avoid division by zero in the endpoint
+     normalization; as gain -> 0 the normalized curve tends to identity. */
+  {
+    const float gx = fmaxf(p->chroma_x_contrast, 1e-4f);
+    const float sx = p->chroma_x_pivot / 100.0f;
+    const float sig0x = 1.0f / (1.0f + expf(-gx * (0.0f - sx)));
+    const float sig1x = 1.0f / (1.0f + expf(-gx * (1.0f - sx)));
+    ctx->chroma_x_gain = gx;
+    ctx->chroma_x_shift = sx;
+    ctx->chroma_x_sig0 = sig0x;
+    ctx->chroma_x_inv_range = 1.0f / fmaxf(sig1x - sig0x, 1e-6f);
+
+    const float gz = fmaxf(p->chroma_z_contrast, 1e-4f);
+    const float sz = p->chroma_z_pivot / 100.0f;
+    const float sig0z = 1.0f / (1.0f + expf(-gz * (0.0f - sz)));
+    const float sig1z = 1.0f / (1.0f + expf(-gz * (1.0f - sz)));
+    ctx->chroma_z_gain = gz;
+    ctx->chroma_z_shift = sz;
+    ctx->chroma_z_sig0 = sig0z;
+    ctx->chroma_z_inv_range = 1.0f / fmaxf(sig1z - sig0z, 1e-6f);
+  }
 
   /* Output gamut protection matrices from pre-computed lookup table */
   {
@@ -2004,6 +2161,24 @@ int legacy_params(dt_iop_module_t *self,
     *new_params = new_p;
     *new_params_size = sizeof(dt_iop_3dcf_params_t);
     *new_version = 9;
+    return 0;
+  }
+
+  // v9 → v10: added chroma_x_contrast/pivot, chroma_z_contrast/pivot
+  if(old_version == 9)
+  {
+    const dt_iop_3dcf_params_t *old = old_params;
+    dt_iop_3dcf_params_t *new_p = malloc(sizeof(dt_iop_3dcf_params_t));
+
+    *new_p = *old;
+    new_p->chroma_x_contrast = 0.0f;
+    new_p->chroma_x_pivot    = 50.0f;
+    new_p->chroma_z_contrast = 0.0f;
+    new_p->chroma_z_pivot    = 50.0f;
+
+    *new_params = new_p;
+    *new_params_size = sizeof(dt_iop_3dcf_params_t);
+    *new_version = 10;
     return 0;
   }
 
@@ -2417,6 +2592,15 @@ static void st_fill_cl_params(const dt_iop_3dcf_data_t *d,
 
   for(int i = 0; i < 360; i++) clp->spectral_boundary[i] = ctx->spectral_boundary[i];
 
+  clp->chroma_x_gain      = ctx->chroma_x_gain;
+  clp->chroma_x_shift     = ctx->chroma_x_shift;
+  clp->chroma_x_sig0      = ctx->chroma_x_sig0;
+  clp->chroma_x_inv_range = ctx->chroma_x_inv_range;
+  clp->chroma_z_gain      = ctx->chroma_z_gain;
+  clp->chroma_z_shift     = ctx->chroma_z_shift;
+  clp->chroma_z_sig0      = ctx->chroma_z_sig0;
+  clp->chroma_z_inv_range = ctx->chroma_z_inv_range;
+
   /* Same clamp as process(): color_looks has 11 entries (0..10) */
   const int look_idx = (d->params.color_look > 0 && d->params.color_look <= 10)
                        ? d->params.color_look : 0;
@@ -2549,6 +2733,14 @@ void init_presets(dt_iop_module_so_t *self)
   p.toe_power = 1.0f;
   p.shoulder_power = 1.0f;
   p.hl_detail_recovery = 0.20f; //CB
+  /* Keep the chroma axes at their introspection defaults (pivot 50, contrast 0)
+     so that re-applying this auto-preset (e.g. after a history reset) restores
+     the pivot sliders to 50%. Without these, the zeroed struct would put them
+     at 0. */
+  p.chroma_x_contrast = 0.0f;
+  p.chroma_x_pivot = 50.0f;
+  p.chroma_z_contrast = 0.0f;
+  p.chroma_z_pivot = 50.0f;
 
   if(auto_apply_st)
   {
@@ -2626,7 +2818,50 @@ void gui_reset(dt_iop_module_t *self)
   dt_iop_3dcf_gui_data_t *g = self->gui_data;
   g->picked_grey_y = 0.0f;
   g->picked_grey_y_last_applied = 0.0f;
+  /* The X/Z lock is a GUI preference, not a parameter: keep it across an
+     explicit module reset too (it defaults to linked). */
   dt_iop_color_picker_reset(self, TRUE);
+}
+
+/* Derived asymmetry helpers for the transient X/Z balance widget. The
+   balance is not a parameter: it is recomputed from the stored X/Z contrast
+   values and, when X and Z are locked together, decides how a shared
+   contrast level is split between the two axes. */
+static inline float _chroma_balance_from_xz(const float x, const float z)
+{
+  const float sum = x + z;
+  return sum > 1e-6f ? CLAMPF((x - z) / sum, -1.0f, 1.0f) : 0.0f;
+}
+
+/* Z contrast that preserves the current balance when X contrast changes:
+   b = (X-Z)/(X+Z)  =>  Z = X*(1-b)/(1+b).  b is clamped away from the
+   singularities at ±1 so the ratio always stays finite. */
+static inline float _chroma_z_from_x(const float x, const float b)
+{
+  const float bf = CLAMPF(b, -0.999f, 0.999f);
+  return CLAMPF(x * (1.0f - bf) / (1.0f + bf), 0.0f, 10.0f);
+}
+
+/* Mirror of _chroma_z_from_x() for the (hidden while linked) Z slider. */
+static inline float _chroma_x_from_z(const float z, const float b)
+{
+  const float bf = CLAMPF(b, -0.999f, 0.999f);
+  return CLAMPF(z * (1.0f + bf) / (1.0f - bf), 0.0f, 10.0f);
+}
+
+/* While X and Z are locked together the X axis alone drives both, so the
+   balance slider replaces the redundant sliders (Z contrast, Z pivot and X
+   pivot are hidden); unlocking brings them back and hides the balance. */
+static void _chroma_set_visibility(dt_iop_3dcf_gui_data_t *g, const gboolean linked)
+{
+  gtk_widget_set_visible(g->chroma_x_pivot, !linked);
+  gtk_widget_set_visible(g->chroma_z_contrast, !linked);
+  gtk_widget_set_visible(g->chroma_z_pivot, !linked);
+  gtk_widget_set_visible(g->chroma_balance, linked);
+  /* While locked, X alone drives both axes: drop the axis qualifier from the
+     X contrast label (and restore it on unlock). */
+  dt_bauhaus_widget_set_label(g->chroma_x_contrast, NULL,
+                              linked ? _("chroma contrast") : _("X-axis chroma contrast"));
 }
 
 void gui_update(dt_iop_module_t *self)
@@ -2646,6 +2881,13 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->hl_desaturation, p->hl_desaturation);
   dt_bauhaus_slider_set(g->hl_desat_threshold, p->hl_desat_threshold);
   dt_bauhaus_slider_set(g->hl_hue_shift, p->hl_hue_shift);
+  dt_bauhaus_slider_set(g->chroma_x_contrast, p->chroma_x_contrast);
+  dt_bauhaus_slider_set(g->chroma_x_pivot, p->chroma_x_pivot);
+  dt_bauhaus_slider_set(g->chroma_z_contrast, p->chroma_z_contrast);
+  dt_bauhaus_slider_set(g->chroma_z_pivot, p->chroma_z_pivot);
+  /* The X/Z balance is transient: recompute it from the stored contrasts. */
+  dt_bauhaus_slider_set(g->chroma_balance,
+                        _chroma_balance_from_xz(p->chroma_x_contrast, p->chroma_z_contrast));
   dt_bauhaus_slider_set(g->hl_detail_recovery, p->hl_detail_recovery);
   dt_bauhaus_slider_set(g->gamut_knee, p->gamut_knee);
   dt_bauhaus_slider_set(g->gamut_steepness, p->gamut_steepness);
@@ -2667,9 +2909,13 @@ void gui_update(dt_iop_module_t *self)
   {
     g->picked_grey_y = 0.0f;
     g->picked_grey_y_last_applied = 0.0f;
+    /* The X/Z lock is a GUI preference, kept across image changes. */
     dt_iop_color_picker_reset(self, TRUE);
     g->last_imgid = current_imgid;
   }
+
+  dt_bauhaus_widget_set_quad_active(g->chroma_x_contrast, g->chroma_linked);
+  _chroma_set_visibility(g, g->chroma_linked);
 
   gui_changed(self, NULL, NULL);
 }
@@ -2980,10 +3226,97 @@ cleanup:
   return FALSE;
 }
 
+/* Chroma link padlock: when active, X and Z axes track each other and the
+   Z sliders are replaced by the X/Z balance slider. */
+static void _chroma_link_toggled(GtkWidget *quad, dt_iop_module_t *self)
+{
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  dt_iop_3dcf_params_t *p = self->params;
+
+  /* bauhaus already toggled CPF_ACTIVE before emitting quad-pressed. */
+  g->chroma_linked = dt_bauhaus_widget_get_quad_active(quad);
+
+  /* Locking preserves the current X and Z values: recompute the transient
+     balance slider from them instead of copying X → Z and resetting the
+     asymmetry to zero (which would drop an existing X/Z split). */
+  if(g->chroma_linked && !g->chroma_syncing)
+  {
+    g->chroma_syncing = TRUE;
+    dt_bauhaus_slider_set(g->chroma_balance,
+                          _chroma_balance_from_xz(p->chroma_x_contrast, p->chroma_z_contrast));
+    g->chroma_syncing = FALSE;
+  }
+
+  _chroma_set_visibility(g, g->chroma_linked);
+}
+
+static void _chroma_x_changed(GtkWidget *slider, dt_iop_module_t *self)
+{
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  dt_iop_3dcf_params_t *p = self->params;
+  (void)slider;
+
+  if(!g->chroma_linked || g->chroma_syncing) return;
+  g->chroma_syncing = TRUE;
+  /* Preserve the X/Z balance while X follows the slider: Z is derived from
+     the new X with the same asymmetry. The stored values are pre-written so
+     the (hidden) Z sliders do not add another history step. */
+  p->chroma_z_contrast = _chroma_z_from_x(p->chroma_x_contrast,
+                                          dt_bauhaus_slider_get(g->chroma_balance));
+  dt_bauhaus_slider_set(g->chroma_z_contrast, p->chroma_z_contrast);
+  p->chroma_z_pivot = p->chroma_x_pivot;
+  dt_bauhaus_slider_set(g->chroma_z_pivot, p->chroma_z_pivot);
+  g->chroma_syncing = FALSE;
+}
+
+static void _chroma_z_changed(GtkWidget *slider, dt_iop_module_t *self)
+{
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  dt_iop_3dcf_params_t *p = self->params;
+  (void)slider;
+
+  if(!g->chroma_linked || g->chroma_syncing) return;
+  g->chroma_syncing = TRUE;
+  p->chroma_x_contrast = _chroma_x_from_z(p->chroma_z_contrast,
+                                          dt_bauhaus_slider_get(g->chroma_balance));
+  dt_bauhaus_slider_set(g->chroma_x_contrast, p->chroma_x_contrast);
+  p->chroma_x_pivot = p->chroma_z_pivot;
+  dt_bauhaus_slider_set(g->chroma_x_pivot, p->chroma_x_pivot);
+  g->chroma_syncing = FALSE;
+}
+
+/* Balance slider: pans the shared contrast level between the X and Z axes.
+   base = (X+Z)/2 stays constant; X = base*(1+b), Z = base*(1-b). Only X is
+   driven here -- _chroma_x_changed() propagates the derived Z, so the two
+   axes stay coherent with a single history step. */
+static void _chroma_balance_changed(GtkWidget *slider, dt_iop_module_t *self)
+{
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  dt_iop_3dcf_params_t *p = self->params;
+  (void)slider;
+
+  if(g->chroma_syncing) return;
+
+  /* The balance slider is only shown while linked. */
+  if(!g->chroma_linked)
+  {
+    dt_bauhaus_slider_set(g->chroma_balance,
+                          _chroma_balance_from_xz(p->chroma_x_contrast, p->chroma_z_contrast));
+    return;
+  }
+
+  const float b = dt_bauhaus_slider_get(g->chroma_balance);
+  const float base = 0.5f * (p->chroma_x_contrast + p->chroma_z_contrast);
+  const float newx = CLAMPF(base * (1.0f + b), 0.0f, 10.0f);
+  dt_bauhaus_slider_set(g->chroma_x_contrast, newx);
+}
+
 void gui_init(dt_iop_module_t *self)
 {
   dt_iop_3dcf_gui_data_t *g = IOP_GUI_ALLOC(3dcf);
   self->gui_data = g;
+  /* X and Z are locked together by default. */
+  g->chroma_linked = TRUE;
 
   GtkWidget *main_vbox = dt_gui_vbox();
   self->widget = main_vbox;
@@ -3099,6 +3432,15 @@ void gui_init(dt_iop_module_t *self)
   /* === COLOR section === */
   dt_gui_box_add(GTK_BOX(main_vbox), dt_ui_section_label_new(C_("section", "color")));
 
+  g->color_look = dt_bauhaus_combobox_from_params(self, "color_look");
+  gtk_widget_set_tooltip_text(g->color_look, _("Apply a color style to the image."));
+
+  g->look_opacity = dt_bauhaus_slider_from_params(self, "look_opacity");
+  dt_bauhaus_widget_set_label(g->look_opacity, NULL, _("look opacity"));
+  dt_bauhaus_slider_set_format(g->look_opacity, "%");
+  dt_bauhaus_slider_set_factor(g->look_opacity, 100.0);
+  gtk_widget_set_tooltip_text(g->look_opacity, _("Adjust the strength of the selected color style."));
+
   g->vibrance = dt_bauhaus_slider_from_params(self, "vibrance");
   dt_bauhaus_slider_set_factor(g->vibrance, 100.0f);
   dt_bauhaus_slider_set_offset(g->vibrance, -100.0f);
@@ -3114,6 +3456,78 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->chromatic_boost,
     _("Chromatic accentuation of midtones with a slight contrast in hue in the highlights"));
 
+  g->chroma_x_contrast = dt_bauhaus_slider_from_params(self, "chroma_x_contrast");
+  /* Display as a percentage of the axis' chroma range: the stored 0..10 maps
+     to 0..100%, e.g. 2.02 shows as 20.2%. The parameter is unchanged. */
+  dt_bauhaus_slider_set_factor(g->chroma_x_contrast, 10.0f);
+  dt_bauhaus_slider_set_format(g->chroma_x_contrast, " %");
+  dt_bauhaus_slider_set_digits(g->chroma_x_contrast, 1);
+  gtk_widget_set_tooltip_text(g->chroma_x_contrast,
+    _("Independent contrast on the CIE X-axis chroma offset from white, applied \n"
+      "right after chromaticity scaling and before spectral gamut roll-off. \n"
+      "0 % = off (no-op)."));
+  /* Padlock quad: locks X and Z axes together */
+  dt_bauhaus_widget_set_quad(g->chroma_x_contrast, self, dtgtk_cairo_paint_lock,
+                             TRUE, _chroma_link_toggled,
+     _("Lock X and Z axes: when active, both contrast and pivot track together."));
+  g_signal_connect_after(G_OBJECT(g->chroma_x_contrast), "value-changed",
+                         G_CALLBACK(_chroma_x_changed), self);
+
+  g->chroma_x_pivot = dt_bauhaus_slider_from_params(self, "chroma_x_pivot");
+  dt_bauhaus_slider_set_default(g->chroma_x_pivot, 50.0f);
+  /* Display relative to the symmetric 50% position: 50% shows as 0%, a 40%
+     pivot as -10%, a 60% one as +10%. The stored parameter is unchanged. */
+  dt_bauhaus_slider_set_offset(g->chroma_x_pivot, -50.0f);
+  dt_bauhaus_slider_set_format(g->chroma_x_pivot, " %");
+  dt_bauhaus_slider_set_digits(g->chroma_x_pivot, 1);
+  gtk_widget_set_tooltip_text(g->chroma_x_pivot,
+    _("Pivot point for the X-axis chroma contrast sigmoid, relative to the \n"
+      "symmetric position (0% = symmetric, the stored 50%)."));
+  g_signal_connect_after(G_OBJECT(g->chroma_x_pivot), "value-changed",
+                         G_CALLBACK(_chroma_x_changed), self);
+
+  /* X/Z balance: transient slider (not a module parameter), shown only while
+     X and Z are locked. It pans the shared contrast level between the two
+     axes; the effective X/Z contrast values are written into the existing
+     chroma_x/z_contrast parameters. */
+  g->chroma_balance = dt_bauhaus_slider_new_with_range(self, -1.0f, 1.0f, 0.01f, 0.0f, 2);
+  dt_bauhaus_widget_set_label(g->chroma_balance, NULL, _("X/Z balance"));
+  dt_bauhaus_slider_set_factor(g->chroma_balance, 100.0f);
+  dt_bauhaus_slider_set_format(g->chroma_balance, " %");
+  dt_bauhaus_slider_set_digits(g->chroma_balance, 0);
+  gtk_widget_set_tooltip_text(g->chroma_balance,
+    _("Split the chroma contrast between the X and Z axes around their average.\n"
+      "0% = symmetric (X = Z). Negative favors Z, positive favors X.\n"
+      "Only available while X and Z are locked together (padlock)."));
+  g_signal_connect(G_OBJECT(g->chroma_balance), "value-changed",
+                   G_CALLBACK(_chroma_balance_changed), self);
+  dt_gui_box_add(main_vbox, g->chroma_balance);
+
+  g->chroma_z_contrast = dt_bauhaus_slider_from_params(self, "chroma_z_contrast");
+  /* Display as a percentage of the axis' chroma range (see chroma_x_contrast). */
+  dt_bauhaus_slider_set_factor(g->chroma_z_contrast, 10.0f);
+  dt_bauhaus_slider_set_format(g->chroma_z_contrast, " %");
+  dt_bauhaus_slider_set_digits(g->chroma_z_contrast, 1);
+  gtk_widget_set_tooltip_text(g->chroma_z_contrast,
+    _("Independent contrast on the CIE Z-axis chroma offset from white, applied \n"
+      "right after chromaticity scaling and before spectral gamut roll-off. \n"
+      "0 % = off (no-op)."));
+  g_signal_connect_after(G_OBJECT(g->chroma_z_contrast), "value-changed",
+                         G_CALLBACK(_chroma_z_changed), self);
+
+  g->chroma_z_pivot = dt_bauhaus_slider_from_params(self, "chroma_z_pivot");
+  dt_bauhaus_slider_set_default(g->chroma_z_pivot, 50.0f);
+  /* Display relative to the symmetric 50% position (see chroma_x_pivot). */
+  dt_bauhaus_slider_set_offset(g->chroma_z_pivot, -50.0f);
+  dt_bauhaus_slider_set_format(g->chroma_z_pivot, " %");
+  dt_bauhaus_slider_set_digits(g->chroma_z_pivot, 1);
+  gtk_widget_set_tooltip_text(g->chroma_z_pivot,
+    _("Pivot point for the Z-axis chroma contrast sigmoid, relative to the \n"
+      "symmetric position (0% = symmetric, the stored 50%)."));
+  g_signal_connect_after(G_OBJECT(g->chroma_z_pivot), "value-changed",
+                         G_CALLBACK(_chroma_z_changed), self);
+
+  /* Abney rotation, kept at the very bottom of the color section. */
   g->hl_hue_shift = dt_bauhaus_slider_from_params(self, "hl_hue_shift");
   dt_bauhaus_slider_set_factor(g->hl_hue_shift, 100.0f);
   dt_bauhaus_slider_set_format(g->hl_hue_shift, " %");
@@ -3124,14 +3538,8 @@ void gui_init(dt_iop_module_t *self)
       "Vibrance-negative desaturation: saturated pixels desaturate further. \n"
       "Independent of highlight roll-off."));
 
-  g->color_look = dt_bauhaus_combobox_from_params(self, "color_look");
-  gtk_widget_set_tooltip_text(g->color_look, _("Apply a color style to the image."));
-
-  g->look_opacity = dt_bauhaus_slider_from_params(self, "look_opacity");
-  dt_bauhaus_widget_set_label(g->look_opacity, NULL, _("look opacity"));
-  dt_bauhaus_slider_set_format(g->look_opacity, "%");
-  dt_bauhaus_slider_set_factor(g->look_opacity, 100.0);
-  gtk_widget_set_tooltip_text(g->look_opacity, _("Adjust the strength of the selected color style."));
+  /* Apply the initial show/hide for the lock-dependent chroma widgets. */
+  _chroma_set_visibility(g, g->chroma_linked);
 
   /* === Advanced section === */
   dt_gui_new_collapsible_section(&g->advanced_section,
