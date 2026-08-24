@@ -2330,7 +2330,9 @@ void gui_post_expose(dt_iop_module_t *self,
   // convey the before/after luminance.
   float bg_rgb[3];
   float frame_color[3];
-  dt_draw_backbuf_contrast(dev, x_pointer, y_pointer, bg_rgb, frame_color,
+  const float buf_w = dev->preview_pipe->backbuf_width;
+  const float buf_h = dev->preview_pipe->backbuf_height;
+  dt_draw_backbuf_contrast(dev, x_pointer / buf_w, y_pointer / buf_h, bg_rgb, frame_color,
                            16.0f / (zoom_scale * width));
 
   // Circle shades: outer = luminance before the correction, inner =
