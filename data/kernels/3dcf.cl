@@ -486,14 +486,14 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
 
     /* Abney hue rotation tied to SSTS compression ratio: weight ramps up
        as soon as compression begins (progressive onset, midtones still 0
-       since pow(0, .6) = 0) to 1 at full compression; hl_hue_shift controls
-       only the angle (max 0.4 rad ~= 23 deg). */
+       since pow(0, .5) = 0) to 1 at full compression; hl_hue_shift controls
+       only the angle (max 0.4 rad). */
     if(p->hl_rotation != 0.0f && y_abs > 1e-10f)
     {
       const float compression = fmin(y_tm / (y_abs * p->exposure_factor), 1.0f);
       const float comp_factor = 1.0f - compression;
-      hl_weight = pow(comp_factor, 0.6f);
-      const float max_angle = 0.4f; //CB
+      hl_weight = pow(comp_factor, 0.5f);
+      const float max_angle = 0.8f; //CB
       const float angle = p->hl_rotation * max_angle * hl_weight;
       const float ca = cos(angle);
       const float sa = sin(angle);

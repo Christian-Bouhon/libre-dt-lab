@@ -1654,21 +1654,21 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
 
   /* Step 8: Film-print highlight desaturation toward white */
   {
-    /* Abney hue rotation tied to SSTS compression ratio. weight = pow(comp_factor, 0.6)
+    /* Abney hue rotation tied to SSTS compression ratio. weight = pow(comp_factor, 0.5)
        ramps up as soon as compression begins (progressive onset, midtones still 0
-       since pow(0, .6) = 0) up to 1 at full compression (clipped highlights):
+       since pow(0, .5) = 0) up to 1 at full compression (clipped highlights):
        midtones/shadows are never touched while the rotation stays clearly visible
        on highlights. hl_hue_shift controls only the rotation angle:
        angle = hl_hue_shift * max_angle * weight
-       (max_angle = 0.4 rad ~= 23 deg at full excursion on clipped highlights). */
+       (max_angle = 0.4 rad). */
     const float y_exposed = y_abs * ctx->exposure_factor;
     float hl_weight = 0.0f;
     if(ctx->hl_rotation != 0.0f && y_abs > 1e-10f)
     {
       const float compression = fminf(y_tm / (y_abs * ctx->exposure_factor), 1.0f);
       const float comp_factor = 1.0f - compression;
-      hl_weight = powf(comp_factor, 0.6f);
-      const float max_angle = 0.4f; //CB
+      hl_weight = powf(comp_factor, 0.5f);
+      const float max_angle = 0.8f; //CB
       const float angle = ctx->hl_rotation * max_angle * hl_weight;
       const float ca = cosf(angle);
       const float sa = sinf(angle);
