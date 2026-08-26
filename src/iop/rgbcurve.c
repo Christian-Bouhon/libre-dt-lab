@@ -769,6 +769,16 @@ static gboolean _area_leave_notify_callback(GtkWidget *widget,
   return FALSE;
 }
 
+static void _rgbcurve_draw_vertical_line(cairo_t *cr,
+                                         const float width,
+                                         const float height,
+                                         dt_iop_rgbcurve_gui_data_t *g);
+
+static void _hover_toggle_callback(GtkToggleButton *togglebutton,
+                                   gpointer user_data);
+
+static void _switch_cursors(dt_iop_module_t *self);
+
 static gboolean _area_draw_callback(GtkWidget *widget,
                                     cairo_t *crf,
                                     dt_iop_module_t *self)
