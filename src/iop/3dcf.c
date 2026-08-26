@@ -2868,17 +2868,18 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker,
     (combo_idx >= DT_ST_AUTO_CONTRASTY && combo_idx <= DT_ST_AUTO_SOFT)
     ? (dt_iop_st_auto_mode_t)combo_idx : DT_ST_AUTO_NEUTRAL;
 
-  /* Re-triggers if the picked value changed meaningfully (dragged to a new
-     area) OR the rendering preset changed (comparing contrasty/neutral/soft
-     on the SAME area without moving the picker) -- auto_requested_mode
-     holds the last mode actually sent, so this comparison doesn't
-     re-trigger needlessly when neither changed (e.g. echo calls). */
-  const float delta = fabsf(y - g->picked_grey_y_last_applied);
-  if(delta > 1e-4f || mode != g->auto_requested_mode)
-  {
-    g->picked_grey_y_last_applied = y;
-    _auto_request(self, mode);
-  }
+  /* Always re-run. _record_point_area() (gui/color_picker_proxy.c) already
+     gates this callback: it fires only when the sampled box/point moved OR
+     the picker was freshly re-armed (self->changed), and it resets
+     self->changed to FALSE before returning, so the reprocess triggered by
+     our own _auto_request() below never re-enters here (area unchanged,
+     flag cleared). The old value/mode guard therefore filtered out nothing
+     real and, worse, swallowed the re-arm case: re-invoking the pipette on
+     the SAME area produced no recompute, forcing the user to flip the
+     preset combobox to get a fresh calculation. An unconditional call
+     restores "re-arm = recompute" while keeping each drag sample live. */
+  g->picked_grey_y_last_applied = y;
+  _auto_request(self, mode);
 }
 
 void gui_reset(dt_iop_module_t *self)
@@ -3526,22 +3527,31 @@ int scrolled(dt_iop_module_t *self,
   const float pivot = ctx.contrast_pivot;
   const float ys_disp = _hover_display_tone(&ctx, y_scene);
 
-  /* 1) pivot balance: the slider always follows the scroll direction
-     (up -> rises/brightens, down -> falls/darkens), independent of the
-     zone, so brightening/darkening stay consistent and fully reversible
-     everywhere. The earlier "toward the tone" glide was reversed for
-     highlights: darkening a near-100% tone raised the pivot while lowering
-     the shoulder, which felt contradictory. */
-  p->contrast_pivot = CLAMP(p->contrast_pivot + 0.02f * direction, 0.01f, 0.99f);
+  /* 1) proximity-weighted balance: each control's per-click step is
+     proportional to how close the picked tone is to that control's node
+     (toe node = 0, shoulder node = 1, pivot node = the current fulcrum), so
+     the nearest node always moves the fastest. The weights are relative
+     (w_pivot + w_region = 1) and share a fixed per-click budget A, so the
+     overall feel is unchanged -- at the fulcrum (t == pivot) this reduces
+     exactly to the previous pivot 0.02 / region 0.01 per click. */
+  const float prox_pivot = 1.0f - fabsf(ys_disp - pivot);
+  const float prox_region = (ys_disp < pivot) ? (1.0f - ys_disp) : ys_disp;
+  const float inv_sum = 1.0f / (prox_pivot + prox_region + 1e-6f);
+  const float w_pivot = prox_pivot * inv_sum;
+  const float w_region = prox_region * inv_sum;
+  const float A = 0.03f;
 
-  /* 2) region of the picked tone relative to the CURRENT fulcrum (stable,
-     direction-independent): shadows -> toe power, highlights -> shoulder */
+  /* The pivot slider always follows the scroll direction (up -> rises,
+     down -> falls), and the region control keeps its validated sign:
+     toe_power drops to brighten shadows, shoulder_power rises to brighten
+     highlights. */
+  p->contrast_pivot = CLAMP(p->contrast_pivot + A * w_pivot * direction, 0.01f, 0.99f);
   if(ys_disp < pivot)
-    p->toe_power = CLAMP(p->toe_power - 0.01f * direction, 0.25f, 3.0f);
+    p->toe_power = CLAMP(p->toe_power - A * w_region * direction, 0.25f, 3.0f);
   else
-    p->shoulder_power = CLAMP(p->shoulder_power + 0.01f * direction, 0.25f, 3.0f);
+    p->shoulder_power = CLAMP(p->shoulder_power + A * w_region * direction, 0.25f, 3.0f);
 
-  /* 3) master contrast impulse */
+  /* 2) master contrast impulse (not node-weighted) */
   p->contrast = CLAMP(p->contrast + 0.004f * direction, 0.25f, 4.25f);
 
   /* Sync the sliders under the GUI-update guard so no value-changed fires:
