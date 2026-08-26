@@ -20,13 +20,16 @@
 #include "common/iop_profile.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/rgb_norms.h"
+#include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
+#include "develop/preview_data.h"
 #include "dtgtk/drawingarea.h"
-#include "gui/color_picker_proxy.h"
-#include "gui/presets.h"
 #include "gui/accelerators.h"
+#include "gui/color_picker_proxy.h"
+#include "gui/draw.h"
+#include "gui/presets.h"
 #include "libs/colorpicker.h"
 
 #define DT_GUI_CURVE_EDITOR_INSET DT_PIXEL_APPLY_DPI(1)
@@ -92,6 +95,15 @@ typedef struct dt_iop_rgbcurve_gui_data_t
   GtkWidget *cmb_preserve_colors;
   float zoom_factor;
   float offset_x, offset_y;
+  // shared under-cursor preview buffer (R, G, B in [0,1]) for
+  // hover+scroll adjustment on the image, gated by the crosshair toggle
+  dt_preview_data_t pd;
+  GtkWidget *hover_toggle;
+  gboolean hover_editing;
+  gboolean cursor_valid;
+  gboolean reprocess_pending;
+  float cursor_abscissa;
+  float cursor_pos_x, cursor_pos_y;
 } dt_iop_rgbcurve_gui_data_t;
 
 typedef struct dt_iop_rgbcurve_data_t
@@ -1157,6 +1169,9 @@ static gboolean _area_draw_callback(GtkWidget *widget,
   }
   cairo_stroke(cr);
 
+  // vertical cursor line in the graph while hover-editing on the image
+  _rgbcurve_draw_vertical_line(cr, width, height, g);
+
 finally:
   cairo_destroy(cr);
   cairo_set_source_surface(crf, cst, 0, 0);
@@ -1479,6 +1494,16 @@ void gui_init(dt_iop_module_t *self)
   g->channel = DT_IOP_RGBCURVE_R;
   change_image(self);
 
+  // shared under-cursor preview buffer for hover+scroll adjustment on the
+  // image, gated by the crosshair toggle in the top bar
+  dt_preview_data_alloc(&g->pd, self);
+  g->pd.components = 3;
+  g->hover_editing = FALSE;
+  g->cursor_valid = FALSE;
+  g->reprocess_pending = FALSE;
+  g->cursor_abscissa = 0.f;
+  g->cursor_pos_x = g->cursor_pos_y = 0.f;
+
   g->autoscale = dt_bauhaus_combobox_from_params(self, "curve_autoscale");
   gtk_widget_set_tooltip_text(g->autoscale,
                               _("choose between linked and independent channels."));
@@ -1518,6 +1543,20 @@ void gui_init(dt_iop_module_t *self)
   dt_action_define_iop(self, N_("pickers"), N_("create curve"),
                        g->colorpicker_set_values, &dt_action_def_toggle);
 
+  // hover+scroll on image (crosshair toggle)
+  g->hover_toggle = dtgtk_togglebutton_new(dtgtk_cairo_paint_compass_star, 0, NULL);
+  dt_gui_add_class(g->hover_toggle, "dt_transparent_background");
+  gtk_widget_set_size_request(g->hover_toggle, DT_PIXEL_APPLY_DPI(14), DT_PIXEL_APPLY_DPI(14));
+  gtk_widget_set_tooltip_text
+    (g->hover_toggle,
+     _("adjust the curves directly on the image\n"
+       "move the mouse over the image and use the scroll wheel\n"
+       "a node is added automatically at the nearest position"));
+  dt_action_define_iop(self, N_("pickers"), N_("adjust on image"),
+                       g->hover_toggle, &dt_action_def_toggle);
+  g_signal_connect(G_OBJECT(g->hover_toggle), "toggled",
+                   G_CALLBACK(_hover_toggle_callback), self);
+
   g->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_height(0));
   g_object_set_data(G_OBJECT(g->area), "iop-instance", self);
   dt_action_define_iop(self, NULL, N_("curve"), GTK_WIDGET(g->area), NULL);
@@ -1556,8 +1595,9 @@ void gui_init(dt_iop_module_t *self)
 
   dt_gui_box_add(self->widget, dt_gui_hbox(dt_gui_expand(g->channel_tabs),
                                            dt_gui_expand(gtk_grid_new()),
+                                           g->hover_toggle,
                                            g->colorpicker, g->colorpicker_set_values),
-                               g->area, g->interpolator);
+                                g->area, g->interpolator);
 
   g->chk_compensate_middle_grey =
     dt_bauhaus_toggle_from_params(self, "compensate_middle_grey");
@@ -1567,6 +1607,12 @@ void gui_init(dt_iop_module_t *self)
   g->cmb_preserve_colors = dt_bauhaus_combobox_from_params(self, "preserve_colors");
   gtk_widget_set_tooltip_text(g->cmb_preserve_colors,
                               _("method to preserve colors when applying contrast"));
+
+  // hover+scroll on the image (gated by g->hover_editing)
+  self->mouse_moved = mouse_moved;
+  self->mouse_leave = mouse_leave;
+  self->scrolled = scrolled;
+  self->gui_post_expose = gui_post_expose;
 }
 
 void gui_update(dt_iop_module_t *self)
@@ -1590,8 +1636,35 @@ void gui_cleanup(dt_iop_module_t *self)
 {
   dt_iop_rgbcurve_gui_data_t *g = self->gui_data;
 
+  dt_preview_data_free(&g->pd);
+
   for(int k = 0; k < DT_IOP_RGBCURVE_MAX_CHANNELS; k++)
     dt_draw_curve_destroy(g->minmax_curve[k]);
+}
+
+void gui_focus(dt_iop_module_t *self, gboolean in)
+{
+  dt_iop_rgbcurve_gui_data_t *g = self->gui_data;
+  if(in)
+  {
+    if(g && g->hover_editing && !dt_preview_data_is_fresh(&g->pd) && !g->reprocess_pending)
+    {
+      g->reprocess_pending = TRUE;
+      dt_dev_reprocess_preview(self->dev);
+    }
+    _switch_cursors(self);
+  }
+  else
+  {
+    if(g)
+    {
+      g->cursor_valid = FALSE;
+      g->reprocess_pending = FALSE;
+      dt_preview_data_invalidate(&g->pd);
+    }
+    _switch_cursors(self);
+    dt_control_queue_redraw_center();
+  }
 }
 
 void init_pipe(dt_iop_module_t *self,
@@ -1768,6 +1841,410 @@ void commit_params(dt_iop_module_t *self,
   d->filename_work[0] = '\0';
 }
 
+/* ------------------------- hover + scroll adjustment ---------------------- */
+
+/* _rgbcurve_fill_cb — copy the module *input* RGB pixel, already in [0,1],
+ * into the shared preview buffer used by the hover+scroll adjustment. */
+static void _rgbcurve_fill_cb(void *const user_data,
+                              float *const buf,
+                              const size_t npixels)
+{
+  const float *const src = (const float *)user_data;
+  DT_OMP_FOR()
+  for(size_t k = 0; k < npixels; k++)
+  {
+    buf[k * 3 + 0] = src[k * 4 + 0]; // R
+    buf[k * 3 + 1] = src[k * 4 + 1]; // G
+    buf[k * 3 + 2] = src[k * 4 + 2]; // B
+  }
+}
+
+/* in_mask_editing — while a drawn mask is being edited the canvas is busy
+ * and we must not hijack the cursor. */
+static gboolean in_mask_editing(const dt_iop_module_t *self)
+{
+  const dt_develop_t *dev = self->dev;
+  return dev->form_gui && dev->form_visible;
+}
+
+/* _select_abscissa — map the normalized RGB stored in the preview buffer
+ * onto the curve abscissa [0,1] of the active channel. */
+static float _select_abscissa(const dt_iop_rgbcurve_params_t *p,
+                              const dt_iop_rgbcurve_gui_data_t *g,
+                              const float rgb[3])
+{
+  const int ch = (p->curve_autoscale == DT_S_SCALE_MANUAL_RGB)
+                    ? (int)g->channel : DT_IOP_RGBCURVE_R;
+  return CLAMP(rgb[ch], 0.0f, 1.0f);
+}
+
+/* _rgbcurve_curve_value_at — value of curve ch at abscissa x, rebuilt
+ * exactly as commit_params() does through a temporary curve. */
+static float _rgbcurve_curve_value_at(const dt_iop_rgbcurve_params_t *p,
+                                      const int ch,
+                                      const float x)
+{
+  dt_draw_curve_t *c = dt_draw_curve_new(0.f, 1.f, p->curve_type[ch]);
+  for(int k = 0; k < p->curve_num_nodes[ch]; k++)
+    dt_draw_curve_add_point(c, p->curve_nodes[ch][k].x,
+                            p->curve_nodes[ch][k].y);
+  const float val = dt_draw_curve_calc_value(c, x);
+  dt_draw_curve_destroy(c);
+  return val;
+}
+
+/* _hover_node_dist — signed distance from cursor abscissa x0 to node
+ * abscissa nx. */
+static inline float _hover_node_dist(const float x0, const float nx)
+{
+  return x0 - nx;
+}
+
+/* _adjust_params_hover — move the node nearest to the cursor abscissa.
+ * If no existing node is close enough, one is added at the band position
+ * with the current curve value as its initial y (so nothing jumps), then
+ * scrolling adjusts it. */
+static gboolean _adjust_params_hover(dt_iop_module_t *self,
+                                     dt_iop_rgbcurve_params_t *p,
+                                     dt_iop_rgbcurve_gui_data_t *g,
+                                     const float x0,
+                                     const float move)
+{
+  const int ch = g->channel;
+  dt_iop_rgbcurve_node_t *curve = p->curve_nodes[ch];
+  const int bands = p->curve_num_nodes[ch];
+
+  // find the node nearest to the cursor abscissa, within a 1/16 window
+  const float window = 1.0f / 16.0f;
+  int node = -1;
+  float best = window;
+  for(int k = 0; k < bands; k++)
+  {
+    const float d = fabsf(_hover_node_dist(x0, curve[k].x));
+    if(d < best)
+    {
+      best = d;
+      node = k;
+    }
+  }
+
+  // no node close enough: add one so scrolling has an effect
+  if(node < 0)
+  {
+    if(bands >= DT_IOP_RGBCURVE_MAXNODES) return FALSE;
+    const float y0 = _rgbcurve_curve_value_at(p, ch, x0);
+    node = _add_node(curve, &p->curve_num_nodes[ch], x0, y0);
+    if(node < 0) return FALSE;
+  }
+
+  const float y = CLAMP(curve[node].y + move, 0.0f, 1.0f);
+  curve[node].y = y;
+
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  gtk_widget_queue_draw(GTK_WIDGET(g->area));
+
+  return TRUE;
+}
+
+/* _switch_cursors — hide the native cursor and rely on the custom indicator
+ * drawn by gui_post_expose while hover editing is active and a valid reading
+ * is available; fall back to the default cursor otherwise. */
+static void _switch_cursors(dt_iop_module_t *self)
+{
+  dt_iop_rgbcurve_gui_data_t *g = self->gui_data;
+  if(!g || !self->dev->gui_attached) return;
+
+  if(in_mask_editing(self) || dt_iop_canvas_not_sensitive(self->dev))
+  {
+    dt_control_change_cursor("default");
+    return;
+  }
+
+  if(!self->expanded) return;
+
+  if(g->hover_editing && g->cursor_valid)
+    dt_control_change_cursor("none");
+  else
+    dt_control_change_cursor("default");
+}
+
+/* _hover_toggle_callback — crosshair toggle: enable/disable the hover+scroll
+ * service.  Turning it on kicks a preview reprocess so the under-cursor
+ * buffer is filled immediately and deactivates any active color picker. */
+static void _hover_toggle_callback(GtkToggleButton *togglebutton,
+                                   gpointer user_data)
+{
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_rgbcurve_gui_data_t *g = self->gui_data;
+  if(!g) return;
+
+  g->hover_editing = gtk_toggle_button_get_active(togglebutton);
+  g->cursor_valid = FALSE;
+  g->reprocess_pending = FALSE;
+
+  if(g->hover_editing)
+  {
+    dt_iop_color_picker_reset(self, FALSE);
+    dt_preview_data_invalidate(&g->pd);
+    dt_dev_reprocess_preview(self->dev);
+  }
+  else
+  {
+    dt_preview_data_invalidate(&g->pd);
+    dt_control_change_cursor("default");
+  }
+
+  dt_control_queue_redraw_center();
+}
+
+int mouse_moved(dt_iop_module_t *self,
+                const float pzx,
+                const float pzy,
+                const double pressure,
+                const int which,
+                const float zoom_scale)
+{
+  dt_iop_rgbcurve_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing) return 0;
+
+  if(in_mask_editing(self))
+  {
+    g->cursor_valid = FALSE;
+    _switch_cursors(self);
+    return 0;
+  }
+
+  // read the normalized RGB of the module input pixel under the cursor
+  float rgb[3] = { 0.0f };
+  gboolean have = FALSE;
+  if(g->pd.buf && g->pd.width > 0 && g->pd.height > 0)
+  {
+    const int cx = CLAMP((int)(pzx * g->pd.width),  0, (int)g->pd.width  - 1);
+    const int cy = CLAMP((int)(pzy * g->pd.height), 0, (int)g->pd.height - 1);
+    dt_iop_gui_enter_critical_section(self);
+    const float *buf = g->pd.buf;
+    if(buf)
+    {
+      const size_t idx = (size_t)cy * g->pd.width + cx;
+      rgb[0] = buf[3 * idx + 0];
+      rgb[1] = buf[3 * idx + 1];
+      rgb[2] = buf[3 * idx + 2];
+      have = TRUE;
+    }
+    dt_iop_gui_leave_critical_section(self);
+  }
+
+  if(!have)
+  {
+    g->cursor_valid = FALSE;
+    if(!g->reprocess_pending)
+    {
+      g->reprocess_pending = TRUE;
+      dt_dev_reprocess_preview(self->dev);
+    }
+    _switch_cursors(self);
+    return 0;
+  }
+
+  const dt_iop_rgbcurve_params_t *p = self->params;
+  g->cursor_abscissa = _select_abscissa(p, g, rgb);
+  g->cursor_pos_x = pzx;
+  g->cursor_pos_y = pzy;
+
+  g->cursor_valid = dt_preview_data_is_fresh(&g->pd);
+  if(g->cursor_valid)
+  {
+    g->reprocess_pending = FALSE;
+    dt_control_queue_redraw_center();
+  }
+  else if(!g->reprocess_pending)
+  {
+    g->reprocess_pending = TRUE;
+    dt_dev_reprocess_preview(self->dev);
+  }
+  _switch_cursors(self);
+  return 0;
+}
+
+/* mouse_leave — invalidate the reading when the mouse leaves the image. */
+int mouse_leave(dt_iop_module_t *self)
+{
+  dt_iop_rgbcurve_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing) return 0;
+
+  g->cursor_valid = FALSE;
+  _switch_cursors(self);
+  gtk_widget_queue_draw(GTK_WIDGET(g->area));
+  dt_control_queue_redraw_center();
+
+  return 1;
+}
+
+/* scrolled — IOP hook called when the scroll wheel is used over the image
+ * in the darkroom.  When hover editing is active and a reading is available
+ * it moves the node nearest to the cursor abscissa (adding one if needed)
+ * and returns 1 to consume the event; Alt+scroll switches the channel tab.
+ * Otherwise it lets darktable zoom normally. */
+int scrolled(dt_iop_module_t *self,
+             const float x,
+             const float y,
+             const int up,
+             const uint32_t state)
+{
+  dt_iop_rgbcurve_gui_data_t *g = self->gui_data;
+  if(!g) return 0;
+
+  // Alt+scroll: switch channel tab
+  if(dt_modifier_is(state, GDK_MOD1_MASK))
+  {
+    const int pages = gtk_notebook_get_n_pages(g->channel_tabs);
+    const int current = gtk_notebook_get_current_page(g->channel_tabs);
+    const int next = (current + (up ? 1 : -1) + pages) % pages;
+    gtk_notebook_set_current_page(g->channel_tabs, next);
+    return 1;
+  }
+
+  if(!g->hover_editing) return 0;
+
+  // read the normalized RGB under the cursor directly from the cached buffer
+  float rgb[3] = { 0.0f };
+  gboolean have = FALSE;
+  if(g->pd.buf && g->pd.width > 0 && g->pd.height > 0)
+  {
+    const int cx = CLAMP((int)(x * g->pd.width),  0, (int)g->pd.width  - 1);
+    const int cy = CLAMP((int)(y * g->pd.height), 0, (int)g->pd.height - 1);
+    have = dt_preview_data_get(&g->pd, cx, cy, 0, &rgb[0]);
+    if(have)
+    {
+      dt_preview_data_get(&g->pd, cx, cy, 1, &rgb[1]);
+      dt_preview_data_get(&g->pd, cx, cy, 2, &rgb[2]);
+    }
+  }
+  if(!have) return 0;
+
+  const dt_iop_rgbcurve_params_t *p = self->params;
+  g->cursor_abscissa = _select_abscissa(p, g, rgb);
+  g->cursor_pos_x = x;
+  g->cursor_pos_y = y;
+  g->cursor_valid = TRUE;
+
+  // step in curve coordinates; Ctrl for fine precision (÷10)
+  const float base_step = 0.001f;
+  const float step = dt_modifier_is(state, GDK_CONTROL_MASK) ? base_step * 0.1f : base_step;
+  const float move = up ? +step : -step;
+
+  _adjust_params_hover(self, self->params, g, g->cursor_abscissa, move);
+  _switch_cursors(self);
+
+  return 1;
+}
+
+/* gui_post_expose — draws the on-canvas cursor: a crosshair frame, a wedge
+ * showing the magnitude/direction of the active channel's correction, and
+ * two concentric circles filled with the module input/output colors at the
+ * pixel under the cursor. */
+void gui_post_expose(dt_iop_module_t *self,
+                     cairo_t *cr,
+                     const float width,
+                     const float height,
+                     const float pointerx,
+                     const float pointery,
+                     const float zoom_scale)
+{
+  dt_iop_rgbcurve_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing || !g->cursor_valid) return;
+
+  if(in_mask_editing(self)) return;
+
+  float bg_rgb[3];
+  float frame_color[3];
+  dt_draw_backbuf_contrast(self->dev, g->cursor_pos_x, g->cursor_pos_y,
+                           bg_rgb, frame_color, 16.0f / (zoom_scale * width));
+
+  const float cx = g->cursor_pos_x * width;
+  const float cy = g->cursor_pos_y * height;
+
+  const dt_iop_rgbcurve_params_t *p = self->params;
+  const int ch = (g->channel == DT_IOP_RGBCURVE_R) ? DT_IOP_RGBCURVE_R
+                : (g->channel == DT_IOP_RGBCURVE_G) ? DT_IOP_RGBCURVE_G
+                : DT_IOP_RGBCURVE_B;
+  const float x = g->cursor_abscissa;
+  const float value = _rgbcurve_curve_value_at(p, ch, x);
+  const float correction_norm = value - x; // identity → 0, boost → positive, cut → negative
+
+  char text[64];
+  snprintf(text, sizeof(text), "%+.1f%%", (value - x) * 100.0f);
+
+  float in_color[3]  = { bg_rgb[0], bg_rgb[1], bg_rgb[2] };
+  float out_color[3] = { bg_rgb[0], bg_rgb[1], bg_rgb[2] };
+
+  // in/out colors: apply the per-channel curves to the stored input RGB
+  if(g->pd.buf && g->pd.width > 0 && g->pd.height > 0)
+  {
+    const int p_cx = CLAMP((int)(g->cursor_pos_x * g->pd.width),  0, (int)g->pd.width  - 1);
+    const int p_cy = CLAMP((int)(g->cursor_pos_y * g->pd.height), 0, (int)g->pd.height - 1);
+
+    float rgb[3] = { 0.0f };
+    gboolean have = FALSE;
+    dt_iop_gui_enter_critical_section(self);
+    const float *buf = g->pd.buf;
+    if(buf)
+    {
+      const size_t idx = (size_t)p_cy * g->pd.width + p_cx;
+      rgb[0] = buf[3 * idx + 0];
+      rgb[1] = buf[3 * idx + 1];
+      rgb[2] = buf[3 * idx + 2];
+      have = TRUE;
+    }
+    dt_iop_gui_leave_critical_section(self);
+
+    if(have)
+    {
+      in_color[0] = rgb[0];
+      in_color[1] = rgb[1];
+      in_color[2] = rgb[2];
+
+      // apply each curve LUT to the input to get the output color
+      for(int c = 0; c < DT_IOP_RGBCURVE_MAX_CHANNELS; c++)
+      {
+        const float val = rgb[c];
+        float out_val;
+        if(p->curve_autoscale == DT_S_SCALE_MANUAL_RGB)
+          out_val = _rgbcurve_curve_value_at(p, c, val);
+        else
+          out_val = _rgbcurve_curve_value_at(p, DT_IOP_RGBCURVE_R, val);
+        out_color[c] = out_val;
+      }
+    }
+  }
+
+  dt_draw_correction_cursor(cr, cx, cy, zoom_scale, correction_norm,
+                            frame_color,
+                            in_color, FALSE,
+                            out_color, FALSE,
+                            text);
+
+  gtk_widget_queue_draw(GTK_WIDGET(g->area));
+}
+
+/* _rgbcurve_draw_vertical_line — draw a vertical line in the graph at the
+ * cursor abscissa while hover-editing is active. */
+static void _rgbcurve_draw_vertical_line(cairo_t *cr,
+                                         const float width,
+                                         const float height,
+                                         dt_iop_rgbcurve_gui_data_t *g)
+{
+  if(!g->hover_editing || !g->cursor_valid) return;
+
+  const float x_line
+      = _curve_to_mouse(g->cursor_abscissa, g->zoom_factor, g->offset_x);
+  cairo_set_source_rgb(cr, .9, .9, .9);
+  cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.5));
+  cairo_move_to(cr, x_line * width, 0);
+  cairo_line_to(cr, x_line * width, -height);
+  cairo_stroke(cr);
+}
+
 #ifdef HAVE_OPENCL
 int process_cl(dt_iop_module_t *self,
                dt_dev_pixelpipe_iop_t *piece,
@@ -1860,6 +2337,29 @@ cleanup:
   dt_opencl_release_mem_object(dev_coeffs_b);
   dt_ioppr_free_iccprofile_params_cl(&profile_info_cl, &profile_lut_cl,
                                      &dev_profile_info, &dev_profile_lut);
+
+  // On the preview pipe, read the module *input* RGB back from the GPU and
+  // cache it for the hover+scroll adjustment (same data as CPU process()).
+  if(self->gui_data && dt_pipe_is_preview(piece->pipe))
+  {
+    dt_iop_rgbcurve_gui_data_t *gui = (dt_iop_rgbcurve_gui_data_t *)self->gui_data;
+    if(gui->hover_editing && err == CL_SUCCESS)
+    {
+      const size_t npixels = (size_t)width * height;
+      const size_t px_sz = 4 * npixels * sizeof(float);
+      float *host_pixout = dt_alloc_align_float(4 * npixels);
+      if(host_pixout)
+      {
+        const cl_int read_err
+            = dt_opencl_read_buffer_from_device(devid, host_pixout, dev_in, 0, px_sz, TRUE);
+        if(read_err == CL_SUCCESS)
+          dt_preview_data_store(&gui->pd, width, height, piece,
+                                _rgbcurve_fill_cb, (void *)host_pixout);
+        dt_free_align(host_pixout);
+      }
+    }
+  }
+
   return err;
 }
 #endif
@@ -1938,6 +2438,13 @@ void process(dt_iop_module_t *self,
     }
     out[y+3] = in[y+3];
   }
+
+  // On the preview pipe, cache the normalized RGB of the module *input*
+  // pixel for the hover+scroll adjustment, gated by the crosshair toggle.
+  dt_iop_rgbcurve_gui_data_t *g = self->gui_data;
+  if(g && g->hover_editing && dt_pipe_is_preview(piece->pipe))
+    dt_preview_data_store(&g->pd, roi_out->width, roi_out->height, piece,
+                          _rgbcurve_fill_cb, (void *)in);
 }
 
 #undef DT_GUI_CURVE_EDITOR_INSET
