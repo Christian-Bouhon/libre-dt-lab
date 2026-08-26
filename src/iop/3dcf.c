@@ -3526,15 +3526,13 @@ int scrolled(dt_iop_module_t *self,
   const float pivot = ctx.contrast_pivot;
   const float ys_disp = _hover_display_tone(&ctx, y_scene);
 
-  /* 1) glide the pivot: scroll-up pulls the fulcrum toward the picked tone,
-     scroll-down pushes it back toward the mirror tone (1 - ys_disp), so up
-     brightens (slider rises) and down darkens (slider falls) and the
-     adjustment is fully reversible. The 0.05 factor (vs the original 0.5)
-     makes each click ~10x gentler; the gap closes geometrically, so a large
-     move needs several clicks instead of one. */
-  const float target = up ? ys_disp : (1.0f - ys_disp);
-  const float p_new = CLAMP(pivot + 0.05f * (target - pivot), 0.01f, 0.99f);
-  p->contrast_pivot = 1.0f - p_new;
+  /* 1) pivot balance: the slider always follows the scroll direction
+     (up -> rises/brightens, down -> falls/darkens), independent of the
+     zone, so brightening/darkening stay consistent and fully reversible
+     everywhere. The earlier "toward the tone" glide was reversed for
+     highlights: darkening a near-100% tone raised the pivot while lowering
+     the shoulder, which felt contradictory. */
+  p->contrast_pivot = CLAMP(p->contrast_pivot + 0.02f * direction, 0.01f, 0.99f);
 
   /* 2) region of the picked tone relative to the CURRENT fulcrum (stable,
      direction-independent): shadows -> toe power, highlights -> shoulder */
