@@ -21,11 +21,14 @@
 #include "common/colorspaces_inline_conversions.h"
 #include "common/imagebuf.h"
 #include "common/math.h"
+#include "control/control.h"
 #include "develop/imageop.h"
 #include "develop/imageop_gui.h"
+#include "develop/preview_data.h"
 #include "dtgtk/drawingarea.h"
 #include "gui/accelerators.h"
 #include "gui/color_picker_proxy.h"
+#include "gui/draw.h"
 #include "gui/presets.h"
 #include "libs/colorpicker.h"
 
@@ -111,6 +114,15 @@ typedef struct dt_iop_colorzones_gui_data_t
   float offset_x, offset_y;
   int edit_by_area;
   gboolean display_mask;
+  // shared under-cursor preview buffer (L/100, C/128, h in [0,1)) for
+  // hover+scroll adjustment on the image, gated by the crosshair toggle
+  dt_preview_data_t pd;
+  GtkWidget *hover_toggle;
+  gboolean hover_editing;
+  gboolean cursor_valid;
+  gboolean reprocess_pending;
+  float cursor_abscissa;
+  float cursor_pos_x, cursor_pos_y;
 } dt_iop_colorzones_gui_data_t;
 
 typedef struct dt_iop_colorzones_data_t
@@ -568,6 +580,28 @@ void process_v3(dt_iop_module_t *self,
   }
 }
 
+/* _colorzones_fill_cb — copy the module *input* Lab pixel, normalized to
+ * (L/100, C/128, h in [0,1)), into the shared preview buffer used by the
+ * hover+scroll adjustment.  The hue is the atan2 of the Lab a,b channels
+ * so the abscissa matches the graph whatever the process mode.
+ */
+static void _colorzones_fill_cb(void *const user_data,
+                                float *const buf,
+                                const size_t npixels)
+{
+  const float *const src = (const float *)user_data;
+  DT_OMP_FOR()
+  for(size_t k = 0; k < npixels / 3; k++)
+  {
+    const float L = src[k * 4 + 0];
+    const float a = src[k * 4 + 1];
+    const float b = src[k * 4 + 2];
+    buf[k * 3 + 0] = L / 100.0f;
+    buf[k * 3 + 1] = dt_fast_hypotf(b, a) / 128.0f;
+    buf[k * 3 + 2] = fmodf(atan2f(b, a) + DT_2PI_F, DT_2PI_F) / DT_2PI_F;
+  }
+}
+
 void process(dt_iop_module_t *self,
              dt_dev_pixelpipe_iop_t *piece,
              const void *const ivoid,
@@ -589,6 +623,12 @@ void process(dt_iop_module_t *self,
     process_v3(self, piece, ivoid, ovoid, roi_in, roi_out);
   else
     process_v1(self, piece, ivoid, ovoid, roi_in, roi_out);
+
+  // On the preview pipe, cache the normalized LCh of the module *input*
+  // pixel for the hover+scroll adjustment, gated by the crosshair toggle.
+  if(g && g->hover_editing && dt_pipe_is_preview(piece->pipe))
+    dt_preview_data_store(&g->pd, roi_out->width, roi_out->height, piece,
+                          _colorzones_fill_cb, (void *)ivoid);
 }
 
 #ifdef HAVE_OPENCL
@@ -623,6 +663,29 @@ int process_cl(dt_iop_module_t *self,
                                          CLARG(width), CLARG(height),
                                          CLARG(d->channel),
                                          CLARG(dev_L), CLARG(dev_a), CLARG(dev_b));
+
+  // On the preview pipe, read the module *input* Lab back from the GPU and
+  // cache its normalized LCh for the hover+scroll adjustment (same data
+  // that the CPU process() path stores).
+  if(self->gui_data && dt_pipe_is_preview(piece->pipe))
+  {
+    dt_iop_colorzones_gui_data_t *gui = (dt_iop_colorzones_gui_data_t *)self->gui_data;
+    if(gui->hover_editing)
+    {
+      const size_t npixels = (size_t)width * height;
+      const size_t px_sz = 4 * npixels * sizeof(float);
+      float *host_pixout = dt_alloc_align_float(4 * npixels);
+      if(host_pixout)
+      {
+        const cl_int read_err
+            = dt_opencl_read_buffer_from_device(devid, host_pixout, dev_in, 0, px_sz, TRUE);
+        if(read_err == CL_SUCCESS)
+          dt_preview_data_store(&gui->pd, width, height, piece,
+                                _colorzones_fill_cb, (void *)host_pixout);
+        dt_free_align(host_pixout);
+      }
+    }
+  }
 
 error:
   dt_opencl_release_mem_object(dev_L);
@@ -1393,6 +1456,18 @@ static gboolean _area_draw_callback(GtkWidget *widget,
       cairo_line_to(cr, x * width, -height * y);
     }
 
+    cairo_stroke(cr);
+  }
+
+  // vertical cursor line in the graph while hover-editing on the image
+  if(g->hover_editing && g->cursor_valid)
+  {
+    const float x_line
+        = _curve_to_mouse(g->cursor_abscissa, g->zoom_factor, g->offset_x);
+    cairo_set_source_rgb(cr, .9, .9, .9);
+    cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(1.5));
+    cairo_move_to(cr, x_line * width, 0);
+    cairo_line_to(cr, x_line * width, -height);
     cairo_stroke(cr);
   }
 
@@ -2579,12 +2654,513 @@ void gui_reset(dt_iop_module_t *self)
   _reset_display_selection(self);
 }
 
+/* ------------------------- hover + scroll adjustment ---------------------- */
+
+/* in_mask_editing — same local helper as the other modules: while a drawn
+ * mask is being edited the canvas is busy and we must not hijack the cursor. */
+static gboolean in_mask_editing(const dt_iop_module_t *self)
+{
+  const dt_develop_t *dev = self->dev;
+  return dev->form_gui && dev->form_visible;
+}
+
+/* _select_abscissa — map the normalized LCh stored in the preview buffer
+ * onto the curve abscissa [0,1] of the active "select by" channel.  Matches
+ * the conventions of process_v1 (V1 chroma abscissa uses 1/(128·√2)) and
+ * process_v3 (C/128). */
+static float _select_abscissa(const dt_iop_colorzones_params_t *p,
+                              const float lch[3])
+{
+  switch(p->channel)
+  {
+    case DT_IOP_COLORZONES_L:
+      return CLAMP(lch[0], 0.0f, 1.0f);
+    case DT_IOP_COLORZONES_C:
+      if(p->splines_version == DT_IOP_COLORZONES_SPLINES_V1)
+        return CLAMP(lch[1] / M_SQRT2_F, 0.0f, 1.0f);
+      return CLAMP(lch[1], 0.0f, 1.0f);
+    case DT_IOP_COLORZONES_h:
+    default:
+      return CLAMP(lch[2], 0.0f, 1.0f);
+  }
+}
+
+/* _colorzones_curve_value_at — value of curve ch at abscissa x, rebuilt
+ * exactly as commit_params() does (nodes + strength) through a temporary
+ * curve.  Used for the cursor readout and for the initial y of auto-added
+ * nodes so the curve does not jump when a node is created. */
+static float _colorzones_curve_value_at(const dt_iop_colorzones_params_t *p,
+                                        const int ch,
+                                        const float x)
+{
+  dt_draw_curve_t *c = dt_draw_curve_new(0.f, 1.f, p->curve_type[ch]);
+  for(int k = 0; k < p->curve_num_nodes[ch]; k++)
+    dt_draw_curve_add_point(c, p->curve[ch][k].x,
+                            strength(p->curve[ch][k].y, p->strength));
+  const float val = dt_draw_curve_calc_value(c, x);
+  dt_draw_curve_destroy(c);
+  return val;
+}
+
+/* _colorzones_lut_at — the three curve values (L, C, h) at abscissa x. */
+static void _colorzones_lut_at(const dt_iop_colorzones_params_t *p,
+                               const float x,
+                               float lut[3])
+{
+  for(int ch = 0; ch < DT_IOP_COLORZONES_MAX_CHANNELS; ch++)
+    lut[ch] = _colorzones_curve_value_at(p, ch, x);
+}
+
+/* _lch_norm_to_rgb — replay the module's process math (v1 or v3) on a
+ * normalized LCh input pixel with the given LUT and convert the result to
+ * display RGB, using the same gamut mapping as COLORZONES_DRAW_BACKGROUD_BOX.
+ * Pass lut = {0.5, 0.5, 0.5} to get the uncorrected input color. */
+static void _lch_norm_to_rgb(const dt_iop_colorzones_params_t *p,
+                             const float lch_norm[3],
+                             const float lut[3],
+                             float rgb[3])
+{
+  const float L = lch_norm[0] * 100.0f;
+  const float C = lch_norm[1] * 128.0f;
+  const float h = lch_norm[2];
+
+  dt_aligned_pixel_t Lab;
+
+  if(p->splines_version == DT_IOP_COLORZONES_SPLINES_V1)
+  {
+    // match process_v1: LCh with a *normalized* hue, then LCh -> Lab
+    dt_aligned_pixel_t out_LCh = { 0.0f, 0.0f, 0.0f, 0.0f };
+    out_LCh[0] = L * powf(2.0f, 4.0f * (lut[0] - 0.5f));
+    out_LCh[1] = C * 2.f * lut[1];
+    out_LCh[2] = h + lut[2] - 0.5f;
+    dt_LCH_2_Lab(out_LCh, Lab);
+  }
+  else
+  {
+    // match process_v3: the new L,a,b are written directly, no LCh round trip
+    const float blend = (p->channel == DT_IOP_COLORZONES_h)
+                          ? sqrf(1.0f - lch_norm[1]) : 0.0f;
+    const float Lm = (blend * .5f + (1.0f - blend) * lut[0]) - .5f;
+    const float hm = (blend * .5f + (1.0f - blend) * lut[2]) - .5f;
+    const float Cm = 2.0f * lut[1];
+    Lab[0] = L * powf(2.0f, 4.0f * Lm);
+    Lab[1] = cosf(DT_2PI_F * (h + hm)) * Cm * C;
+    Lab[2] = sinf(DT_2PI_F * (h + hm)) * Cm * C;
+  }
+
+  // Lab -> XYZ -> sRGB with the exposure-style gamut clip
+  const float L0 = Lab[0];
+  const float Lwhite = 100.0f, Lclip = 20.0f;
+  const float Lcap = fminf(100.0f, Lab[0]);
+  const float clip
+      = 1.0f
+        - (Lcap - L0) * (1.0f / 100.0f) * fminf(Lwhite - Lclip, fmaxf(0.0f, Lab[0] - Lclip)) / (Lwhite - Lclip);
+  const float clip2 = clip * clip * clip;
+  const float scale = (L0 > 0.0f) ? Lab[0] / L0 : 0.0f;
+  Lab[1] *= scale * clip2;
+  Lab[2] *= scale * clip2;
+  Lab[3] = 0.0f;
+  dt_aligned_pixel_t xyz;
+  dt_aligned_pixel_t rgb4;
+  dt_Lab_to_XYZ(Lab, xyz);
+  dt_XYZ_to_sRGB(xyz, rgb4);
+  rgb[0] = rgb4[0];
+  rgb[1] = rgb4[1];
+  rgb[2] = rgb4[2];
+}
+
+/* _hover_node_dist — signed distance from the cursor abscissa x0 to node
+ * abscissa nx, wrapped into ]-0.5, 0.5] for the periodic hue channel. */
+static inline float _hover_node_dist(const gboolean periodic,
+                                     const float x0,
+                                     const float nx)
+{
+  float dx = x0 - nx;
+  if(periodic)
+  {
+    if(dx > 0.5f)       dx -= 1.0f;
+    else if(dx < -0.5f) dx += 1.0f;
+  }
+  return dx;
+}
+
+/* _adjust_params_hover — snap the cursor abscissa to the nearest of the 8
+ * HSL bands (red/orange/yellow/green/aqua/blue/purple/magenta, exactly like
+ * the color-zones keyboard shortcuts) and move the node that controls that
+ * band.  If no existing node is close enough to the band, a node is first
+ * added at the band position with the current curve value as its initial y
+ * (so nothing jumps), then scrolling adjusts it.  The periodic V1 hue
+ * channel keeps its boundary nodes mirror-locked. */
+static gboolean _adjust_params_hover(dt_iop_module_t *self,
+                                     dt_iop_colorzones_params_t *p,
+                                     dt_iop_colorzones_gui_data_t *g,
+                                     const float x0,
+                                     const float move)
+{
+  const int ch = g->channel;
+  dt_iop_colorzones_node_t *curve = p->curve[ch];
+  const gboolean periodic = (p->channel == DT_IOP_COLORZONES_h
+                             && p->splines_version == DT_IOP_COLORZONES_SPLINES_V1);
+  const int max_bands = DT_IOP_COLORZONES_BANDS;
+
+  // snap to the nearest of the 8 HSL bands (position in [0,1))
+  int band = (int)(x0 * max_bands + 0.5f);
+  band = CLAMP(band, 0, max_bands - 1);
+  const float xb = (float)band / max_bands;
+
+  const int bands = p->curve_num_nodes[ch];
+
+  // find the node nearest to the band, within the same 1/16 window as the
+  // keyboard shortcuts (circular distance for the periodic hue channel)
+  const float window = 1.0f / 16.0f;
+  int node = -1;
+  float best = window;
+  for(int k = 0; k < bands; k++)
+  {
+    const float d = fabsf(_hover_node_dist(periodic, xb, curve[k].x));
+    if(d < best)
+    {
+      best = d;
+      node = k;
+    }
+  }
+
+  // no node close enough to the band: add one so scrolling has an effect
+  if(node < 0)
+  {
+    if(bands >= DT_IOP_COLORZONES_MAXNODES) return FALSE;
+    const float y0 = _colorzones_curve_value_at(p, ch, xb);
+    node = _add_node(curve, &p->curve_num_nodes[ch], xb, y0);
+    if(node < 0) return FALSE;
+  }
+
+  // apply the move; the first/last nodes of the periodic hue channel are
+  // mirror-locked
+  const int nbands = p->curve_num_nodes[ch];
+  const float y = CLAMP(curve[node].y + move, 0.0f, 1.0f);
+  curve[node].y = y;
+  if(periodic && (node == 0 || node == nbands - 1))
+    curve[nbands - 1 - node].y = y;
+
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+  gtk_widget_queue_draw(GTK_WIDGET(g->area));
+
+  return TRUE;
+}
+
+/* _switch_cursors — hide the native cursor and rely on the custom indicator
+ * drawn by gui_post_expose while hover editing is active and a valid reading
+ * is available; fall back to the default cursor otherwise (mask editing,
+ * module not focused, no valid reading yet). */
+static void _switch_cursors(dt_iop_module_t *self)
+{
+  dt_iop_colorzones_gui_data_t *g = self->gui_data;
+  if(!g || !self->dev->gui_attached) return;
+
+  // editing a mask or the canvas is otherwise not interactive
+  if(in_mask_editing(self) || dt_iop_canvas_not_sensitive(self->dev))
+  {
+    dt_control_change_cursor("default");
+    return;
+  }
+
+  if(!self->expanded) return; // module not focused: let the app decide
+
+  if(g->hover_editing && g->cursor_valid)
+    dt_control_change_cursor("none");
+  else
+    dt_control_change_cursor("default");
+}
+
+/* _hover_toggle_callback — crosshair toggle: enable/disable the hover+scroll
+ * service.  Turning it on kicks a preview reprocess so the under-cursor
+ * buffer is filled immediately and deactivates any active color picker
+ * (they would fight for the mouse on the image); turning it off restores
+ * the native cursor and clears the buffer state. */
+static void _hover_toggle_callback(GtkToggleButton *togglebutton,
+                                   gpointer user_data)
+{
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_colorzones_gui_data_t *g = self->gui_data;
+  if(!g) return;
+
+  g->hover_editing = gtk_toggle_button_get_active(togglebutton);
+  g->cursor_valid = FALSE;
+  g->reprocess_pending = FALSE;
+
+  if(g->hover_editing)
+  {
+    // an active pipette would keep grabbing the mouse over the image;
+    // also clear the global/primary picker (module == NULL) because it keeps
+    // dt_iop_color_picker_is_visible() true and blocks the mouse_moved dispatch
+    dt_iop_color_picker_reset(self, FALSE);
+    dt_iop_color_picker_reset(NULL, FALSE);
+    dt_preview_data_invalidate(&g->pd);
+    dt_dev_reprocess_preview(self->dev);
+  }
+  else
+  {
+    dt_preview_data_invalidate(&g->pd);
+    dt_control_change_cursor("default");
+  }
+
+  dt_control_queue_redraw_center();
+}
+
+int mouse_moved(dt_iop_module_t *self,
+                const float pzx,
+                const float pzy,
+                const double pressure,
+                const int which,
+                const float zoom_scale)
+{
+  dt_iop_colorzones_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing) return 0;
+
+  // disable cursor tracking while the mask editor is visible
+  if(in_mask_editing(self))
+  {
+    g->cursor_valid = FALSE;
+    _switch_cursors(self);
+    return 0;
+  }
+
+  // read the normalized LCh of the module input pixel under the cursor
+  float lch[3] = { 0.0f };
+  gboolean have = FALSE;
+  if(g->pd.buf && g->pd.width > 0 && g->pd.height > 0)
+  {
+    const int cx = CLAMP((int)(pzx * g->pd.width),  0, (int)g->pd.width  - 1);
+    const int cy = CLAMP((int)(pzy * g->pd.height), 0, (int)g->pd.height - 1);
+    dt_iop_gui_enter_critical_section(self);
+    const float *buf = g->pd.buf;
+    if(buf)
+    {
+      const size_t idx = (size_t)cy * g->pd.width + cx;
+      lch[0] = buf[3 * idx + 0];
+      lch[1] = buf[3 * idx + 1];
+      lch[2] = buf[3 * idx + 2];
+      have = TRUE;
+    }
+    dt_iop_gui_leave_critical_section(self);
+  }
+
+  if(!have)
+  {
+    // buffer missing (e.g. gui_init() just reset it): ask for a preview
+    // reprocess, debounced so we don't flood the pipeline while hovering
+    g->cursor_valid = FALSE;
+    if(!g->reprocess_pending)
+    {
+      g->reprocess_pending = TRUE;
+      dt_dev_reprocess_preview(self->dev);
+    }
+    _switch_cursors(self);
+    return 0;
+  }
+
+  const dt_iop_colorzones_params_t *p = self->params;
+  g->cursor_abscissa = _select_abscissa(p, lch);
+  g->cursor_pos_x = pzx;
+  g->cursor_pos_y = pzy;
+
+  // validate the buffer freshness against the cumulative pipe hash
+  g->cursor_valid = dt_preview_data_is_fresh(&g->pd);
+  if(g->cursor_valid)
+  {
+    g->reprocess_pending = FALSE;
+    dt_control_queue_redraw_center();
+  }
+  else if(!g->reprocess_pending)
+  {
+    g->reprocess_pending = TRUE;
+    dt_dev_reprocess_preview(self->dev);
+  }
+  _switch_cursors(self);
+  return 0;
+}
+
+/* mouse_leave — invalidate the reading when the mouse leaves the image. */
+int mouse_leave(dt_iop_module_t *self)
+{
+  dt_iop_colorzones_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing) return 0;
+
+  g->cursor_valid = FALSE;
+  _switch_cursors(self);
+  gtk_widget_queue_draw(GTK_WIDGET(g->area));
+  dt_control_queue_redraw_center();
+
+  return 1;
+}
+
+/* scrolled — IOP hook called when the scroll wheel is used over the image
+ * in the darkroom.  When hover editing is active and a reading is available
+ * it moves the node of the nearest HSL band (adding it if none is close
+ * enough) and returns 1 to consume the event (blocking image zoom);
+ * Alt+scroll switches the channel tab.  Otherwise it lets darktable zoom
+ * normally. */
+int scrolled(dt_iop_module_t *self,
+             const float x,
+             const float y,
+             const int up,
+             const uint32_t state)
+{
+  dt_iop_colorzones_gui_data_t *g = self->gui_data;
+  if(!g) return 0;
+
+  // Alt+scroll: switch channel tab, matching the graph's behavior
+  if(dt_modifier_is(state, GDK_MOD1_MASK))
+  {
+    const int pages = gtk_notebook_get_n_pages(g->channel_tabs);
+    const int current = gtk_notebook_get_current_page(g->channel_tabs);
+    const int next = (current + (up ? 1 : -1) + pages) % pages;
+    gtk_notebook_set_current_page(g->channel_tabs, next);
+    return 1;
+  }
+
+  if(!g->hover_editing) return 0; // normal behavior (image zoom)
+
+  // read the normalized LCh under the cursor directly from the cached
+  // buffer (race-safe), without gating on the pipe hash, so scrolling keeps
+  // working even if the preview is momentarily stale
+  float lch[3] = { 0.0f };
+  gboolean have = FALSE;
+  if(g->pd.buf && g->pd.width > 0 && g->pd.height > 0)
+  {
+    const int cx = CLAMP((int)(x * g->pd.width),  0, (int)g->pd.width  - 1);
+    const int cy = CLAMP((int)(y * g->pd.height), 0, (int)g->pd.height - 1);
+    have = dt_preview_data_get(&g->pd, cx, cy, 0, &lch[0]);
+    if(have)
+    {
+      dt_preview_data_get(&g->pd, cx, cy, 1, &lch[1]);
+      dt_preview_data_get(&g->pd, cx, cy, 2, &lch[2]);
+    }
+  }
+  if(!have) return 0;
+
+  const dt_iop_colorzones_params_t *p = self->params;
+  g->cursor_abscissa = _select_abscissa(p, lch);
+  g->cursor_pos_x = x;
+  g->cursor_pos_y = y;
+  g->cursor_valid = TRUE;
+
+  // step in curve coordinates; Ctrl for fine precision (÷10)
+  const float base_step = DT_IOP_COLORZONES_DEFAULT_STEP;
+  const float step = dt_modifier_is(state, GDK_CONTROL_MASK) ? base_step * 0.1f : base_step;
+  const float move = up ? +step : -step;
+
+  _adjust_params_hover(self, self->params, g, g->cursor_abscissa, move);
+  _switch_cursors(self);
+
+  return 1; // consumes the event → BLOCKS image zoom
+}
+
+/* gui_post_expose — draws the on-canvas cursor: a crosshair frame, a wedge
+ * showing the magnitude/direction of the active channel's correction, and
+ * two concentric circles filled with the module input/output colors at the
+ * pixel under the cursor. */
+void gui_post_expose(dt_iop_module_t *self,
+                     cairo_t *cr,
+                     const float width,
+                     const float height,
+                     const float pointerx,
+                     const float pointery,
+                     const float zoom_scale)
+{
+  dt_iop_colorzones_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing || !g->cursor_valid) return;
+
+  // hide the cursor indicator while editing a mask
+  if(in_mask_editing(self)) return;
+
+  float bg_rgb[3];
+  float frame_color[3];
+  dt_draw_backbuf_contrast(self->dev, g->cursor_pos_x, g->cursor_pos_y,
+                           bg_rgb, frame_color, 16.0f / (zoom_scale * width));
+
+  const float cx = g->cursor_pos_x * width;
+  const float cy = g->cursor_pos_y * height;
+
+  // readout of the active channel's correction at the cursor abscissa
+  const dt_iop_colorzones_params_t *p = self->params;
+  const float x = g->cursor_abscissa;
+  const float value = _colorzones_curve_value_at(p, g->channel, x);
+  const float correction_norm = (value - 0.5f) * 2.0f; // y∈[0,1], 0.5 = neutral
+
+  char text[64];
+  snprintf(text, sizeof(text), "%+.1f%%", (value - 0.5f) * 100.0f);
+
+  float in_color[3]  = { bg_rgb[0], bg_rgb[1], bg_rgb[2] };
+  float out_color[3] = { bg_rgb[0], bg_rgb[1], bg_rgb[2] };
+
+  // in/out colors: replay the module math on the stored input LCh
+  if(g->pd.buf && g->pd.width > 0 && g->pd.height > 0)
+  {
+    const int p_cx = CLAMP((int)(g->cursor_pos_x * g->pd.width),  0, (int)g->pd.width  - 1);
+    const int p_cy = CLAMP((int)(g->cursor_pos_y * g->pd.height), 0, (int)g->pd.height - 1);
+
+    float lch[3] = { 0.0f };
+    gboolean have = FALSE;
+    dt_iop_gui_enter_critical_section(self);
+    const float *buf = g->pd.buf;
+    if(buf)
+    {
+      const size_t idx = (size_t)p_cy * g->pd.width + p_cx;
+      lch[0] = buf[3 * idx + 0];
+      lch[1] = buf[3 * idx + 1];
+      lch[2] = buf[3 * idx + 2];
+      have = TRUE;
+    }
+    dt_iop_gui_leave_critical_section(self);
+
+    if(have)
+    {
+      const float neutral[3] = { 0.5f, 0.5f, 0.5f };
+      float lut[3];
+      _colorzones_lut_at(p, x, lut);
+      _lch_norm_to_rgb(p, lch, neutral, in_color);
+      _lch_norm_to_rgb(p, lch, lut, out_color);
+    }
+  }
+
+  dt_draw_correction_cursor(cr, cx, cy, zoom_scale, correction_norm,
+                            frame_color,
+                            in_color, FALSE,   // outer: module input color
+                            out_color, FALSE,  // inner: module output color
+                            text);
+
+  // keep the graph in sync with the cursor abscissa
+  gtk_widget_queue_draw(GTK_WIDGET(g->area));
+}
+
 void gui_focus(dt_iop_module_t *self, gboolean in)
 {
-  if(!in)
+  dt_iop_colorzones_gui_data_t *g = self->gui_data;
+  if(in)
+  {
+    // opening/focusing the module doesn't by itself dirty the pipe, so the
+    // under-cursor buffer can be stale (e.g. right after a toggle) — kick a
+    // preview reprocess so hovering works right away
+    if(g && g->hover_editing && !dt_preview_data_is_fresh(&g->pd) && !g->reprocess_pending)
+    {
+      g->reprocess_pending = TRUE;
+      dt_dev_reprocess_preview(self->dev);
+    }
+    _switch_cursors(self);
+  }
+  else
   {
     _reset_display_selection(self);
     dt_iop_color_picker_reset(self, FALSE);
+    if(g)
+    {
+      g->cursor_valid = FALSE; // disables hover adjustment when the module loses focus
+      g->reprocess_pending = FALSE;
+      dt_preview_data_invalidate(&g->pd);
+    }
+    _switch_cursors(self);
+    dt_control_queue_redraw_center();
   }
 }
 
@@ -2615,6 +3191,16 @@ void gui_init(dt_iop_module_t *self)
   g->dragging = 0;
   g->edit_by_area = 0;
   g->display_mask = FALSE;
+
+  // shared under-cursor preview buffer for hover+scroll adjustment on the
+  // image, gated by the crosshair toggle in the top bar
+  dt_preview_data_alloc(&g->pd, self);
+  g->pd.components = 3;
+  g->hover_editing = FALSE;
+  g->cursor_valid = FALSE;
+  g->reprocess_pending = FALSE;
+  g->cursor_abscissa = 0.f;
+  g->cursor_pos_x = g->cursor_pos_y = 0.f;
 
   // tabs
   static dt_action_def_t notebook_def = { };
@@ -2656,6 +3242,20 @@ void gui_init(dt_iop_module_t *self)
   dt_action_define_iop(self, N_("pickers"), N_("create curve"),
                        g->colorpicker_set_values, &dt_action_def_toggle);
 
+  // hover+scroll on image (crosshair toggle)
+  g->hover_toggle = dtgtk_togglebutton_new(dtgtk_cairo_paint_compass_star, 0, NULL);
+  dt_gui_add_class(g->hover_toggle, "dt_transparent_background");
+  gtk_widget_set_size_request(g->hover_toggle, DT_PIXEL_APPLY_DPI(14), DT_PIXEL_APPLY_DPI(14));
+  gtk_widget_set_tooltip_text
+    (g->hover_toggle,
+     _("adjust the curves directly on the image\n"
+       "move the mouse over the image and use the scroll wheel\n"
+       "a node is added automatically at the nearest color band"));
+  dt_action_define_iop(self, N_("pickers"), N_("adjust on image"),
+                       g->hover_toggle, &dt_action_def_toggle);
+  g_signal_connect(G_OBJECT(g->hover_toggle), "toggled",
+                   G_CALLBACK(_hover_toggle_callback), self);
+
   // the nice graph
   g->area = GTK_DRAWING_AREA(dt_ui_resize_wrap(NULL,
                                                0,
@@ -2687,7 +3287,7 @@ void gui_init(dt_iop_module_t *self)
 
   self->widget = dt_gui_vbox
     (dt_gui_hbox(dt_gui_expand(g->channel_tabs), gtk_label_new("   "),
-                 g->colorpicker, g->colorpicker_set_values),
+                 g->hover_toggle, g->colorpicker, g->colorpicker_set_values),
      g->area, dabox,
      dt_gui_hbox(dt_gui_expand(g->chk_edit_by_area), g->bt_showmask));
 
@@ -2738,6 +3338,12 @@ void gui_init(dt_iop_module_t *self)
         "- monotonic is better for accuracy of pure analytical functions (log, gamma, exp)"));
   g_signal_connect(G_OBJECT(g->interpolator), "value-changed",
                    G_CALLBACK(_interpolator_callback), self);
+
+  // hover+scroll on the image (gated by g->hover_editing)
+  self->mouse_moved = mouse_moved;
+  self->mouse_leave = mouse_leave;
+  self->scrolled = scrolled;
+  self->gui_post_expose = gui_post_expose;
 }
 
 void gui_update(dt_iop_module_t *self)
@@ -2754,6 +3360,8 @@ void gui_cleanup(dt_iop_module_t *self)
 {
   dt_iop_colorzones_gui_data_t *g = self->gui_data;
   dt_conf_set_int("plugins/darkroom/colorzones/gui_channel", g->channel);
+
+  dt_preview_data_free(&g->pd);
 
   for(int ch = 0; ch < DT_IOP_COLORZONES_MAX_CHANNELS; ch++)
     dt_draw_curve_destroy(g->minmax_curve[ch]);

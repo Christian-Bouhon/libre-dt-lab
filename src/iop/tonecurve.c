@@ -30,8 +30,10 @@
 #include "develop/imageop.h"
 #include "develop/imageop_math.h"
 #include "develop/imageop_gui.h"
+#include "develop/preview_data.h"
 #include "dtgtk/drawingarea.h"
 #include "dtgtk/paint.h"
+#include "dtgtk/togglebutton.h"
 #include "gui/draw.h"
 #include "gui/gtk.h"
 #include "gui/presets.h"
@@ -126,6 +128,15 @@ typedef struct dt_iop_tonecurve_gui_data_t
   int semilog;
   GtkWidget *logbase;
   GtkWidget *preserve_colors;
+  // shared under-cursor preview buffer (L/100, (a+128)/256, (b+128)/256)
+  // for hover+scroll adjustment on the image, gated by the crosshair toggle
+  dt_preview_data_t pd;
+  GtkWidget *hover_toggle;
+  gboolean hover_editing;
+  gboolean cursor_valid;
+  gboolean reprocess_pending;
+  float cursor_abscissa;
+  float cursor_pos_x, cursor_pos_y;
 } dt_iop_tonecurve_gui_data_t;
 
 typedef struct dt_iop_tonecurve_data_t
@@ -296,6 +307,10 @@ int legacy_params(dt_iop_module_t *self,
   return 1;
 }
 
+static void _tonecurve_fill_cb(void *const user_data,
+                               float *const buf,
+                               const size_t npixels);
+
 #ifdef HAVE_OPENCL
 int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_in, cl_mem dev_out,
                const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
@@ -357,6 +372,29 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece, cl_mem dev_
                                          CLARG(low_approximation),
                                          CLARG(preserve_colors), CLARG(dev_profile_info),
                                          CLARG(dev_profile_lut));
+
+  // On the preview pipe, read the module *input* Lab back from the GPU and
+  // cache its normalized Lab for the hover+scroll adjustment (same data
+  // that the CPU process() path stores).
+  if(err == CL_SUCCESS && self->gui_data && dt_pipe_is_preview(piece->pipe))
+  {
+    dt_iop_tonecurve_gui_data_t *g = (dt_iop_tonecurve_gui_data_t *)self->gui_data;
+    if(g->hover_editing)
+    {
+      const size_t npixels = (size_t)width * height;
+      const size_t px_sz = 4 * npixels * sizeof(float);
+      float *host_pixout = dt_alloc_align_float(4 * npixels);
+      if(host_pixout)
+      {
+        const cl_int read_err
+            = dt_opencl_read_buffer_from_device(devid, host_pixout, dev_in, 0, px_sz, TRUE);
+        if(read_err == CL_SUCCESS)
+          dt_preview_data_store(&g->pd, width, height, piece,
+                                _tonecurve_fill_cb, (void *)host_pixout);
+        dt_free_align(host_pixout);
+      }
+    }
+  }
 
 error:
   dt_opencl_release_mem_object(dev_L);
@@ -497,6 +535,13 @@ void process(dt_iop_module_t *self,
 
     out[k+3] = in[k+3];
   }
+
+  // On the preview pipe, cache the normalized Lab of the module *input*
+  // pixel for the hover+scroll adjustment, gated by the crosshair toggle.
+  dt_iop_tonecurve_gui_data_t *const g = self->gui_data;
+  if(g && g->hover_editing && dt_pipe_is_preview(piece->pipe))
+    dt_preview_data_store(&g->pd, roi_out->width, roi_out->height, piece,
+                          _tonecurve_fill_cb, (void *)in);
 }
 
 static const struct
@@ -837,6 +882,358 @@ void commit_params(dt_iop_module_t *self,
                           d->table[ch_b][CLAMP((int)((1.0f - x_bl[2]) * 0x10000ul), 0, 0xffff)],
                           d->table[ch_b][CLAMP((int)((1.0f - x_bl[3]) * 0x10000ul), 0, 0xffff)] };
   dt_iop_estimate_exp(x_bl, y_bl, 4, d->unbounded_coeffs_ab + 9);
+}
+
+// ---- preview-data service: under-cursor pixel buffer ----
+// Fills 3 components: L/100, (a+128)/256, (b+128)/256 all in [0,1].
+
+static void _tonecurve_fill_cb(void *const user_data,
+                               float *const buf,
+                               const size_t npixels)
+{
+  // npixels covers components floats per pixel (3·width·height).
+  // The module input is Lab: store L/100, (a+128)/256, (b+128)/256 all in [0,1].
+  const float *const src = (const float *)user_data;
+  DT_OMP_FOR()
+  for(size_t k = 0; k < npixels / 3; k++)
+  {
+    buf[k * 3 + 0] = src[k * 4 + 0] / 100.0f;            // L
+    buf[k * 3 + 1] = (src[k * 4 + 1] + 128.0f) / 256.0f; // a
+    buf[k * 3 + 2] = (src[k * 4 + 2] + 128.0f) / 256.0f; // b
+  }
+}
+
+static gboolean in_mask_editing(const dt_iop_module_t *self)
+{
+  const dt_develop_t *dev = self->dev;
+  return dev->form_gui && dev->form_visible;
+}
+
+static gboolean _select_abscissa(dt_iop_module_t *self, int ch,
+                                  const float *in_norm, float *abscissa)
+{
+  if(!self->dev->gui_attached || self->dev->gui_module != self)
+    return FALSE;
+
+  *abscissa = in_norm[ch];      // already [0,1]: L/100, (a+128)/256, or (b+128)/256
+  return TRUE;
+}
+
+static float _tonecurve_curve_value(dt_iop_module_t *self, int ch, float x)
+{
+  dt_iop_tonecurve_params_t *p = self->params;
+  if(!p) return x;
+  const int nodes = p->tonecurve_nodes[ch];
+  if(nodes < 1) return x;
+
+  // The GUI thread has no per-pipe data available, so rebuild the curve
+  // from the module parameters exactly as commit_params() and
+  // dt_iop_tonecurve_draw() do. The returned value is the normalized curve
+  // output in [0,1] for every channel (L/100, (a+128)/256 or (b+128)/256).
+  dt_draw_curve_t *curve = dt_draw_curve_new(0.0f, 1.0f, p->tonecurve_type[ch]);
+  for(int k = 0; k < nodes; k++)
+    (void)dt_draw_curve_add_point(curve, p->tonecurve[ch][k].x, p->tonecurve[ch][k].y);
+
+  float value;
+  const float xm = p->tonecurve[ch][nodes - 1].x;
+  if(xm <= 0.0f || x < xm)
+  {
+    value = dt_draw_curve_calc_value(curve, x);
+  }
+  else
+  {
+    // unbounded extrapolation on the right side, as commit_params() does
+    float unbounded_coeffs[3];
+    const float xr[4] = { 0.7f * xm, 0.8f * xm, 0.9f * xm, 1.0f * xm };
+    const float yr[4] = { dt_draw_curve_calc_value(curve, xr[0]),
+                          dt_draw_curve_calc_value(curve, xr[1]),
+                          dt_draw_curve_calc_value(curve, xr[2]),
+                          dt_draw_curve_calc_value(curve, xr[3]) };
+    dt_iop_estimate_exp(xr, yr, 4, unbounded_coeffs);
+    value = dt_iop_eval_exp(unbounded_coeffs, x);
+  }
+
+  dt_draw_curve_destroy(curve);
+  return CLAMP(value, 0.0f, 1.0f);
+}
+
+static float to_log(const float x, const float base, const int ch,
+                    const int semilog, const int is_ordinate);
+
+static inline int _add_node(dt_iop_tonecurve_node_t *tonecurve,
+                            int *nodes,
+                            const float x,
+                            const float y);
+
+static float _hover_node_dist(const dt_iop_tonecurve_node_t *nodes, int count,
+                               int ch, float loglogscale, int semilog,
+                               float abscissa, int *out_idx)
+{
+  float min = 1.0f;
+  *out_idx = -1;
+  for(int k = 0; k < count; k++)
+  {
+    float x_log = to_log(nodes[k].x, loglogscale, ch, semilog, 0);
+    float absc_log = to_log(abscissa, loglogscale, ch, semilog, 0);
+    float d = fabsf(x_log - absc_log);
+    if(d < min)
+    {
+      min = d;
+      *out_idx = k;
+    }
+  }
+  return min;
+}
+
+static void _adjust_params_hover(dt_iop_module_t *self, float delta, int nb)
+{
+  if(!self->params || nb < 1 || nb >= DT_IOP_TONECURVE_MAXNODES) return;
+
+  dt_iop_tonecurve_params_t *p = self->params;
+  dt_iop_tonecurve_gui_data_t *g = self->gui_data;
+  int ch = g->channel;
+  int nodes = p->tonecurve_nodes[ch];
+  dt_iop_tonecurve_node_t *tonecurve = p->tonecurve[ch];
+
+  int selected = -1;
+  float min = _hover_node_dist(tonecurve, nodes, ch,
+                                g->loglogscale, g->semilog,
+                                g->cursor_abscissa, &selected);
+
+  if(selected < 0 || min > (1.0f / 16.0f))
+  {
+    if(nodes < DT_IOP_TONECURVE_MAXNODES)
+    {
+      selected = _add_node(tonecurve, &p->tonecurve_nodes[ch],
+                           g->cursor_abscissa, g->cursor_abscissa);
+      nodes = p->tonecurve_nodes[ch];
+    }
+    else
+      return;
+  }
+
+  tonecurve[selected].y = CLAMP(tonecurve[selected].y + delta, 0.0f, 1.0f);
+  p->tonecurve_nodes[ch] = nodes;
+  dt_dev_add_history_item_target(darktable.develop, self, TRUE, self->widget + ch);
+  gtk_widget_queue_draw(GTK_WIDGET(g->area));
+}
+
+static void _switch_cursors(dt_iop_module_t *self)
+{
+  dt_iop_tonecurve_gui_data_t *g = self->gui_data;
+  if(!g || !self->dev->gui_attached) return;
+
+  if(in_mask_editing(self) || dt_iop_canvas_not_sensitive(self->dev))
+  {
+    dt_control_change_cursor("default");
+    return;
+  }
+
+  if(!self->expanded) return;
+
+  if(g->hover_editing && g->cursor_valid)
+    dt_control_change_cursor("none");
+  else
+    dt_control_change_cursor("default");
+}
+
+static void _hover_toggle_callback(GtkToggleButton *togglebutton,
+                                   gpointer user_data)
+{
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_tonecurve_gui_data_t *g = self->gui_data;
+  if(!g) return;
+
+  g->hover_editing = gtk_toggle_button_get_active(togglebutton);
+  g->cursor_valid = FALSE;
+  g->reprocess_pending = FALSE;
+
+  if(g->hover_editing)
+  {
+    // deactivate any active color picker: the module picker AND the
+    // global/primary picker (module == NULL).  An active primary pipette
+    // keeps dt_iop_color_picker_is_visible() true and therefore blocks the
+    // mouse_moved dispatch, so it must be cleared here on the first toggle.
+    dt_iop_color_picker_reset(self, FALSE);
+    dt_iop_color_picker_reset(NULL, FALSE);
+    dt_preview_data_invalidate(&g->pd);
+    dt_dev_reprocess_preview(self->dev);
+  }
+  else
+  {
+    dt_preview_data_invalidate(&g->pd);
+  }
+
+  _switch_cursors(self);
+  dt_control_queue_redraw_center();
+}
+
+int mouse_moved(dt_iop_module_t *self,
+                const float pzx,
+                const float pzy,
+                const double pressure,
+                const int which,
+                const float zoom_scale)
+{
+  dt_iop_tonecurve_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing) return 0;
+
+  if(in_mask_editing(self))
+  {
+    g->cursor_valid = FALSE;
+    _switch_cursors(self);
+    return 0;
+  }
+
+  if(!dt_preview_data_is_fresh(&g->pd))
+  {
+    if(!g->reprocess_pending)
+    {
+      g->reprocess_pending = TRUE;
+      dt_dev_reprocess_preview(self->dev);
+    }
+    return 0;
+  }
+
+  g->cursor_pos_x = pzx;
+  g->cursor_pos_y = pzy;
+
+  // read the normalized Lab of the module input pixel under the cursor
+  float in_norm[3] = { 0.0f, 0.0f, 0.0f };
+  gboolean have = FALSE;
+  if(g->pd.buf && g->pd.width > 0 && g->pd.height > 0)
+  {
+    const int cx = CLAMP((int)(pzx * g->pd.width),  0, (int)g->pd.width  - 1);
+    const int cy = CLAMP((int)(pzy * g->pd.height), 0, (int)g->pd.height - 1);
+    have = dt_preview_data_get(&g->pd, cx, cy, 0, &in_norm[0]);
+    if(have)
+    {
+      dt_preview_data_get(&g->pd, cx, cy, 1, &in_norm[1]);
+      dt_preview_data_get(&g->pd, cx, cy, 2, &in_norm[2]);
+    }
+  }
+  if(!have)
+  {
+    g->cursor_valid = FALSE;
+    _switch_cursors(self);
+    return 0;
+  }
+
+  float abscissa = 0.0f;
+  g->cursor_valid = _select_abscissa(self, g->channel, in_norm, &abscissa);
+  g->cursor_abscissa = abscissa;
+  _switch_cursors(self);
+  dt_control_queue_redraw_center();
+  return 0;
+}
+
+int mouse_leave(dt_iop_module_t *self)
+{
+  dt_iop_tonecurve_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing) return 0;
+
+  g->cursor_valid = FALSE;
+  g->reprocess_pending = FALSE;
+  dt_preview_data_invalidate(&g->pd);
+  _switch_cursors(self);
+  dt_control_queue_redraw_center();
+
+  return 1;
+}
+
+int scrolled(dt_iop_module_t *self,
+             const float x,
+             const float y,
+             const int up,
+             const uint32_t state)
+{
+  dt_iop_tonecurve_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing) return 0;
+  if(in_mask_editing(self)) return 0;
+  if(!g->cursor_valid) return 0;
+
+  const float delta_y = up ? 1.0f : -1.0f;
+  _adjust_params_hover(self, delta_y / 250.0f, 1);
+  return 1;
+}
+
+void gui_post_expose(dt_iop_module_t *self, cairo_t *cr,
+                     const float width, const float height,
+                     const float pointerx, const float pointery,
+                     const float zoom_scale)
+{
+  dt_iop_tonecurve_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing || !self->dev->gui_attached
+     || self->dev->gui_module != self)
+    return;
+  if(in_mask_editing(self)) return;
+  if(!g->cursor_valid) return;
+  const int ch = g->channel;
+
+  const float cx = g->cursor_pos_x * width;
+  const float cy = g->cursor_pos_y * height;
+
+  dt_aligned_pixel_t in_Lab = { 0.0f, 0.0f, 0.0f, 0.0f };
+  gboolean have = FALSE;
+  if(g->pd.buf && g->pd.width > 0 && g->pd.height > 0)
+  {
+    const int p_cx = CLAMP((int)(g->cursor_pos_x * g->pd.width),  0, (int)g->pd.width  - 1);
+    const int p_cy = CLAMP((int)(g->cursor_pos_y * g->pd.height), 0, (int)g->pd.height - 1);
+    have = dt_preview_data_get(&g->pd, p_cx, p_cy, 0, &in_Lab[0]);
+    if(have)
+    {
+      dt_preview_data_get(&g->pd, p_cx, p_cy, 1, &in_Lab[1]);
+      dt_preview_data_get(&g->pd, p_cx, p_cy, 2, &in_Lab[2]);
+    }
+  }
+  if(!have) return;
+  in_Lab[0] *= 100.0f;
+  in_Lab[1] = in_Lab[1] * 256.0f - 128.0f;
+  in_Lab[2] = in_Lab[2] * 256.0f - 128.0f;
+
+  float in_norm = g->cursor_abscissa;
+  float out_norm = _tonecurve_curve_value(self, ch, in_norm);
+  dt_aligned_pixel_t out_Lab = { in_Lab[0], in_Lab[1], in_Lab[2], 0.0f };
+  out_Lab[ch] = (ch == ch_L)
+    ? out_norm * 100.0f
+    : out_norm * 256.0f - 128.0f;
+
+  dt_aligned_pixel_t in_XYZ, out_XYZ;
+  dt_aligned_pixel_t in_sRGB, out_sRGB;
+  dt_Lab_to_XYZ(in_Lab, in_XYZ);
+  dt_XYZ_to_sRGB(in_XYZ, in_sRGB);
+  dt_Lab_to_XYZ(out_Lab, out_XYZ);
+  dt_XYZ_to_sRGB(out_XYZ, out_sRGB);
+  for(int c = 0; c < 3; c++)
+  {
+    in_sRGB[c]  = CLAMP(in_sRGB[c],  0.0f, 1.0f);
+    out_sRGB[c] = CLAMP(out_sRGB[c], 0.0f, 1.0f);
+  }
+
+  float frame_color[3];
+  float bg_rgb[3];
+  dt_draw_backbuf_contrast(self->dev, g->cursor_pos_x, g->cursor_pos_y,
+                           bg_rgb, frame_color, 16.0f / (zoom_scale * width));
+  float outer_color[3] = { in_sRGB[0], in_sRGB[1], in_sRGB[2] };
+  float inner_color[3] = { out_sRGB[0], out_sRGB[1], out_sRGB[2] };
+  float correction_norm = out_norm - in_norm;
+
+  // value readout drawn to the right of the crosshair, consistent with the
+  // in-graph node display: L in [0,100], a/b in [-128,128]
+  const float min_scale_value = (ch == ch_L) ? 0.0f : -128.0f;
+  const float max_scale_value = (ch == ch_L) ? 100.0f : 128.0f;
+  const float in_value =
+    in_norm * (max_scale_value - min_scale_value) + min_scale_value;
+  const float out_value =
+    out_norm * (max_scale_value - min_scale_value) + min_scale_value;
+  char text[64];
+  snprintf(text, sizeof(text), "%.1f / %.1f ( %+.1f)",
+           in_value, out_value, out_value - in_value);
+
+  dt_draw_correction_cursor(cr, cx, cy,
+                            zoom_scale, correction_norm,
+                            frame_color, outer_color, FALSE,
+                            inner_color, FALSE, text);
 }
 
 static inline float eval_grey(const float x)
@@ -1280,8 +1677,24 @@ void gui_init(dt_iop_module_t *self)
      _("pick GUI color from image\nctrl+click or right-click to select an area"));
   dt_action_define_iop(self, NULL, N_("pick color"), g->colorpicker, &dt_action_def_toggle);
 
-  dt_gui_box_add(self->widget, dt_gui_hbox(dt_gui_expand(g->channel_tabs), 
-                                           dt_gui_align_right(g->colorpicker)));
+  // hover+scroll on image (crosshair toggle)
+  g->hover_toggle = dtgtk_togglebutton_new(dtgtk_cairo_paint_compass_star, 0, NULL);
+  dt_gui_add_class(g->hover_toggle, "dt_transparent_background");
+  gtk_widget_set_size_request(g->hover_toggle, DT_PIXEL_APPLY_DPI(14), DT_PIXEL_APPLY_DPI(14));
+  gtk_widget_set_tooltip_text
+    (g->hover_toggle,
+     _("adjust the curves directly on the image\n"
+       "move the mouse over the image and use the scroll wheel\n"
+       "a node is added automatically at the nearest position"));
+  dt_action_define_iop(self, N_("pickers"), N_("adjust on image"),
+                       g->hover_toggle, &dt_action_def_toggle);
+  g_signal_connect(G_OBJECT(g->hover_toggle), "toggled",
+                   G_CALLBACK(_hover_toggle_callback), self);
+
+  dt_gui_box_add(self->widget, dt_gui_hbox(dt_gui_expand(g->channel_tabs),
+                                           dt_gui_expand(gtk_grid_new()),
+                                           g->hover_toggle,
+                                           g->colorpicker));
 
   g->area = GTK_DRAWING_AREA(dtgtk_drawing_area_new_with_height(0));
   g_object_set_data(G_OBJECT(g->area), "iop-instance", self);
@@ -1331,16 +1744,50 @@ void gui_init(dt_iop_module_t *self)
   g->sizegroup = GTK_SIZE_GROUP(gtk_size_group_new(GTK_SIZE_GROUP_HORIZONTAL));
   gtk_size_group_add_widget(g->sizegroup, GTK_WIDGET(g->area));
   gtk_size_group_add_widget(g->sizegroup, GTK_WIDGET(g->channel_tabs));
+
+  dt_preview_data_alloc(&g->pd, self);
+  g->pd.components = 3;
+
+  // The mouse_moved / mouse_leave / scrolled module callbacks are resolved
+  // automatically by the loader (they are plain exported functions), so only
+  // the post-expose hook needs to be wired up here.
+  self->so->gui_post_expose = gui_post_expose;
 }
 
 void gui_cleanup(dt_iop_module_t *self)
 {
   dt_iop_tonecurve_gui_data_t *g = self->gui_data;
+  dt_preview_data_free(&g->pd);
   // this one we need to unref manually. not so the initially unowned widgets.
   g_object_unref(g->sizegroup);
   dt_draw_curve_destroy(g->minmax_curve[ch_L]);
   dt_draw_curve_destroy(g->minmax_curve[ch_a]);
   dt_draw_curve_destroy(g->minmax_curve[ch_b]);
+}
+
+void gui_focus(dt_iop_module_t *self, gboolean in)
+{
+  dt_iop_tonecurve_gui_data_t *g = self->gui_data;
+  if(in)
+  {
+    if(g && g->hover_editing && !dt_preview_data_is_fresh(&g->pd) && !g->reprocess_pending)
+    {
+      g->reprocess_pending = TRUE;
+      dt_dev_reprocess_preview(self->dev);
+    }
+    _switch_cursors(self);
+  }
+  else
+  {
+    if(g)
+    {
+      g->cursor_valid = FALSE;
+      g->reprocess_pending = FALSE;
+      dt_preview_data_invalidate(&g->pd);
+    }
+    _switch_cursors(self);
+    dt_control_queue_redraw_center();
+  }
 }
 
 static gboolean dt_iop_tonecurve_leave_notify(GtkWidget *widget,
@@ -1707,6 +2154,32 @@ static gboolean dt_iop_tonecurve_draw(GtkWidget *widget,
 
     cairo_arc(cr, x * width, -y * height, DT_PIXEL_APPLY_DPI(6), 0, 2. * M_PI);
     cairo_fill(cr);
+  }
+
+  // draw vertical cursor line for hover+scroll
+  if(g->hover_editing && g->cursor_valid)
+  {
+    float norm = g->cursor_abscissa;
+    float pos_x = to_log(norm, g->loglogscale, ch, g->semilog, 0);
+    float out_norm = _tonecurve_curve_value(self, ch, norm);
+    float pos_y = to_log(out_norm, g->loglogscale, ch, g->semilog, 1);
+    pos_x = CLAMP(pos_x, 0.0f, 1.0f);
+    pos_y = CLAMP(pos_y, 0.0f, 1.0f);
+    if(pos_x > 0.0f && pos_x < 1.0f)
+    {
+      cairo_save(cr);
+      cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+      cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2));
+      set_color(cr, darktable.bauhaus->graph_fg);
+      cairo_move_to(cr, pos_x * width, 0.0);
+      cairo_line_to(cr, pos_x * width, -height);
+      cairo_stroke(cr);
+      float yy = pos_y * height;
+      cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(3));
+      cairo_arc(cr, pos_x * width, -yy, DT_PIXEL_APPLY_DPI(5), 0, 2.0 * M_PI);
+      cairo_stroke(cr);
+      cairo_restore(cr);
+    }
   }
 
   cairo_destroy(cr);

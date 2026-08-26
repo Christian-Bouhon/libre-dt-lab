@@ -67,10 +67,12 @@
 #include "common/imagebuf.h"
 #include "common/math.h"
 #include "common/matrices.h"
+#include "control/control.h"
 #include "dtgtk/paint.h"
 #include "develop/imageop.h"
 #include "develop/tiling.h"
 #include "develop/imageop_gui.h"
+#include "develop/preview_data.h"
 #include "gui/accelerators.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/draw.h"
@@ -333,6 +335,18 @@ typedef struct dt_iop_3dcf_gui_data_t
      the displayed image actually changed. 0 (NO_IMGID) on the first call is
      distinct from any real id, so the initial reset happens naturally. */
   dt_imgid_t last_imgid;
+
+  /* === Hover service (crosshair on the contrast slider) ===
+     Caches the module *input* pixel (Rec.2020 D50 RGB) under the cursor on
+     the preview pipe; mouse_moved / scrolled / gui_post_expose read it back
+     to drive the local "balance" adjustment and the on-canvas cursor. */
+  dt_preview_data_t pd;
+  gboolean hover_editing;
+  gboolean cursor_valid;
+  gboolean reprocess_pending;
+  float cursor_pos_x, cursor_pos_y; /* normalized [0,1] pointer position */
+  float in_rgb[3];                  /* module input RGB under the cursor */
+  float y_scene;                    /* scene luma (Rec.2020 D50 Y) under the cursor */
 } dt_iop_3dcf_gui_data_t;
 
 /* Conversion matrices */
@@ -2291,6 +2305,29 @@ void tiling_callback(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   tiling->align = 1;
 }
 
+typedef struct _3dcf_preview_fill_t
+{
+  const float *src;
+  int ch;
+} _3dcf_preview_fill_t;
+
+/* Copies a sub-slice of each pixel (first 3 channels) into the 3-component
+   preview buffer used by the hover service (crosshair on the contrast
+   slider). Synchronously called from dt_preview_data_store() under the GUI
+   lock, so `src` only needs to be valid for the duration of that call. */
+static void _3dcf_fill_cb(void *const user_data, float *const buf, const size_t npixels)
+{
+  const _3dcf_preview_fill_t *const f = (_3dcf_preview_fill_t *)user_data;
+  const float *const src = f->src;
+  const int ch = f->ch;
+  for(size_t k = 0; k < npixels / 3; k++)
+  {
+    buf[k * 3 + 0] = src[k * ch + 0];
+    buf[k * 3 + 1] = src[k * ch + 1];
+    buf[k * 3 + 2] = src[k * ch + 2];
+  }
+}
+
 void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
              const void *const ivoid, void *const ovoid,
              const dt_iop_roi_t *const roi_in, const dt_iop_roi_t *const roi_out)
@@ -2549,6 +2586,17 @@ void process(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     free_gray_image(&base_orig_g);
     dt_free_align(guide_sanitized);
   }
+
+  /* Hover service: cache the module *input* pixel (RGB/RGBA) for the
+     crosshair readout, gated by the toggle and only on the preview pipe.
+     `in` stays valid for the duration of the synchronous store(). */
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  if(g && g->hover_editing && dt_pipe_is_preview(piece->pipe))
+  {
+    _3dcf_preview_fill_t f = { in, ch };
+    dt_preview_data_store(&g->pd, roi_out->width, roi_out->height, piece,
+                          _3dcf_fill_cb, (void *)&f);
+  }
 }
 
 #ifdef HAVE_OPENCL
@@ -2679,6 +2727,29 @@ int process_cl(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
     CLARG(dev_base));
   if(err != CL_SUCCESS) goto error;
 
+  /* Hover service: cache the module *input* pixel (RGBA) for the crosshair
+     readout, gated by the toggle and only on the preview pipe. The kernel
+     has finished (err == CL_SUCCESS), so reading dev_in back to the host is
+     safe; we only need one pixel's worth of context per redraw. */
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  if(g && g->hover_editing && dt_pipe_is_preview(piece->pipe))
+  {
+    const size_t npixels = (size_t)width * height;
+    float *host_pixout = dt_alloc_align_float(4 * npixels);
+    if(host_pixout)
+    {
+      const cl_int read_err = dt_opencl_read_buffer_from_device(
+        devid, host_pixout, dev_in, 0, 4 * npixels * sizeof(float), TRUE);
+      if(read_err == CL_SUCCESS)
+      {
+        _3dcf_preview_fill_t f = { host_pixout, 4 };
+        dt_preview_data_store(&g->pd, width, height, piece,
+                              _3dcf_fill_cb, (void *)&f);
+      }
+      dt_free_align(host_pixout);
+    }
+  }
+
 error:
   dt_opencl_release_mem_object(dev_lum);
   dt_opencl_release_mem_object(dev_base);
@@ -2797,17 +2868,18 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker,
     (combo_idx >= DT_ST_AUTO_CONTRASTY && combo_idx <= DT_ST_AUTO_SOFT)
     ? (dt_iop_st_auto_mode_t)combo_idx : DT_ST_AUTO_NEUTRAL;
 
-  /* Re-triggers if the picked value changed meaningfully (dragged to a new
-     area) OR the rendering preset changed (comparing contrasty/neutral/soft
-     on the SAME area without moving the picker) -- auto_requested_mode
-     holds the last mode actually sent, so this comparison doesn't
-     re-trigger needlessly when neither changed (e.g. echo calls). */
-  const float delta = fabsf(y - g->picked_grey_y_last_applied);
-  if(delta > 1e-4f || mode != g->auto_requested_mode)
-  {
-    g->picked_grey_y_last_applied = y;
-    _auto_request(self, mode);
-  }
+  /* Always re-run. _record_point_area() (gui/color_picker_proxy.c) already
+     gates this callback: it fires only when the sampled box/point moved OR
+     the picker was freshly re-armed (self->changed), and it resets
+     self->changed to FALSE before returning, so the reprocess triggered by
+     our own _auto_request() below never re-enters here (area unchanged,
+     flag cleared). The old value/mode guard therefore filtered out nothing
+     real and, worse, swallowed the re-arm case: re-invoking the pipette on
+     the SAME area produced no recompute, forcing the user to flip the
+     preset combobox to get a fresh calculation. An unconditional call
+     restores "re-arm = recompute" while keeping each drag sample live. */
+  g->picked_grey_y_last_applied = y;
+  _auto_request(self, mode);
 }
 
 void gui_reset(dt_iop_module_t *self)
@@ -3228,6 +3300,351 @@ cleanup:
   return FALSE;
 }
 
+/* ========================================================================
+   Hover service -- crosshair on the "contrast" slider
+   ========================================================================
+   While the compass-star quad on the "contrast" slider is active, the mouse
+   over the image drives a local "balance" adjustment. The crosshair marks a
+   scene tone (the luma under the cursor after SSTS+BT.1886), and the scroll
+   wheel glides the contrast pivot toward that tone while nudging the toe
+   power (shadows) or shoulder power (highlights) and the master contrast.
+
+   The module *input* pixel under the cursor is cached by process() /
+   process_cl() via dt_preview_data (see _3dcf_fill_cb), gated on the toggle
+   so there is zero overhead while the service is off. */
+
+static gboolean in_mask_editing(const dt_iop_module_t *self)
+{
+  const dt_develop_t *dev = self->dev;
+  return dev->form_gui && dev->form_visible;
+}
+
+/* Scene luma (Rec.2020 D50 Y) of the module input pixel under the cursor.
+   The input matrix rows 3-5 of dt_st_rec2020_d50_to_xyz are the Y row. */
+static float _hover_scene_luma(const float rgb[3])
+{
+  return (float)(dt_st_rec2020_d50_to_xyz[3] * rgb[0]
+               + dt_st_rec2020_d50_to_xyz[4] * rgb[1]
+               + dt_st_rec2020_d50_to_xyz[5] * rgb[2]);
+}
+
+/* Display tone of a scene value: SSTS + BT.1886 only (no contrast S-curve),
+   clamped to [0,1]. This is the "baseline" level a neutral rendering would
+   show, and the level the crosshair marks on the image. */
+static float _hover_display_tone(const dt_st_context_t *ctx, const float y_scene)
+{
+  return CLAMP(
+    powf(fmaxf(dt_st_ssts_fwd(&ctx->ssts, y_scene * ctx->exposure_factor)
+                 / (float)ctx->ssts.n_r, 0.0f), 1.0f / 2.4f),
+    0.0f, 1.0f);
+}
+
+/* Hide the native cursor and rely on the custom indicator drawn by
+   gui_post_expose while hover editing is active and a valid reading is
+   available; fall back to the default cursor otherwise. */
+static void _switch_cursors(dt_iop_module_t *self)
+{
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  if(!g || !self->dev->gui_attached) return;
+
+  if(in_mask_editing(self) || dt_iop_canvas_not_sensitive(self->dev))
+  {
+    dt_control_change_cursor("default");
+    return;
+  }
+
+  if(!self->expanded) return;
+
+  if(g->hover_editing && g->cursor_valid)
+    dt_control_change_cursor("none");
+  else
+    dt_control_change_cursor("default");
+}
+
+/* Crosshair toggle (quad on the contrast slider): enable/disable the hover +
+   scroll service. Turning it on kicks a preview reprocess so the under-cursor
+   buffer is filled immediately and deactivates any active color picker. */
+static void _hover_toggle_callback(GtkWidget *quad, dt_iop_module_t *self)
+{
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  if(!g) return;
+
+  g->hover_editing = dt_bauhaus_widget_get_quad_active(quad);
+  g->cursor_valid = FALSE;
+  g->reprocess_pending = FALSE;
+
+  if(g->hover_editing)
+  {
+    /* Deactivate any active color picker: the module picker AND the
+       global/primary picker (module == NULL). An active primary pipette
+       keeps dt_iop_color_picker_is_visible() true and therefore blocks the
+       mouse_moved dispatch, so it must be cleared here on the first toggle. */
+    dt_iop_color_picker_reset(self, FALSE);
+    dt_iop_color_picker_reset(NULL, FALSE);
+    dt_preview_data_invalidate(&g->pd);
+    dt_dev_reprocess_preview(self->dev);
+  }
+  else
+  {
+    dt_preview_data_invalidate(&g->pd);
+    dt_control_change_cursor("default");
+  }
+
+  dt_control_queue_redraw_center();
+}
+
+/* mouse_moved -- refresh the cached reading: read the module input pixel
+   under the cursor and update the cached scene luma + input RGB. */
+int mouse_moved(dt_iop_module_t *self,
+                const float pzx,
+                const float pzy,
+                const double pressure,
+                const int which,
+                const float zoom_scale)
+{
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing) return 0;
+
+  if(in_mask_editing(self))
+  {
+    g->cursor_valid = FALSE;
+    _switch_cursors(self);
+    return 0;
+  }
+
+  /* read the normalized module-input RGB under the cursor */
+  float rgb[3] = { 0.0f };
+  gboolean have = FALSE;
+  if(g->pd.buf && g->pd.width > 0 && g->pd.height > 0)
+  {
+    const int cx = CLAMP((int)(pzx * g->pd.width),  0, (int)g->pd.width  - 1);
+    const int cy = CLAMP((int)(pzy * g->pd.height), 0, (int)g->pd.height - 1);
+    dt_iop_gui_enter_critical_section(self);
+    const float *buf = g->pd.buf;
+    if(buf)
+    {
+      const size_t idx = (size_t)cy * g->pd.width + cx;
+      rgb[0] = buf[3 * idx + 0];
+      rgb[1] = buf[3 * idx + 1];
+      rgb[2] = buf[3 * idx + 2];
+      have = TRUE;
+    }
+    dt_iop_gui_leave_critical_section(self);
+  }
+
+  if(!have)
+  {
+    g->cursor_valid = FALSE;
+    if(!g->reprocess_pending)
+    {
+      g->reprocess_pending = TRUE;
+      dt_dev_reprocess_preview(self->dev);
+    }
+    _switch_cursors(self);
+    return 0;
+  }
+
+  g->cursor_pos_x = pzx;
+  g->cursor_pos_y = pzy;
+  memcpy(g->in_rgb, rgb, sizeof(rgb));
+  g->y_scene = _hover_scene_luma(rgb);
+
+  g->cursor_valid = dt_preview_data_is_fresh(&g->pd);
+  if(g->cursor_valid)
+  {
+    g->reprocess_pending = FALSE;
+    dt_control_queue_redraw_center();
+  }
+  else if(!g->reprocess_pending)
+  {
+    g->reprocess_pending = TRUE;
+    dt_dev_reprocess_preview(self->dev);
+  }
+  _switch_cursors(self);
+  return 0;
+}
+
+/* mouse_leave -- invalidate the reading when the mouse leaves the image. */
+int mouse_leave(dt_iop_module_t *self)
+{
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing) return 0;
+
+  g->cursor_valid = FALSE;
+  _switch_cursors(self);
+  gtk_widget_queue_draw(GTK_WIDGET(g->graph));
+  dt_control_queue_redraw_center();
+
+  return 1;
+}
+
+/* scrolled -- local "balance" adjustment: scroll-up pulls the contrast pivot
+   toward the picked tone (brighten), scroll-down pushes it back toward the
+   mirror tone (darken) -- fully reversible, unlike a one-way attractor. The
+   region-specific toe/shoulder power nudges and the master contrast gets an
+   impulse. Up = brighten. */
+int scrolled(dt_iop_module_t *self,
+             const float x,
+             const float y,
+             const int up,
+             const uint32_t state)
+{
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing) return 0;
+
+  /* read the normalized module-input RGB under the cursor */
+  float rgb[3] = { 0.0f };
+  gboolean have = FALSE;
+  if(g->pd.buf && g->pd.width > 0 && g->pd.height > 0)
+  {
+    const int cx = CLAMP((int)(x * g->pd.width),  0, (int)g->pd.width  - 1);
+    const int cy = CLAMP((int)(y * g->pd.height), 0, (int)g->pd.height - 1);
+    have = dt_preview_data_get(&g->pd, cx, cy, 0, &rgb[0]);
+    if(have)
+    {
+      dt_preview_data_get(&g->pd, cx, cy, 1, &rgb[1]);
+      dt_preview_data_get(&g->pd, cx, cy, 2, &rgb[2]);
+    }
+  }
+  if(!have) return 0;
+
+  const float direction = up ? 1.0f : -1.0f;
+
+  dt_iop_3dcf_params_t *p = self->params;
+  const float y_scene = _hover_scene_luma(rgb);
+
+  g->cursor_pos_x = x;
+  g->cursor_pos_y = y;
+  memcpy(g->in_rgb, rgb, sizeof(rgb));
+  g->y_scene = y_scene;
+  g->cursor_valid = TRUE;
+
+  /* Current effective fulcrum (ctx->contrast_pivot = 1 - p->contrast_pivot,
+     in the display/y_tm domain) and the display tone of the picked level
+     (SSTS + BT.1886, no contrast S-curve). */
+  dt_st_context_t ctx;
+  st_compute_context(p, &ctx);
+  const float pivot = ctx.contrast_pivot;
+  const float ys_disp = _hover_display_tone(&ctx, y_scene);
+
+  /* 1) proximity-weighted balance: each control's per-click step is
+     proportional to how close the picked tone is to that control's node
+     (toe node = 0, shoulder node = 1, pivot node = the current fulcrum), so
+     the nearest node always moves the fastest. The weights are the SQUARED
+     proximities, renormalized (w_pivot + w_region = 1), which widens the
+     gap between the pivot and the toe/shoulder control: at the fulcrum
+     (t == pivot, pivot 0.5) this gives pivot 0.024 / region 0.006 per click
+     instead of the linear 0.020 / 0.010. The fixed per-click budget A keeps
+     the total correction per click unchanged. */
+  const float prox_pivot = 1.0f - fabsf(ys_disp - pivot);
+  const float prox_region = (ys_disp < pivot) ? (1.0f - ys_disp) : ys_disp;
+  const float inv_sum = 1.0f / (prox_pivot * prox_pivot + prox_region * prox_region + 1e-6f);
+  const float w_pivot = prox_pivot * prox_pivot * inv_sum;
+  const float w_region = prox_region * prox_region * inv_sum;
+  const float A = 0.03f;
+
+  /* The pivot slider always follows the scroll direction (up -> rises,
+     down -> falls), and the region control keeps its validated sign:
+     toe_power drops to brighten shadows, shoulder_power rises to brighten
+     highlights. */
+  p->contrast_pivot = CLAMP(p->contrast_pivot + A * w_pivot * direction, 0.01f, 0.99f);
+  if(ys_disp < pivot)
+    p->toe_power = CLAMP(p->toe_power - A * w_region * direction, 0.25f, 3.0f);
+  else
+    p->shoulder_power = CLAMP(p->shoulder_power + A * w_region * direction, 0.25f, 3.0f);
+
+  /* 2) master contrast impulse (not node-weighted) */
+  p->contrast = CLAMP(p->contrast + 0.004f * direction, 0.25f, 4.25f);
+
+  /* Sync the sliders under the GUI-update guard so no value-changed fires:
+     these sliders carry a 50/100 display factor, so without the guard
+     _slider_value_change() would overwrite each param with (value / factor),
+     crushing them to their minimum on the very first scroll, and every set
+     would queue its own history item. Same guard as the auto-adjust callback
+     above; dt_bauhaus_slider_set() takes the raw param as its range value. */
+  DT_ENTER_GUI_UPDATE();
+  dt_bauhaus_slider_set(g->contrast, p->contrast);
+  dt_bauhaus_slider_set(g->contrast_pivot, p->contrast_pivot);
+  if(ys_disp < pivot)
+    dt_bauhaus_slider_set(g->toe_power, p->toe_power);
+  else
+    dt_bauhaus_slider_set(g->shoulder_power, p->shoulder_power);
+  DT_LEAVE_GUI_UPDATE();
+
+  /* one history step for the whole impulse */
+  dt_dev_add_history_item(self->dev, self, TRUE);
+  gtk_widget_queue_draw(GTK_WIDGET(g->graph));
+  dt_control_queue_redraw_center();
+
+  return 1;
+}
+
+/* gui_post_expose -- draw the on-canvas cursor: a crosshair frame with a
+   wedge showing the tone-mapping delta, an inner dot with the module input
+   color, an outer dot with the tone-mapped output color, and a text readout
+   giving the picked scene level in EV plus the resulting output / delta. */
+void gui_post_expose(dt_iop_module_t *self,
+                     cairo_t *cr,
+                     const float width,
+                     const float height,
+                     const float pointerx,
+                     const float pointery,
+                     const float zoom_scale)
+{
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing || !g->cursor_valid) return;
+
+  if(in_mask_editing(self)) return;
+
+  float bg_rgb[3];
+  float frame_color[3];
+  dt_draw_backbuf_contrast(self->dev, g->cursor_pos_x, g->cursor_pos_y,
+                           bg_rgb, frame_color, 16.0f / (zoom_scale * width));
+
+  const float cx = g->cursor_pos_x * width;
+  const float cy = g->cursor_pos_y * height;
+
+  /* current tone context from the live params */
+  dt_st_context_t ctx;
+  st_compute_context((dt_iop_3dcf_params_t *)self->params, &ctx);
+
+  const float y_scene = g->y_scene;
+
+  /* baseline = SSTS + BT.1886 only (neutral rendering) */
+  const float base = _hover_display_tone(&ctx, y_scene);
+
+  /* full tone-mapped output (with contrast S-curve + gamma) */
+  float y_tm = dt_st_compute_y_tm(y_scene, &ctx);
+  if(ctx.gamma != 0.0f)
+    y_tm = powf(fminf(fmaxf(y_tm, 0.0f), 1.0f), ctx.gamma_power);
+  y_tm = fminf(fmaxf(y_tm, 0.0f), 1.0f);
+
+  /* readout: only the resulting output tone in %, drawn in the pill to the
+     right of the pointer by dt_draw_correction_cursor() */
+  char text[64];
+  snprintf(text, sizeof(text), "%.1f%%", y_tm * 100.0f);
+
+  const float correction_norm = CLAMP(y_tm - base, -1.0f, 1.0f);
+
+  /* in/out colors: inner dot = module input RGB, outer dot = tone-mapped
+     (scaled) version so the brighten/darken direction is visible */
+  float in_color[3]  = { 0.0f };
+  float out_color[3] = { 0.0f };
+  for(int c = 0; c < 3; c++)
+  {
+    in_color[c]  = CLAMP(g->in_rgb[c], 0.0f, 1.0f);
+    out_color[c] = CLAMP(g->in_rgb[c] * (y_tm / fmaxf(base, 1e-6f)), 0.0f, 1.0f);
+  }
+
+  dt_draw_correction_cursor(cr, cx, cy, zoom_scale, correction_norm,
+                            frame_color,
+                            in_color, FALSE,
+                            out_color, FALSE,
+                            text);
+
+  gtk_widget_queue_draw(GTK_WIDGET(g->graph));
+}
+
 /* Chroma link padlock: when active, X and Z axes track each other and the
    Z sliders are replaced by the X/Z balance slider. */
 static void _chroma_link_toggled(GtkWidget *quad, dt_iop_module_t *self)
@@ -3417,6 +3834,15 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->contrast,
     _("S-curve contrast pivoted at mid-gray. -100% = minimum contrast, \n"
       "0% = neutral, +100% = maximum. Negative values soften, positive values sharpen."));
+
+  /* Crosshair quad: enables the hover service to adjust the 4 contrast sliders
+     locally from the image (see the hover-service block above). */
+  dt_bauhaus_widget_set_quad(g->contrast, self, dtgtk_cairo_paint_compass_star,
+                             TRUE, _hover_toggle_callback,
+    _("Adjust the contrast sliders locally: activate, then move the mouse\n"
+      "over the image to pick a tone with the crosshair and scroll to set a\n"
+      "local balance (pivot follows the tone, toe/shoulder on the region,\n"
+      "contrast in impulses)."));
 
   g->contrast_pivot = dt_bauhaus_slider_from_params(self, "contrast_pivot");
   dt_bauhaus_slider_set_factor(g->contrast_pivot, 100.0f);
@@ -3645,18 +4071,26 @@ void gui_init(dt_iop_module_t *self)
       "selected primaries. sRGB/Rec. 709 is the narrowest, Rec. 2020 "
       "the widest (no clipping)."));
 
+  /* Hover service: expose the on-canvas cursor and allocate the preview
+     buffer that process()/process_cl() fill with the module input pixels. */
+  self->so->gui_post_expose = gui_post_expose;
+  dt_preview_data_alloc(&g->pd, self);
+  g->pd.components = 3;
+
   self->widget = main_vbox;
 }
 
-/* NOTE: no gui_cleanup() is needed. IOP_GUI_ALLOC() allocates gui_data via
-   dt_calloc_aligned() -> dt_alloc_aligned(), which on Windows is
-   _aligned_malloc() (and posix_memalign() on Linux/macOS). The framework
-   already frees it for us in dt_iop_gui_cleanup_module() with the matching
-   dt_free_align(). Freeing it here with free()/g_free() would release an
-   _aligned_malloc() block with the wrong deallocator -- heap corruption
-   (c0000374) at module load on Windows. The gui_data struct only holds
-   GtkWidget* and an embedded collapsible_section (no separately-owned
-   resources), so the default widget destruction is sufficient. */
+/* The framework frees gui_data itself in dt_iop_gui_cleanup_module() with the
+   matching dt_free_align(), so we must NOT free()/g_free() it here (that would
+   release an _aligned_malloc() block with the wrong deallocator -- heap
+   corruption (c0000374) at module load on Windows). However, the hover-service
+   preview buffer (g->pd) is a separately-owned resource allocated by
+   dt_preview_data_alloc(), so it has to be released here. */
+void gui_cleanup(dt_iop_module_t *self)
+{
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  if(g) dt_preview_data_free(&g->pd);
+}
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
