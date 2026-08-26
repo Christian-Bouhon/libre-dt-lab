@@ -3530,15 +3530,17 @@ int scrolled(dt_iop_module_t *self,
   /* 1) proximity-weighted balance: each control's per-click step is
      proportional to how close the picked tone is to that control's node
      (toe node = 0, shoulder node = 1, pivot node = the current fulcrum), so
-     the nearest node always moves the fastest. The weights are relative
-     (w_pivot + w_region = 1) and share a fixed per-click budget A, so the
-     overall feel is unchanged -- at the fulcrum (t == pivot) this reduces
-     exactly to the previous pivot 0.02 / region 0.01 per click. */
+     the nearest node always moves the fastest. The weights are the SQUARED
+     proximities, renormalized (w_pivot + w_region = 1), which widens the
+     gap between the pivot and the toe/shoulder control: at the fulcrum
+     (t == pivot, pivot 0.5) this gives pivot 0.024 / region 0.006 per click
+     instead of the linear 0.020 / 0.010. The fixed per-click budget A keeps
+     the total correction per click unchanged. */
   const float prox_pivot = 1.0f - fabsf(ys_disp - pivot);
   const float prox_region = (ys_disp < pivot) ? (1.0f - ys_disp) : ys_disp;
-  const float inv_sum = 1.0f / (prox_pivot + prox_region + 1e-6f);
-  const float w_pivot = prox_pivot * inv_sum;
-  const float w_region = prox_region * inv_sum;
+  const float inv_sum = 1.0f / (prox_pivot * prox_pivot + prox_region * prox_region + 1e-6f);
+  const float w_pivot = prox_pivot * prox_pivot * inv_sum;
+  const float w_region = prox_region * prox_region * inv_sum;
   const float A = 0.03f;
 
   /* The pivot slider always follows the scroll direction (up -> rises,
