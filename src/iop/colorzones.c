@@ -2890,8 +2890,11 @@ static void _hover_toggle_callback(GtkToggleButton *togglebutton,
 
   if(g->hover_editing)
   {
-    // an active pipette would keep grabbing the mouse over the image
+    // an active pipette would keep grabbing the mouse over the image;
+    // also clear the global/primary picker (module == NULL) because it keeps
+    // dt_iop_color_picker_is_visible() true and blocks the mouse_moved dispatch
     dt_iop_color_picker_reset(self, FALSE);
+    dt_iop_color_picker_reset(NULL, FALSE);
     dt_preview_data_invalidate(&g->pd);
     dt_dev_reprocess_preview(self->dev);
   }

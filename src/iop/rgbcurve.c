@@ -1859,9 +1859,10 @@ static void _rgbcurve_fill_cb(void *const user_data,
                               float *const buf,
                               const size_t npixels)
 {
+  // npixels covers components floats per pixel (3·width·height).
   const float *const src = (const float *)user_data;
   DT_OMP_FOR()
-  for(size_t k = 0; k < npixels; k++)
+  for(size_t k = 0; k < npixels / 3; k++)
   {
     buf[k * 3 + 0] = src[k * 4 + 0]; // R
     buf[k * 3 + 1] = src[k * 4 + 1]; // G
@@ -1994,7 +1995,12 @@ static void _hover_toggle_callback(GtkToggleButton *togglebutton,
 
   if(g->hover_editing)
   {
+    // deactivate any active color picker: the module picker AND the
+    // global/primary picker (module == NULL).  An active primary pipette
+    // keeps dt_iop_color_picker_is_visible() true and therefore blocks the
+    // mouse_moved dispatch, so it must be cleared here on the first toggle.
     dt_iop_color_picker_reset(self, FALSE);
+    dt_iop_color_picker_reset(NULL, FALSE);
     dt_preview_data_invalidate(&g->pd);
     dt_dev_reprocess_preview(self->dev);
   }
