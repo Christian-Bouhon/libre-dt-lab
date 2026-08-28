@@ -2872,6 +2872,22 @@ static void _switch_cursors(dt_iop_module_t *self)
     dt_control_change_cursor("default");
 }
 
+/* _colorpicker_toggle_callback — a color picker (pipette) and the hover
+ * crosshair are mutually exclusive: they would fight for the mouse over the
+ * image.  Activating any pipette therefore fully deactivates the hover service
+ * (unchecks the crosshair and clears hover_editing) so the icon state matches
+ * reality and re-clicking the crosshair re-arms the service cleanly. */
+static void _colorpicker_toggle_callback(GtkToggleButton *togglebutton,
+                                         gpointer user_data)
+{
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_colorzones_gui_data_t *g = self->gui_data;
+  if(!g) return;
+
+  if(gtk_toggle_button_get_active(togglebutton) && g->hover_editing)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->hover_toggle), FALSE);
+}
+
 /* _hover_toggle_callback — crosshair toggle: enable/disable the hover+scroll
  * service.  Turning it on kicks a preview reprocess so the under-cursor
  * buffer is filled immediately and deactivates any active color picker
@@ -3241,6 +3257,13 @@ void gui_init(dt_iop_module_t *self)
                                 "shift+drag to create a negative curve"));
   dt_action_define_iop(self, N_("pickers"), N_("create curve"),
                        g->colorpicker_set_values, &dt_action_def_toggle);
+  // a pipette and the hover crosshair are mutually exclusive: activating a
+  // pipette fully deactivates the hover service (and vice versa) so the icon
+  // states never desync.
+  g_signal_connect(G_OBJECT(g->colorpicker), "toggled",
+                   G_CALLBACK(_colorpicker_toggle_callback), self);
+  g_signal_connect(G_OBJECT(g->colorpicker_set_values), "toggled",
+                   G_CALLBACK(_colorpicker_toggle_callback), self);
 
   // hover+scroll on image (crosshair toggle)
   g->hover_toggle = dtgtk_togglebutton_new(dtgtk_cairo_paint_compass_star, 0, NULL);

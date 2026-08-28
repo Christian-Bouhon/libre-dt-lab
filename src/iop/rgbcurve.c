@@ -102,6 +102,11 @@ typedef struct dt_iop_rgbcurve_gui_data_t
   gboolean hover_editing;
   gboolean cursor_valid;
   gboolean reprocess_pending;
+  // middle-grey compensation is auto-enabled while the hover service is active
+  // so the curve is read/written in a perceptual scale (good low-light response).
+  // This remembers if *we* flipped the checkbox, so the user's original setting
+  // is restored when the crosshair is turned off again.
+  gboolean hover_auto_compensate;
   float cursor_abscissa;
   float cursor_pos_x, cursor_pos_y;
 } dt_iop_rgbcurve_gui_data_t;
@@ -778,6 +783,9 @@ static void _hover_toggle_callback(GtkToggleButton *togglebutton,
                                    gpointer user_data);
 
 static void _switch_cursors(dt_iop_module_t *self);
+
+static void _colorpicker_toggle_callback(GtkToggleButton *togglebutton,
+                                         gpointer user_data);
 
 static gboolean _area_draw_callback(GtkWidget *widget,
                                     cairo_t *crf,
@@ -1552,6 +1560,13 @@ void gui_init(dt_iop_module_t *self)
                                 "shift+drag to create a negative curve"));
   dt_action_define_iop(self, N_("pickers"), N_("create curve"),
                        g->colorpicker_set_values, &dt_action_def_toggle);
+  // a pipette and the hover crosshair are mutually exclusive: activating a
+  // pipette fully deactivates the hover service (and vice versa) so the icon
+  // states never desync.
+  g_signal_connect(G_OBJECT(g->colorpicker), "toggled",
+                   G_CALLBACK(_colorpicker_toggle_callback), self);
+  g_signal_connect(G_OBJECT(g->colorpicker_set_values), "toggled",
+                   G_CALLBACK(_colorpicker_toggle_callback), self);
 
   // hover+scroll on image (crosshair toggle)
   g->hover_toggle = dtgtk_togglebutton_new(dtgtk_cairo_paint_compass_star, 0, NULL);
@@ -1880,13 +1895,41 @@ static gboolean in_mask_editing(const dt_iop_module_t *self)
 
 /* _select_abscissa — map the normalized RGB stored in the preview buffer
  * onto the curve abscissa [0,1] of the active channel. */
-static float _select_abscissa(const dt_iop_rgbcurve_params_t *p,
+static float _select_abscissa(dt_iop_module_t *self,
                               const dt_iop_rgbcurve_gui_data_t *g,
                               const float rgb[3])
 {
-  const int ch = (p->curve_autoscale == DT_S_SCALE_MANUAL_RGB)
-                    ? (int)g->channel : DT_IOP_RGBCURVE_R;
-  return CLAMP(rgb[ch], 0.0f, 1.0f);
+  const dt_iop_rgbcurve_params_t *p = self->params;
+  const dt_iop_order_iccprofile_info_t *const work_profile
+      = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
+
+  // Compute the abscissa in the same (compensated) scale as the stored curve
+  // nodes, mirroring picker_scale(): luminance for AUTOMATIC_RGB, the active
+  // channel for MANUAL_RGB, then middle-grey compensation when enabled.  This
+  // keeps the hover node (and the drawn cursor) aligned with the tone under
+  // the pointer — the raw value would land far too low in the shadows.
+  float val;
+  if(p->curve_autoscale == DT_S_SCALE_MANUAL_RGB)
+  {
+    val = rgb[(int)g->channel];
+    if(p->compensate_middle_grey && work_profile)
+      val = dt_ioppr_compensate_middle_grey(val, work_profile);
+  }
+  else
+  {
+    const dt_aligned_pixel_t rgba = { rgb[0], rgb[1], rgb[2], 0.0f };
+    val = (work_profile)
+            ? dt_ioppr_get_rgb_matrix_luminance(rgba,
+                                                work_profile->matrix_in,
+                                                work_profile->lut_in,
+                                                work_profile->unbounded_coeffs_in,
+                                                work_profile->lutsize,
+                                                work_profile->nonlinearlut)
+            : dt_camera_rgb_luminance(rgba);
+    if(p->compensate_middle_grey && work_profile)
+      val = dt_ioppr_compensate_middle_grey(val, work_profile);
+  }
+  return CLAMP(val, 0.0f, 1.0f);
 }
 
 /* _rgbcurve_curve_value_at — value of curve ch at abscissa x, rebuilt
@@ -1925,12 +1968,16 @@ static gboolean _adjust_params_hover(dt_iop_module_t *self,
   dt_iop_rgbcurve_node_t *curve = p->curve_nodes[ch];
   const int bands = p->curve_num_nodes[ch];
 
-  // find the node nearest to the cursor abscissa, within a 1/16 window
+  // find the node nearest to the cursor abscissa, within a 1/16 window.
+  // Endpoint anchors (x ≈ 0 and x ≈ 1) are skipped so that hovering in the
+  // shadows or highlights creates/moves a localized node at the pointer
+  // instead of dragging the global bottom/top anchor of the curve.
   const float window = 1.0f / 16.0f;
   int node = -1;
   float best = window;
   for(int k = 0; k < bands; k++)
   {
+    if(curve[k].x < 1e-3f || curve[k].x > 1.0f - 1e-3f) continue;
     const float d = fabsf(_hover_node_dist(x0, curve[k].x));
     if(d < best)
     {
@@ -1943,8 +1990,11 @@ static gboolean _adjust_params_hover(dt_iop_module_t *self,
   if(node < 0)
   {
     if(bands >= DT_IOP_RGBCURVE_MAXNODES) return FALSE;
-    const float y0 = _rgbcurve_curve_value_at(p, ch, x0);
-    node = _add_node(curve, &p->curve_num_nodes[ch], x0, y0);
+    // keep the new node outside the anchor-skip zone so it can be selected by
+    // subsequent scrolls (avoids stacking duplicate nodes at the extremes)
+    const float ax = CLAMP(x0, 1e-3f, 1.0f - 1e-3f);
+    const float y0 = _rgbcurve_curve_value_at(p, ch, ax);
+    node = _add_node(curve, &p->curve_num_nodes[ch], ax, y0);
     if(node < 0) return FALSE;
   }
 
@@ -1979,6 +2029,44 @@ static void _switch_cursors(dt_iop_module_t *self)
     dt_control_change_cursor("default");
 }
 
+/* _hover_toggle_deactivate_callback — idle helper used to uncheck the hover
+ * crosshair.  It is deferred to the idle loop because a color picker is
+ * activated while darktable.gui->reset != 0 (inside DT_ENTER_GUI_UPDATE, see
+ * _color_picker_callback_button_press), and the checkbox revert that the
+ * crosshair OFF branch triggers would otherwise be swallowed by
+ * DT_GUARD_GUI_UPDATE: _iop_toggle_callback would return early and leave
+ * p->compensate_middle_grey stuck at TRUE.  Running here (reset == 0) lets the
+ * whole compensation revert go through the normal checkbox path. */
+static gboolean _hover_toggle_deactivate_callback(gpointer user_data)
+{
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_rgbcurve_gui_data_t *g = self->gui_data;
+  if(!g) return G_SOURCE_REMOVE;
+
+  if(g->hover_toggle && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->hover_toggle)))
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->hover_toggle), FALSE);
+
+  return G_SOURCE_REMOVE;
+}
+
+/* _colorpicker_toggle_callback — a color picker (pipette) and the hover
+ * crosshair are mutually exclusive: they would fight for the mouse over the
+ * image.  Activating any pipette therefore fully deactivates the hover service
+ * (unchecks the crosshair and clears hover_editing) so the icon state matches
+ * reality and re-clicking the crosshair re-arms the service cleanly.  The
+ * unchecking is deferred to the idle loop (see above) so it runs outside the
+ * picker's DT_ENTER_GUI_UPDATE guard. */
+static void _colorpicker_toggle_callback(GtkToggleButton *togglebutton,
+                                         gpointer user_data)
+{
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_rgbcurve_gui_data_t *g = self->gui_data;
+  if(!g) return;
+
+  if(gtk_toggle_button_get_active(togglebutton) && g->hover_editing)
+    g_idle_add(_hover_toggle_deactivate_callback, self);
+}
+
 /* _hover_toggle_callback — crosshair toggle: enable/disable the hover+scroll
  * service.  Turning it on kicks a preview reprocess so the under-cursor
  * buffer is filled immediately and deactivates any active color picker. */
@@ -1988,6 +2076,8 @@ static void _hover_toggle_callback(GtkToggleButton *togglebutton,
   dt_iop_module_t *self = (dt_iop_module_t *)user_data;
   dt_iop_rgbcurve_gui_data_t *g = self->gui_data;
   if(!g) return;
+
+  dt_iop_rgbcurve_params_t *p = self->params;
 
   g->hover_editing = gtk_toggle_button_get_active(togglebutton);
   g->cursor_valid = FALSE;
@@ -2001,11 +2091,39 @@ static void _hover_toggle_callback(GtkToggleButton *togglebutton,
     // mouse_moved dispatch, so it must be cleared here on the first toggle.
     dt_iop_color_picker_reset(self, FALSE);
     dt_iop_color_picker_reset(NULL, FALSE);
+
+    // The hover service reads/writes the curve in the same (perceptual,
+    // middle-grey compensated) scale as the stored nodes for precise shadow
+    // handling.  Auto-enable the compensation checkbox while the crosshair is
+    // active, remembering that we did so (hover_auto_compensate) so the user's
+    // original setting is restored when the service is turned off.  Flipping
+    // the widget runs the regular checkbox path (node conversion + history).
+    g->hover_auto_compensate = FALSE;
+    if(!p->compensate_middle_grey)
+    {
+      const dt_iop_order_iccprofile_info_t *const work_profile
+          = dt_ioppr_get_iop_work_profile_info(self, self->dev->iop);
+      if(work_profile != NULL)
+      {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->chk_compensate_middle_grey), TRUE);
+        g->hover_auto_compensate = p->compensate_middle_grey;
+      }
+    }
+
     dt_preview_data_invalidate(&g->pd);
     dt_dev_reprocess_preview(self->dev);
   }
   else
   {
+    // if we auto-enabled middle-grey compensation on activation, restore the
+    // user's previous setting now that the crosshair is off (respecting any
+    // manual toggle the user made while the service was active).
+    if(g->hover_auto_compensate)
+    {
+      g->hover_auto_compensate = FALSE;
+      if(p->compensate_middle_grey)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->chk_compensate_middle_grey), FALSE);
+    }
     dt_preview_data_invalidate(&g->pd);
     dt_control_change_cursor("default");
   }
@@ -2062,8 +2180,7 @@ int mouse_moved(dt_iop_module_t *self,
     return 0;
   }
 
-  const dt_iop_rgbcurve_params_t *p = self->params;
-  g->cursor_abscissa = _select_abscissa(p, g, rgb);
+  g->cursor_abscissa = _select_abscissa(self, g, rgb);
   g->cursor_pos_x = pzx;
   g->cursor_pos_y = pzy;
 
@@ -2138,14 +2255,14 @@ int scrolled(dt_iop_module_t *self,
   }
   if(!have) return 0;
 
-  const dt_iop_rgbcurve_params_t *p = self->params;
-  g->cursor_abscissa = _select_abscissa(p, g, rgb);
+  g->cursor_abscissa = _select_abscissa(self, g, rgb);
   g->cursor_pos_x = x;
   g->cursor_pos_y = y;
   g->cursor_valid = TRUE;
 
-  // step in curve coordinates; Ctrl for fine precision (÷10)
-  const float base_step = 0.001f;
+  // step in curve coordinates, aligned with tonecurve (1/250 = 0.004);
+  // Ctrl for fine precision (÷10)
+  const float base_step = 0.004f;
   const float step = dt_modifier_is(state, GDK_CONTROL_MASK) ? base_step * 0.1f : base_step;
   const float move = up ? +step : -step;
 
