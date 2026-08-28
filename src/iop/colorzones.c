@@ -2784,13 +2784,69 @@ static inline float _hover_node_dist(const gboolean periodic,
   return dx;
 }
 
-/* _adjust_params_hover — snap the cursor abscissa to the nearest of the 8
- * HSL bands (red/orange/yellow/green/aqua/blue/purple/magenta, exactly like
- * the color-zones keyboard shortcuts) and move the node that controls that
- * band.  If no existing node is close enough to the band, a node is first
- * added at the band position with the current curve value as its initial y
- * (so nothing jumps), then scrolling adjusts it.  The periodic V1 hue
- * channel keeps its boundary nodes mirror-locked. */
+/* Gaussian sigma (in hue degrees) of the hover+scroll adjustment, matching
+ * the colorequal service.  Converted to normalized abscissa units (35°/360°)
+ * so it maps exactly onto the periodic hue curve and gives a consistent
+ * relative width on the L/C curves. */
+#define DT_IOP_COLORZONES_GAUSS_SIGMA_DEG 35.0f
+
+/* _gaussian_weight — weight of a node given its normalized abscissa distance
+ * from the cursor: 1.0 at center, Gaussian decay with
+ * sigma = 35°/360° of the full [0,1] range (i.e. 35° on the hue curve). */
+static inline float _gaussian_weight(const float dist_abscissa)
+{
+  const float sigma = DT_IOP_COLORZONES_GAUSS_SIGMA_DEG / 360.0f;
+  const float inv2s2 = 1.0f / (2.0f * sigma * sigma);
+  return expf(-(dist_abscissa * dist_abscissa) * inv2s2);
+}
+
+/* _create_hsl_nodes — when the hover service is switched on, make sure the 8
+ * HSL band nodes (x = k/8, exactly like the color-zones keyboard shortcuts)
+ * exist on all three curves (L, C, h).  Missing nodes are added at the
+ * current curve value so the curve does not jump; nodes already sitting
+ * within the shortcuts' 1/16 window are left untouched.  Returns TRUE if at
+ * least one node was added. */
+static gboolean _create_hsl_nodes(dt_iop_module_t *self)
+{
+  dt_iop_colorzones_params_t *p = self->params;
+  gboolean added = FALSE;
+
+  for(int c = 0; c < DT_IOP_COLORZONES_MAX_CHANNELS; c++)
+  {
+    dt_iop_colorzones_node_t *curve = p->curve[c];
+
+    for(int b = 0; b < DT_IOP_COLORZONES_BANDS; b++)
+    {
+      const float x = (float)b / DT_IOP_COLORZONES_BANDS;
+
+      // skip if a node already sits within the shortcut window of the band
+      gboolean close_enough = FALSE;
+      for(int k = 0; k < p->curve_num_nodes[c]; k++)
+      {
+        if(fabsf(curve[k].x - x) <= 1.f / 16.f)
+        {
+          close_enough = TRUE;
+          break;
+        }
+      }
+      if(close_enough) continue;
+
+      const float y = _colorzones_curve_value_at(p, c, x);
+      if(_add_node(curve, &p->curve_num_nodes[c], x, y) >= 0) added = TRUE;
+    }
+  }
+
+  return added;
+}
+
+/* _adjust_params_hover — colorequal-style Gaussian adjustment on the active
+ * channel: every node receives a fraction of the scroll move weighted by a
+ * Gaussian (sigma = 35°) centered on the cursor abscissa, so the closest
+ * node moves most and neighbours fade out smoothly with no dead zones.
+ * Distances are circular for the periodic V1 hue channel (so the boundary
+ * nodes at 0°/360° are weighted identically, keeping the mirror-lock
+ * consistent) and linear for the L/C curves.  Nodes farther than ~3σ are
+ * skipped. */
 static gboolean _adjust_params_hover(dt_iop_module_t *self,
                                      dt_iop_colorzones_params_t *p,
                                      dt_iop_colorzones_gui_data_t *g,
@@ -2801,51 +2857,31 @@ static gboolean _adjust_params_hover(dt_iop_module_t *self,
   dt_iop_colorzones_node_t *curve = p->curve[ch];
   const gboolean periodic = (p->channel == DT_IOP_COLORZONES_h
                              && p->splines_version == DT_IOP_COLORZONES_SPLINES_V1);
-  const int max_bands = DT_IOP_COLORZONES_BANDS;
-
-  // snap to the nearest of the 8 HSL bands (position in [0,1))
-  int band = (int)(x0 * max_bands + 0.5f);
-  band = CLAMP(band, 0, max_bands - 1);
-  const float xb = (float)band / max_bands;
-
   const int bands = p->curve_num_nodes[ch];
 
-  // find the node nearest to the band, within the same 1/16 window as the
-  // keyboard shortcuts (circular distance for the periodic hue channel)
-  const float window = 1.0f / 16.0f;
-  int node = -1;
-  float best = window;
+  gboolean changed = FALSE;
+
   for(int k = 0; k < bands; k++)
   {
-    const float d = fabsf(_hover_node_dist(periodic, xb, curve[k].x));
-    if(d < best)
+    const float dist = fabsf(_hover_node_dist(periodic, x0, curve[k].x));
+    const float weight = _gaussian_weight(dist);
+    if(weight < 0.01f) continue; // negligible contribution
+
+    const float y = CLAMP(curve[k].y + move * weight, 0.0f, 1.0f);
+    if(y != curve[k].y)
     {
-      best = d;
-      node = k;
+      curve[k].y = y;
+      changed = TRUE;
     }
   }
 
-  // no node close enough to the band: add one so scrolling has an effect
-  if(node < 0)
+  if(changed)
   {
-    if(bands >= DT_IOP_COLORZONES_MAXNODES) return FALSE;
-    const float y0 = _colorzones_curve_value_at(p, ch, xb);
-    node = _add_node(curve, &p->curve_num_nodes[ch], xb, y0);
-    if(node < 0) return FALSE;
+    dt_dev_add_history_item(darktable.develop, self, TRUE);
+    gtk_widget_queue_draw(GTK_WIDGET(g->area));
   }
 
-  // apply the move; the first/last nodes of the periodic hue channel are
-  // mirror-locked
-  const int nbands = p->curve_num_nodes[ch];
-  const float y = CLAMP(curve[node].y + move, 0.0f, 1.0f);
-  curve[node].y = y;
-  if(periodic && (node == 0 || node == nbands - 1))
-    curve[nbands - 1 - node].y = y;
-
-  dt_dev_add_history_item(darktable.develop, self, TRUE);
-  gtk_widget_queue_draw(GTK_WIDGET(g->area));
-
-  return TRUE;
+  return changed;
 }
 
 /* _switch_cursors — hide the native cursor and rely on the custom indicator
@@ -2911,6 +2947,15 @@ static void _hover_toggle_callback(GtkToggleButton *togglebutton,
     // dt_iop_color_picker_is_visible() true and blocks the mouse_moved dispatch
     dt_iop_color_picker_reset(self, FALSE);
     dt_iop_color_picker_reset(NULL, FALSE);
+
+    // make sure the 8 HSL band nodes exist on all three curves so the
+    // Gaussian hover adjustment has nodes to act on (like colorequal)
+    if(_create_hsl_nodes(self))
+    {
+      dt_dev_add_history_item(self->dev, self, TRUE);
+      gtk_widget_queue_draw(GTK_WIDGET(g->area));
+    }
+
     dt_preview_data_invalidate(&g->pd);
     dt_dev_reprocess_preview(self->dev);
   }
@@ -3272,8 +3317,11 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text
     (g->hover_toggle,
      _("adjust the curves directly on the image\n"
+       "activating creates the 8 HSL nodes on the L, C and h curves\n"
        "move the mouse over the image and use the scroll wheel\n"
-       "a node is added automatically at the nearest color band"));
+       "scroll adjusts the active channel's nodes around the cursor hue,\n"
+       "Gaussian-weighted like the color equalizer (35°)\n"
+       "ctrl+scroll for fine steps"));
   dt_action_define_iop(self, N_("pickers"), N_("adjust on image"),
                        g->hover_toggle, &dt_action_def_toggle);
   g_signal_connect(G_OBJECT(g->hover_toggle), "toggled",
