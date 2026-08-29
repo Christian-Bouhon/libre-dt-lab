@@ -514,15 +514,17 @@ static inline int _add_node(dt_iop_rgbcurve_node_t *curve_nodes,
   return selected;
 }
 
-static inline int _add_node_from_picker
+/* _picker_val — map a picked RGB colour onto the abscissa scale in which the
+ * curve nodes are stored: luminance for AUTOMATIC_RGB, the active channel for
+ * MANUAL_RGB, then middle-grey compensation when enabled.  Mirror of
+ * picker_scale() / _select_abscissa() so the picker lands on the same
+ * (perceptual) scale as the stored anchors. */
+static inline float _picker_val
   (dt_iop_rgbcurve_params_t *p,
    const float *const in,
-   const float increment,
    const int ch,
    const dt_iop_order_iccprofile_info_t *const work_profile)
 {
-  float x = 0.f;
-  float y = 0.f;
   float val = 0.f;
 
   if(p->curve_autoscale == DT_S_SCALE_AUTOMATIC_RGB)
@@ -538,12 +540,51 @@ static inline int _add_node_from_picker
     val = in[ch];
 
   if(p->compensate_middle_grey && work_profile)
-    y = x = dt_ioppr_compensate_middle_grey(val, work_profile);
-  else
-    y = x = val;
+    val = dt_ioppr_compensate_middle_grey(val, work_profile);
 
-  x = CLIP(x - increment);
-  y = CLIP(y + increment);
+  return val;
+}
+
+/* _picker_valid_x — abscissa a picker node may use: strictly inside (0,1) and
+ * leaving room for the fixed (0,0)/(1,1) endpoint anchors (edge margin), so a
+ * node can never stack on an endpoint. */
+static inline float _picker_valid_x(const float x)
+{
+  return CLAMP(x, 2.0f * DT_IOP_RGBCURVE_MIN_X_DISTANCE,
+               1.0f - 2.0f * DT_IOP_RGBCURVE_MIN_X_DISTANCE);
+}
+
+/* _picker_can_add — TRUE when a node at abscissa x would keep at least
+ * DT_IOP_RGBCURVE_MIN_X_DISTANCE from every existing anchor.  In very low
+ * light min ≈ mean ≈ max sample to nearly the same abscissa; stacking
+ * duplicate anchors would degenerate the spline in the shadows, so those
+ * nodes are skipped instead. */
+static inline gboolean _picker_can_add(const dt_iop_rgbcurve_params_t *p,
+                                       const int ch,
+                                       const float x)
+{
+  for(int k = 0; k < p->curve_num_nodes[ch]; k++)
+    if(fabsf(p->curve_nodes[ch][k].x - x) <= DT_IOP_RGBCURVE_MIN_X_DISTANCE)
+      return FALSE;
+  return TRUE;
+}
+
+static inline int _add_node_from_picker
+  (dt_iop_rgbcurve_params_t *p,
+   const float *const in,
+   const float increment,
+   const int ch,
+   const dt_iop_order_iccprofile_info_t *const work_profile)
+{
+  const float val = _picker_val(p, in, ch, work_profile);
+
+  // band behaviour: the +/- increment (Ctrl/Shift) shifts the abscissa
+  // opposite to the ordinate, but both stay inside the valid range so they
+  // can never collide with the endpoint anchors or escape the curve.
+  const float x = _picker_valid_x(val - increment);
+  const float y = CLAMP(val + increment, 0.0f, 1.0f);
+
+  if(!_picker_can_add(p, ch, x)) return -1;
 
   return _add_node(p->curve_nodes[ch], &p->curve_num_nodes[ch], x, y);
 }
@@ -580,19 +621,27 @@ void color_picker_apply(dt_iop_module_t *self,
     else
       picker_set_upper_lower = 0;
 
-    // now add 4 nodes: min, avg, center, max
+    // now add nodes for min, avg, max of the sampled area.  Nodes that would
+    // duplicate an existing abscissa (very dark/highlight areas) are skipped,
+    // so the result is always a well-formed curve.
     const float increment = 0.05f * picker_set_upper_lower;
 
     _add_node_from_picker(p, self->picked_color_min, 0.f, ch, work_profile);
     _add_node_from_picker(p, self->picked_color, increment, ch, work_profile);
     _add_node_from_picker(p, self->picked_color_max, 0.f, ch, work_profile);
 
-    if(p->curve_num_nodes[ch] == 5)
-      _add_node(p->curve_nodes[ch], &p->curve_num_nodes[ch],
-                p->curve_nodes[ch][1].x - increment
-                + (p->curve_nodes[ch][3].x - p->curve_nodes[ch][1].x) / 2.f,
-                p->curve_nodes[ch][1].y + increment
-                + (p->curve_nodes[ch][3].y - p->curve_nodes[ch][1].y) / 2.f);
+    // add a center node midway between the sampled min and max so the "set
+    // values" band stays symmetric — but only when the band is wide enough
+    // that it yields a distinct anchor rather than another duplicate.
+    const float val_min = _picker_val(p, self->picked_color_min, ch, work_profile);
+    const float val_max = _picker_val(p, self->picked_color_max, ch, work_profile);
+    if(fabsf(val_max - val_min) > 4.f * DT_IOP_RGBCURVE_MIN_X_DISTANCE)
+    {
+      const float xc = _picker_valid_x(0.5f * (val_min + val_max));
+      const float yc = CLAMP(0.5f * (val_min + val_max), 0.0f, 1.0f);
+      if(_picker_can_add(p, ch, xc))
+        _add_node(p->curve_nodes[ch], &p->curve_num_nodes[ch], xc, yc);
+    }
 
     dt_dev_add_history_item(darktable.develop, self, TRUE);
   }
