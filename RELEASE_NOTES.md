@@ -166,6 +166,9 @@ changes (where available).
 - Fixed highlights modes for 4BAYER (CYGM/RGBE) raws, only clipping mode
   is available for those.
 
+- Fixed highlights modes for 4BAYER (CYGM/RGBE) raws, only clipping mode
+  is available for those.
+
 ## Lua
 
 ### API Version
