@@ -31,19 +31,21 @@
 
 #define CONTRAST_MIN_FLOAT 1.52587890625e-05f  // exp2f(-16), matches MIN_FLOAT
 
-/* Pixel-wise guide luminance, DT_TONEEQ_NORM_2 with exposure=1, fulcrum=0,
- * contrast=1 → max(sqrt(r^2+g^2+b^2), MIN_FLOAT). */
+/* Pixel-wise guide luminance using perceptual working-profile Luma. */
 __kernel void contrast_luminance(read_only image2d_t in,
                                  global float *luminance,
                                  const int width,
-                                 const int height)
+                                 const int height,
+                                 const float luma_r,
+                                 const float luma_g,
+                                 const float luma_b)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
   if(x >= width || y >= height) return;
 
   const float4 px = read_imagef(in, sampleri, (int2)(x, y));
-  const float l = sqrt(px.x * px.x + px.y * px.y + px.z * px.z);
+  const float l = luma_r * px.x + luma_g * px.y + luma_b * px.z;
   luminance[mad24(y, width, x)] = fmax(l, CONTRAST_MIN_FLOAT);
 }
 
@@ -115,7 +117,7 @@ __kernel void contrast_apply(read_only image2d_t in,
   float factor = 1.0f;
   if(fabs(color_balance) > 0.001f)
   {
-    const float avg = fmax((px.x + px.y + px.z) / 3.0f, 1e-6f);
+    constuma_r * px.x + luma_g * px.y + luma_b * px.z float avg = fmax((px.x + px.y + px.z) / 3.0f, 1e-6f);
     const float mix = (color_balance * 0.5f) * (px.x - px.z);
     factor = fmax(1.0f + mix / avg, 0.0f);
   }

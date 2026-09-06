@@ -135,6 +135,7 @@ typedef struct dt_iop_contrast_data_t
   float s_mult_micro, s_mult_fine, s_mult_local, s_mult_broad, s_mult_coarse;
   float scale;
   float green_compensation;
+  float luma_r, luma_g, luma_b;
   int radius;
   int radius_coarse;
   int radius_broad;
@@ -275,17 +276,29 @@ static void invalidate_luminance_cache(dt_iop_module_t *const self)
 }
 
 
-//Compute pixel-wise luminance mask (no blur)
+//Compute pixel-wise luminance mask (no blur) using perceptual working-profile Luma
 
 __DT_CLONE_TARGETS__
 static inline void compute_pixel_luminance_mask(const float *const restrict in,
                                                 float *const restrict luminance,
                                                 const size_t width,
                                                 const size_t height,
-                                                const dt_iop_luminance_mask_method_t method)
+                                                const dt_iop_contrast_data_t *const d)
 {
-  // No exposure/contrast boost, just compute raw luminance
-  luminance_mask(in, luminance, width, height, method, 1.0f, 0.0f, 1.0f);
+  const size_t npixels = width * height;
+  const float lr = d->luma_r;
+  const float lg = d->luma_g;
+  const float lb = d->luma_b;
+
+  DT_OMP_FOR()
+  for(size_t k = 0; k < npixels; k++)
+  {
+    const float r = in[4 * k + 0];
+    const float g = in[4 * k + 1];
+    const float b = in[4 * k + 2];
+    const float l = lr * r + lg * g + lb * b;
+    luminance[k] = fmaxf(l, MIN_FLOAT);
+  }
 }
 
 
@@ -300,8 +313,20 @@ static inline void compute_smoothed_luminance_mask(const float *const restrict i
                                                    const int radius,
                                                    const float feathering)
 {
-  // First compute pixel-wise luminance (no boost)
-  luminance_mask(in, luminance, width, height, d->method, 1.0f, 0.0f, 1.0f);
+  const size_t npixels = width * height;
+  const float lr = d->luma_r;
+  const float lg = d->luma_g;
+  const float lb = d->luma_b;
+
+  DT_OMP_FOR()
+  for(size_t k = 0; k < npixels; k++)
+  {
+    const float r = in[4 * k + 0];
+    const float g = in[4 * k + 1];
+    const float b = in[4 * k + 2];
+    const float l = lr * r + lg * g + lb * b;
+    luminance[k] = fmaxf(l, MIN_FLOAT);
+  }
 
   // Then apply the smoothing filter
   fast_eigf_surface_blur(luminance, width, height,
@@ -683,7 +708,7 @@ static void spatial_contrast_process(dt_iop_module_t *self,
 
       if(hash != saved_hash || !luminance_valid)
       {
-        compute_pixel_luminance_mask(in, luminance_pixel, width, height, d->method);
+        compute_pixel_luminance_mask(in, luminance_pixel, width, height, d);
         if(d->coarse_scale != 1.0f || g->mask_display == DT_LC_MASK_coarse)
           compute_smoothed_luminance_mask(in, luminance_smoothed_coarse, width, height, d, d->radius_coarse, base_eps * fmaxf(d->f_mult_coarse, 0.5f));
         if(d->broad_scale != 1.0f || g->mask_display == DT_LC_MASK_broad)
@@ -717,7 +742,7 @@ static void spatial_contrast_process(dt_iop_module_t *self,
       {
         dt_iop_gui_enter_critical_section(self);
         g->thumb_preview_hash = hash;
-        compute_pixel_luminance_mask(in, luminance_pixel, width, height, d->method);
+        compute_pixel_luminance_mask(in, luminance_pixel, width, height, d);
         if(d->coarse_scale != 1.0f || g->mask_display == DT_LC_MASK_coarse)
         compute_smoothed_luminance_mask(in, luminance_smoothed_coarse, width, height, d, d->radius_coarse, base_eps * fmaxf(d->f_mult_coarse, 0.5f));
         if(d->broad_scale != 1.0f || g->mask_display == DT_LC_MASK_broad)
@@ -739,7 +764,7 @@ static void spatial_contrast_process(dt_iop_module_t *self,
     // Non-interactive path (no GUI, or GUI-attached pipe of another type than FULL/PREVIEW).
     // The pixel luminance is always needed, but each EIGF pass only runs when the
     // scale is active (scale != 1.0) or its mask is being displayed.
-    compute_pixel_luminance_mask(in, luminance_pixel, width, height, d->method);
+    compute_pixel_luminance_mask(in, luminance_pixel, width, height, d);
     if(d->coarse_scale != 1.0f || (g && g->mask_display == DT_LC_MASK_coarse))
       compute_smoothed_luminance_mask(in, luminance_smoothed_coarse, width, height, d, d->radius_coarse, base_eps * fmaxf(d->f_mult_coarse, 0.5f));
     if(d->broad_scale != 1.0f || (g && g->mask_display == DT_LC_MASK_broad))
@@ -870,9 +895,10 @@ int process_cl(dt_iop_module_t *self,
 
   if(!dev_lum) { err = CL_MEM_OBJECT_ALLOCATION_FAILURE; goto cleanup; }
 
-  // 1. guide luminance from the RGBA input
+  // 1. guide luminance from the RGBA input using perceptual luma coefficients
   err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_luminance, width, height,
-          CLARG(dev_in), CLARG(dev_lum), CLARG(width), CLARG(height));
+          CLARG(dev_in), CLARG(dev_lum), CLARG(width), CLARG(height),
+          CLARG(d->luma_r), CLARG(d->luma_g), CLARG(d->luma_b));
   if(err != CL_SUCCESS) goto cleanup;
 
   const float base_eps = d->feathering * d->feathering;
@@ -1057,11 +1083,17 @@ void commit_params(dt_iop_module_t *self,
     const float coeff_g = work_profile->matrix_in_transposed[1][1];
     const float coeff_b = work_profile->matrix_in_transposed[2][1];
     d->green_compensation = (coeff_r - coeff_b) / fmaxf(coeff_g, 1e-6f);
+    d->luma_r = coeff_r;
+    d->luma_g = coeff_g;
+    d->luma_b = coeff_b;
   }
   else
   {
-    // Fallback Rec.2020
+    // Fallback Rec.2020 luma coefficients
     d->green_compensation = 0.300f;
+    d->luma_r = 0.2627f;
+    d->luma_g = 0.6780f;
+    d->luma_b = 0.0593f;
   }
 }
 
