@@ -47,6 +47,17 @@ Contrast is modeled through three complementary components:
     _Colorful Contrast_: Enhances color separation between warm and cool tones while
     preserving overall luminance. The green channel compensation is derived from the
     pipe working profile luminance coefficients.
+
+Guide luminance
+The five-scale decomposition above and the EIGF edge-aware blur are all driven by a
+single guide luminance signal. That guide is a weighted Luma (l_r*R + l_g*G + l_b*B),
+with coefficients read from the working profile's RGB->XYZ matrix (Rec.2020 coefficients
+as fallback when no profile matrix is available), NOT the RGB Euclidean norm used in
+earlier versions of this module. The Euclidean norm treats R/G/B geometrically, so a
+sharp transition between saturated, differently-hued regions (e.g. green foliage against
+blue sky) produces a guide-luminance swing that doesn't match perceived brightness,
+which the guided/EIGF filter then mis-averages into a halo. Weighting by the profile's
+actual luminance contribution removes that artifact at the source.
 */
 
 
@@ -103,7 +114,7 @@ typedef struct dt_iop_contrast_params_t
 
   // Blending uses a quadratic curve because changes in small values are more noticeable
   float blending;        // $MIN: 1.0 $MAX: 2.0 $DEFAULT: 1.2 $DESCRIPTION: "contrast scale"
-  float feathering;      // $MIN: 0.01 $MAX: 10.0 $DEFAULT: 2.5 $DESCRIPTION: "spatial edge protection"
+  float feathering;      // $MIN: 0.01 $MAX: 10.0 $DEFAULT: 5.0 $DESCRIPTION: "spatial edge protection"
 
   float f_mult_micro;    // $MIN: 0.1 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "micro edge protection"
   float f_mult_fine;     // $MIN: 0.1 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "fine edge protection"
@@ -112,7 +123,11 @@ typedef struct dt_iop_contrast_params_t
   float f_mult_coarse;   // $MIN: 0.1 $MAX: 2.0 $DEFAULT: 1.0 $DESCRIPTION: "coarse edge protection"
 
   int reserved0;         // formerly 'details' filter type, now unused
-  dt_iop_luminance_mask_method_t method;      // $DEFAULT: DT_TONEEQ_NORM_2 $DESCRIPTION: "luminance estimator"
+  int reserved1;         // formerly luminance estimator (dt_iop_luminance_mask_method_t),
+                         // now unused: the guide luminance always uses the working-profile
+                         // Luma (see luma_r/g/b in dt_iop_contrast_data_t). Kept as a
+                         // placeholder for params blob / XMP compatibility, do not reuse
+                         // without bumping DT_MODULE_INTROSPECTION and adding legacy_params().
   int iterations;        // $MIN: 1 $MAX: 20 $DEFAULT: 1 $DESCRIPTION: "filter diffusion"
 
   float noise_threshold;    // $MIN: 0.0 $MAX: 0.01 $DEFAULT: 0.001 $DESCRIPTION: "noise threshold"
@@ -147,7 +162,6 @@ typedef struct dt_iop_contrast_data_t
   float color_balance;
   float contrast_balance;
   float colorful_contrast;
-  dt_iop_luminance_mask_method_t method;
 } dt_iop_contrast_data_t;
 
 
@@ -276,14 +290,18 @@ static void invalidate_luminance_cache(dt_iop_module_t *const self)
 }
 
 
-//Compute pixel-wise luminance mask (no blur) using perceptual working-profile Luma
+// Guide luminance shared by both variants below: weighted Luma from the
+// working-profile RGB->XYZ matrix (or its Rec.2020 fallback), NOT the RGB
+// Euclidean norm — this is what removes the halos at saturated hue
+// boundaries (e.g. green foliage against blue sky). See d->luma_r/g/b
+// in commit_params() for where the coefficients come from.
 
 __DT_CLONE_TARGETS__
-static inline void compute_pixel_luminance_mask(const float *const restrict in,
-                                                float *const restrict luminance,
-                                                const size_t width,
-                                                const size_t height,
-                                                const dt_iop_contrast_data_t *const d)
+static inline void compute_working_luma(const float *const restrict in,
+                                        float *const restrict luminance,
+                                        const size_t width,
+                                        const size_t height,
+                                        const dt_iop_contrast_data_t *const d)
 {
   const size_t npixels = width * height;
   const float lr = d->luma_r;
@@ -302,6 +320,19 @@ static inline void compute_pixel_luminance_mask(const float *const restrict in,
 }
 
 
+//Compute pixel-wise luminance mask (no blur) using perceptual working-profile Luma
+
+__DT_CLONE_TARGETS__
+static inline void compute_pixel_luminance_mask(const float *const restrict in,
+                                                float *const restrict luminance,
+                                                const size_t width,
+                                                const size_t height,
+                                                const dt_iop_contrast_data_t *const d)
+{
+  compute_working_luma(in, luminance, width, height, d);
+}
+
+
 // Compute smoothed luminance mask using edge-aware filters
 
 __DT_CLONE_TARGETS__
@@ -313,20 +344,7 @@ static inline void compute_smoothed_luminance_mask(const float *const restrict i
                                                    const int radius,
                                                    const float feathering)
 {
-  const size_t npixels = width * height;
-  const float lr = d->luma_r;
-  const float lg = d->luma_g;
-  const float lb = d->luma_b;
-
-  DT_OMP_FOR()
-  for(size_t k = 0; k < npixels; k++)
-  {
-    const float r = in[4 * k + 0];
-    const float g = in[4 * k + 1];
-    const float b = in[4 * k + 2];
-    const float l = lr * r + lg * g + lb * b;
-    luminance[k] = fmaxf(l, MIN_FLOAT);
-  }
+  compute_working_luma(in, luminance, width, height, d);
 
   // Then apply the smoothing filter
   fast_eigf_surface_blur(luminance, width, height,
@@ -1023,7 +1041,6 @@ void commit_params(dt_iop_module_t *self,
   const dt_iop_contrast_params_t *p = (dt_iop_contrast_params_t *)p1;
   dt_iop_contrast_data_t *d = piece->data;
 
-  d->method = DT_TONEEQ_NORM_2;
   d->iterations = 1;
   d->scale = 1.0f;
   d->micro_scale = p->micro_scale;

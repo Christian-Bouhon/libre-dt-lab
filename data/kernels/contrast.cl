@@ -117,7 +117,7 @@ __kernel void contrast_apply(read_only image2d_t in,
   float factor = 1.0f;
   if(fabs(color_balance) > 0.001f)
   {
-    constuma_r * px.x + luma_g * px.y + luma_b * px.z float avg = fmax((px.x + px.y + px.z) / 3.0f, 1e-6f);
+    const float avg = fmax((px.x + px.y + px.z) / 3.0f, 1e-6f);
     const float mix = (color_balance * 0.5f) * (px.x - px.z);
     factor = fmax(1.0f + mix / avg, 0.0f);
   }
