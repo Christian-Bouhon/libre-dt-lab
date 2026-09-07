@@ -99,7 +99,7 @@ actual luminance contribution removes that artifact at the source.
 #include <omp.h>
 #endif
 
-DT_MODULE_INTROSPECTION(1, dt_iop_contrast_params_t)
+DT_MODULE_INTROSPECTION(2, dt_iop_contrast_params_t)
 
 
 typedef struct dt_iop_contrast_params_t
@@ -135,6 +135,14 @@ typedef struct dt_iop_contrast_params_t
   float color_balance;      // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "colorimetric contrast"
   float contrast_balance;   // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "contrast balance"
   float colorful_contrast;  // $MIN: -1.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "colorful contrast"
+
+  // Tone: asymmetric refinement of global_scale. Appended at the end of the
+  // struct (rather than next to global_scale) so legacy_params() for v1->v2
+  // can migrate with a single memcpy of the common prefix. GUI placement is
+  // independent of struct order (dt_bauhaus_slider_from_params looks up by
+  // name), so they still appear right after global_scale in gui_init().
+  float gain_highlights;    // $MIN: -5.0 $MAX: 5.0 $DEFAULT: 0.0 $DESCRIPTION: "highlights"
+  float gain_shadows;       // $MIN: -5.0 $MAX: 5.0 $DEFAULT: 0.0 $DESCRIPTION: "shadows"
 } dt_iop_contrast_params_t;
 
 typedef struct dt_iop_contrast_data_t
@@ -162,6 +170,8 @@ typedef struct dt_iop_contrast_data_t
   float color_balance;
   float contrast_balance;
   float colorful_contrast;
+  float slope_highlights;
+  float slope_shadows;
 } dt_iop_contrast_data_t;
 
 
@@ -207,6 +217,7 @@ typedef struct dt_iop_contrast_gui_data_t
 
   // GTK widgets
   GtkWidget *coarse_scale, *broad_scale, *local_scale, *fine_scale, *micro_scale, *global_scale;
+  GtkWidget *gain_highlights, *gain_shadows;
   GtkWidget *blending;
   GtkWidget *feathering;
   GtkWidget *noise_threshold;
@@ -264,6 +275,47 @@ int legacy_params(dt_iop_module_t *self,
                   int32_t *new_params_size,
                   int *new_version)
 {
+  if(old_version == 1)
+  {
+    typedef struct dt_iop_contrast_params_v1_t
+    {
+      float micro_scale;
+      float fine_scale;
+      float local_scale;
+      float broad_scale;
+      float coarse_scale;
+      float global_scale;
+      float blending;
+      float feathering;
+      float f_mult_micro;
+      float f_mult_fine;
+      float f_mult_local;
+      float f_mult_broad;
+      float f_mult_coarse;
+      int reserved0;
+      int reserved1;
+      int iterations;
+      float noise_threshold;
+      float csf_adaptation;
+      float color_balance;
+      float contrast_balance;
+      float colorful_contrast;
+    } dt_iop_contrast_params_v1_t;
+
+    const dt_iop_contrast_params_v1_t *o = (dt_iop_contrast_params_v1_t *)old_params;
+    dt_iop_contrast_params_t *n = malloc(sizeof(dt_iop_contrast_params_t));
+
+    // v1 and v2 share the same layout for every field up to colorful_contrast:
+    // a single memcpy of the common prefix, then default the two new fields.
+    memcpy(n, o, sizeof(dt_iop_contrast_params_v1_t));
+    n->gain_highlights = 0.0f;
+    n->gain_shadows = 0.0f;
+
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_contrast_params_t);
+    *new_version = 2;
+    return 0;
+  }
   return 1;
 }
 
@@ -459,6 +511,14 @@ static inline void apply_local_contrast(const float *const restrict in,
     const float effective_csf_weight = (1.0f - d->csf_adaptation) + d->csf_adaptation * csf_weight;
     const float global_term = (gain_global - 1.0f) * effective_csf_weight * log_lum * w_global;
 
+    // Shadows/highlights: same construction as global_term (same CSF taper,
+    // same w_global weighting) but with two independent slopes instead of
+    // one, split at middle gray (log_lum == 0). Inherits the Gaussian
+    // protection at the extremes for free -- unlike a straight per-scale
+    // tone split, this one tapers off instead of amplifying near black/white.
+    const float slope_sh = (log_lum < 0.0f) ? d->slope_shadows : d->slope_highlights;
+    const float sh_term = (slope_sh - 1.0f) * effective_csf_weight * log_lum * w_global;
+
     float factor = 1.0f;
     if (fabsf(d->color_balance) > 0.001f)
     {
@@ -471,7 +531,7 @@ static inline void apply_local_contrast(const float *const restrict in,
     }
 
     // Apply correction in linear space
-    const float multiplier = exp2f(correction_ev + global_term) * factor;
+    const float multiplier = exp2f(correction_ev + global_term + sh_term) * factor;
 
     const float L_final = lum_pixel * multiplier;
 
@@ -967,7 +1027,8 @@ int process_cl(dt_iop_module_t *self,
           CLARG(w_local), CLARG(w_global),
           CLARG(d->noise_threshold), CLARG(d->csf_adaptation),
           CLARG(d->color_balance), CLARG(d->colorful_contrast),
-          CLARG(d->green_compensation));
+          CLARG(d->green_compensation),
+          CLARG(d->slope_highlights), CLARG(d->slope_shadows));
 
 cleanup:
   dt_opencl_release_mem_object(dev_lum);
@@ -1049,6 +1110,12 @@ void commit_params(dt_iop_module_t *self,
   d->broad_scale = p->broad_scale;
   d->coarse_scale = p->coarse_scale; 
   d->global_scale = p->global_scale;
+  // Same power-of-2 slope convention as global_scale, but split into two
+  // independent, unweighted terms (see process()): no CSF taper cancellation
+  // trick here, sign is flipped on shadows only so that raising either
+  // slider always brightens that end of the tonal range.
+  d->slope_highlights = powf(2.0f, p->gain_highlights);
+  d->slope_shadows = powf(2.0f, -p->gain_shadows);
 
   d->noise_threshold = p->noise_threshold;
   d->csf_adaptation = p->csf_adaptation;
@@ -1291,9 +1358,12 @@ void gui_changed(dt_iop_module_t *self,
     invalidate_luminance_cache(self);
   }
 
-  if(!w || w == g->global_scale)
+  if(!w || w == g->global_scale || w == g->gain_highlights || w == g->gain_shadows)
   {
-    gtk_widget_set_sensitive(g->csf_adaptation, fabsf(p->global_scale - 1.0f) > 1e-5f);
+    const gboolean any_tone_active = fabsf(p->global_scale - 1.0f) > 1e-5f
+                                   || fabsf(p->gain_highlights) > 1e-5f
+                                   || fabsf(p->gain_shadows) > 1e-5f;
+    gtk_widget_set_sensitive(g->csf_adaptation, any_tone_active);
   }
 }
 
@@ -1382,7 +1452,10 @@ void gui_init(dt_iop_module_t *self)
   GtkWidget *main_box = dt_gui_vbox();
   self->widget = main_box;
 
-  // --- Section 1: Global Contrast ---
+  // --- Section 1: tone ---
+  GtkWidget *tone_label = dt_ui_section_label_new(C_("section", "tone"));
+  dt_gui_box_add(main_box, tone_label);
+
   g->global_scale = dt_bauhaus_slider_from_params(self, "global_scale");
   dt_bauhaus_slider_set_soft_range(g->global_scale, 0.25, 1.75);
   dt_bauhaus_slider_set_digits(g->global_scale, 2);
@@ -1392,13 +1465,32 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_default(g->global_scale, 1.0);
   gtk_widget_set_tooltip_text(g->global_scale, _("amount of global contrast enhancement"));
 
+  g->gain_highlights = dt_bauhaus_slider_from_params(self, "gain_highlights");
+  dt_bauhaus_slider_set_soft_range(g->gain_highlights, -2.0, 2.0);
+  gtk_widget_set_tooltip_text(g->gain_highlights,
+    _("brighten or darken highlights, independently of shadows.\n"
+      "shares the global contrast's CSF-weighted protection near middle gray:\n"
+      "the effect tapers off instead of growing without bound at the extremes."));
+
+  g->gain_shadows = dt_bauhaus_slider_from_params(self, "gain_shadows");
+  dt_bauhaus_slider_set_soft_range(g->gain_shadows, -2.0, 2.0);
+  gtk_widget_set_tooltip_text(g->gain_shadows,
+    _("brighten or darken shadows, independently of highlights.\n"
+      "shares the global contrast's CSF-weighted protection near middle gray:\n"
+      "the effect tapers off instead of growing without bound at the extremes."));
+
   g->csf_adaptation = dt_bauhaus_slider_from_params(self, "csf_adaptation");
   dt_bauhaus_slider_set_soft_range(g->csf_adaptation, 0.0, 1.0);
   dt_bauhaus_slider_set_digits(g->csf_adaptation, 2);
   dt_bauhaus_slider_set_format(g->csf_adaptation, "%");
   dt_bauhaus_slider_set_factor(g->csf_adaptation, 100.0);
   gtk_widget_set_tooltip_text(g->csf_adaptation, _("weight the enhancement according to the Human Contrast Sensitivity Function (CSF).\n"
-                                                  "high values focus on details the eye is most sensitive to."));
+                                                  "high values focus on details the eye is most sensitive to.\n"
+                                                  "applies to global contrast and to the highlights/shadows sliders above."));
+
+  // --- Section 2: color contrast ---
+  GtkWidget *color_label = dt_ui_section_label_new(C_("section", "color contrast"));
+  dt_gui_box_add(main_box, color_label);
 
   g->color_balance = dt_bauhaus_slider_from_params(self, "color_balance");
   dt_bauhaus_widget_set_label(g->color_balance, NULL, _("colorimetric contrast"));
@@ -1418,7 +1510,7 @@ void gui_init(dt_iop_module_t *self)
                                                       "positive values boost the color separation between warm and cool tones.\n"
                                                       "this affects color intensity, whereas 'colorimetric contrast' affects brightness."));
 
-  // --- Section 2: spatial contrast ---
+  // --- Section 3: spatial contrast ---
   GtkWidget *label = dt_ui_section_label_new(C_("section", "spatial contrast"));
   dt_gui_box_add(main_box, label);
 
@@ -1488,7 +1580,7 @@ void gui_init(dt_iop_module_t *self)
                                                     "negative values favor global contrast,\n"
                                                     "while positive values favor spatial contrast.\n"
                                                     "colorimetric and colorful contrast are not affected."));
-  // --- Section 3: Masking (collapsible) ---
+  // --- Section 4: Masking (collapsible) ---
   dt_gui_new_collapsible_section(&g->masking_expander, "plugins/darkroom/contrast/expanded_masking",
                                                        _("fine adjustment"), 
                                                        GTK_BOX(main_box), 

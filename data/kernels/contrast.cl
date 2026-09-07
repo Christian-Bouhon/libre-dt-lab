@@ -75,7 +75,9 @@ __kernel void contrast_apply(read_only image2d_t in,
                              const float csf_adaptation,
                              const float color_balance,
                              const float colorful_contrast,
-                             const float green_compensation)
+                             const float green_compensation,
+                             const float slope_highlights,
+                             const float slope_shadows)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -112,6 +114,13 @@ __kernel void contrast_apply(read_only image2d_t in,
   const float effective_csf_weight = (1.0f - csf_adaptation) + csf_adaptation * csf_weight;
   const float global_term = (gain_global - 1.0f) * effective_csf_weight * log_lum * w_global;
 
+  // Shadows/highlights: same construction as global_term, split at middle
+  // gray (log_lum == 0) into two independent slopes. Must stay in lockstep
+  // with the CPU path in contrast.c process() -- same formula, same operand
+  // order.
+  const float slope_sh = (log_lum < 0.0f) ? slope_shadows : slope_highlights;
+  const float sh_term = (slope_sh - 1.0f) * effective_csf_weight * log_lum * w_global;
+
   // Colorimetric contrast factor (red vs blue)
   const float4 px = read_imagef(in, sampleri, pos);
   float factor = 1.0f;
@@ -122,7 +131,7 @@ __kernel void contrast_apply(read_only image2d_t in,
     factor = fmax(1.0f + mix / avg, 0.0f);
   }
 
-  const float multiplier = exp2(correction_ev + global_term) * factor;
+  const float multiplier = exp2(correction_ev + global_term + sh_term) * factor;
   const float L_final = lp * multiplier;
 
   float ratio = L_final / fmax(lp, 1e-6f);
