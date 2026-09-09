@@ -232,7 +232,6 @@ int legacy_params(dt_iop_module_t *self,
     {
       dt_iop_highlights_mode_t mode;
       float blendL, blendC, blendh;
-      float strength;
     } dt_iop_highlights_params_v1_t;
 
     const dt_iop_highlights_params_v1_t *o = (dt_iop_highlights_params_v1_t *)old_params;
@@ -260,7 +259,6 @@ int legacy_params(dt_iop_module_t *self,
     {
       dt_iop_highlights_mode_t mode;
       float blendL, blendC, blendh;
-      float strength;
       float clip;
     } dt_iop_highlights_params_v2_t;
 

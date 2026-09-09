@@ -153,6 +153,10 @@ changes (where available).
   a star rating or color label while the first row was only partly
   visible.
 
+- Fixed exposure's area mapping blowing out the image when its target
+  lightness was set to zero. Such a target cannot be reached, so the
+  correction is now left alone instead.
+
 ## Lua
 
 ### API Version
