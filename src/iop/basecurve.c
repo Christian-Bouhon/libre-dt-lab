@@ -59,6 +59,7 @@
 #include "gui/gtk.h"
 #include "gui/presets.h"
 #include "gui/accelerators.h"
+#include "develop/preview_data.h"
 #include "iop/iop_api.h"
 #include "imageio/imageio_common.h"
 #include <regex.h>
@@ -501,6 +502,13 @@ typedef struct dt_iop_basecurve_gui_data_t
   gboolean look_selected_first_time;
   gboolean in_gui_update; // TRUE while gui_update is running, prevents slider callbacks from adding spurious history
   GtkWidget *colorpicker;
+  dt_preview_data_t pd;
+  GtkWidget *hover_toggle;
+  gboolean hover_editing;
+  gboolean cursor_valid;
+  gboolean reprocess_pending;
+  float cursor_abscissa;
+  float cursor_pos_x, cursor_pos_y;
 } dt_iop_basecurve_gui_data_t;
 
 typedef struct basecurve_preset_t
@@ -897,6 +905,68 @@ static float exposure_increment(float stops, int e, float fusion, float bias)
 {
   float offset = stops * fusion * (bias - 1.0f) / 2.0f;
   return powf(2.0f, stops * e + offset);
+}
+
+/* ---- preview-data service: under-cursor pixel buffer ---- */
+/* Copies the module input RGBA pixel (RGB channels only) into the shared
+ * preview buffer used by the hover+scroll adjustment. */
+
+static void _basecurve_fill_cb(void *const user_data,
+                               float *const buf,
+                               const size_t npixels)
+{
+  const float *const src = (const float *)user_data;
+  DT_OMP_FOR()
+  for(size_t k = 0; k < npixels / 3; k++)
+  {
+    buf[k * 3 + 0] = src[k * 4 + 0]; // R
+    buf[k * 3 + 1] = src[k * 4 + 1]; // G
+    buf[k * 3 + 2] = src[k * 4 + 2]; // B
+  }
+}
+
+/* in_mask_editing — while a drawn mask is being edited the canvas is busy
+ * and we must not hijack the cursor. */
+static inline gboolean in_mask_editing(dt_iop_module_t *self)
+{
+  const dt_develop_t *const dev = self->dev;
+  return dev->form_gui && dev->form_visible;
+}
+
+/* Curve value at abscissa x, rebuilt from the GUI params exactly like
+ * commit_params() / dt_iop_basecurve_draw() do.  Clamped to [0,1]. */
+static float _basecurve_curve_value(dt_iop_module_t *self, const float x)
+{
+  dt_iop_basecurve_params_t *p = self->params;
+  if(!p) return x;
+
+  const int ch = 0;
+  const int nodes = p->basecurve_nodes[ch];
+  if(nodes < 1) return x;
+
+  dt_draw_curve_t *curve = dt_draw_curve_new(0.0f, 1.0f, p->basecurve_type[ch]);
+  for(int k = 0; k < nodes; k++)
+    (void)dt_draw_curve_add_point(curve, p->basecurve[ch][k].x, p->basecurve[ch][k].y);
+
+  float value;
+  const float xm = p->basecurve[ch][nodes - 1].x;
+  if(xm <= 0.0f || x < xm)
+    value = dt_draw_curve_calc_value(curve, x);
+  else
+  {
+    // unbounded extrapolation on the right, as commit_params() does
+    float unbounded_coeffs[3];
+    const float xr[4] = { 0.7f * xm, 0.8f * xm, 0.9f * xm, 1.0f * xm };
+    const float yr[4] = { dt_draw_curve_calc_value(curve, xr[0]),
+                          dt_draw_curve_calc_value(curve, xr[1]),
+                          dt_draw_curve_calc_value(curve, xr[2]),
+                          dt_draw_curve_calc_value(curve, xr[3]) };
+    dt_iop_estimate_exp(xr, yr, 4, unbounded_coeffs);
+    value = dt_iop_eval_exp(unbounded_coeffs, x);
+  }
+
+  dt_draw_curve_destroy(curve);
+  return CLAMP(value, 0.0f, 1.0f);
 }
 
 #ifdef HAVE_OPENCL
@@ -1332,6 +1402,24 @@ int process_cl_lut(dt_iop_module_t *self,
         CLARG(d->color_space),
         CLARGFLOAT(d->look_opacity), CLARG(look_mat_buf), CLARGFLOAT(alpha), CLARG(dev_profile_info), CLARG(use_work_profile));
     if(err != CL_SUCCESS) goto error;
+  }
+
+  if(err == CL_SUCCESS && self->gui_data && dt_pipe_is_preview(piece->pipe))
+  {
+    dt_iop_basecurve_gui_data_t *g = self->gui_data;
+    if(g->hover_editing)
+    {
+      const size_t npixels = (size_t)width * height;
+      const size_t px_sz = 4 * npixels * sizeof(float);
+      float *host_pixout = dt_alloc_align_float(4 * npixels);
+      if(host_pixout)
+      {
+        cl_int read_err = dt_opencl_read_buffer_from_device(devid, host_pixout, dev_in, 0, px_sz, TRUE);
+        if(read_err == CL_SUCCESS)
+          dt_preview_data_store(&g->pd, width, height, piece, _basecurve_fill_cb, (void *)host_pixout);
+        dt_free_align(host_pixout);
+      }
+    }
   }
 
 error:
@@ -2117,6 +2205,11 @@ static void process_lut(dt_iop_module_t *self,
       apply_postprocess(&out[k], d, work_profile, has_work_profile, r_coeff_lum, g_coeff_lum, b_coeff_lum);
     }
   }
+
+  dt_iop_basecurve_gui_data_t *g = self->gui_data;
+  if(g && g->hover_editing && dt_pipe_is_preview(piece->pipe))
+    dt_preview_data_store(&g->pd, roi_out->width, roi_out->height, piece,
+                          _basecurve_fill_cb, (void *)in);
 }
 
 static void process_fusion(dt_iop_module_t *self,
@@ -2296,6 +2389,11 @@ static void process_fusion(dt_iop_module_t *self,
 for(int i = 0; i < 3; i++) out[k + i] = val[i];
     out[k + 3] = in[k + 3]; // pass on 4th channel
   }
+
+  dt_iop_basecurve_gui_data_t *g = self->gui_data;
+  if(g && g->hover_editing && dt_pipe_is_preview(piece->pipe))
+    dt_preview_data_store(&g->pd, roi_out->width, roi_out->height, piece,
+                          _basecurve_fill_cb, (void *)in);
 
   // free temp buffers
 cleanup:
@@ -2951,6 +3049,35 @@ static gboolean dt_iop_basecurve_draw(GtkWidget *widget, cairo_t *crf, dt_iop_mo
       cairo_move_to(cr, width * x_pick, 0.0);
       cairo_line_to(cr, width * x_pick, height);
       cairo_stroke(cr);
+    }
+  }
+
+  // draw vertical cursor line for hover+scroll
+  if(g->hover_editing && g->cursor_valid)
+  {
+    if(!in_mask_editing(self)) {
+      float norm = g->cursor_abscissa;
+      float pos_x = to_log(norm, g->loglogscale);
+      float out_norm = _basecurve_curve_value(self, norm);
+      float pos_y = to_log(out_norm, g->loglogscale);
+      pos_x = CLAMP(pos_x, 0.0f, 1.0f);
+      pos_y = CLAMP(pos_y, 0.0f, 1.0f);
+      if(pos_x > 0.0f && pos_x < 1.0f) {
+        cairo_save(cr);
+        cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+        cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2));
+        cairo_set_dash(cr, NULL, 0, 0);
+        cairo_set_source_rgb(cr, .9, .9, .9);
+        float x = pos_x * width;
+        cairo_move_to(cr, x, 0.0);
+        cairo_line_to(cr, x, height);
+        cairo_stroke(cr);
+        float y = pos_y * height;
+        cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(3));
+        cairo_arc(cr, x, y, DT_PIXEL_APPLY_DPI(5), 0, 2.0 * M_PI);
+        cairo_stroke(cr);
+        cairo_restore(cr);
+      }
     }
   }
 
@@ -3625,6 +3752,285 @@ void gui_reset(dt_iop_module_t *self)
   dt_iop_color_picker_reset(self, TRUE);
 }
 
+/* hover_node_dist — distance (in graph scale) from the cursor abscissa to
+ * the nearest node. */
+static float _hover_node_dist(const dt_iop_basecurve_node_t *nodes, int count,
+                              const float loglogscale, const float abscissa,
+                              int *out_idx)
+{
+  float min = 1.0f;
+  *out_idx = -1;
+  for(int k = 0; k < count; k++)
+  {
+    // Endpoint anchors (x ~ 0 and x ~ 1) are skipped so that hovering in the
+    // shadows or highlights creates/moves a localized node at the pointer
+    // instead of dragging the global bottom/top anchor of the curve.
+    if(nodes[k].x < 1e-3f || nodes[k].x > 1.0f - 1e-3f) continue;
+    const float x_log = to_log(nodes[k].x, loglogscale);
+    const float absc_log = to_log(abscissa, loglogscale);
+    const float d = fabsf(x_log - absc_log);
+    if(d < min)
+    {
+      min = d;
+      *out_idx = k;
+    }
+  }
+  return min;
+}
+
+/* adjust_params_hover — scroll moved the wheel: move the node nearest the
+ * cursor abscissa (adding one if the cursor is far from every node). */
+static void _adjust_params_hover(dt_iop_module_t *self, const float delta)
+{
+  if(!self->params) return;
+
+  dt_iop_basecurve_params_t *p = self->params;
+  dt_iop_basecurve_gui_data_t *g = self->gui_data;
+  int nodes = p->basecurve_nodes[0];
+  dt_iop_basecurve_node_t *basecurve = p->basecurve[0];
+
+  int selected = -1;
+  const float min = _hover_node_dist(basecurve, nodes, g->loglogscale,
+                                     g->cursor_abscissa, &selected);
+
+  if(selected < 0 || min > (1.0f / 16.0f))
+  {
+    if(nodes < MAXNODES)
+    {
+      // keep the new node outside the anchor-skip zone so it can be selected
+      // by subsequent scrolls, and start it at the current curve value so
+      // nothing jumps when the node is created.
+      const float ax = CLAMP(g->cursor_abscissa, 1e-3f, 1.0f - 1e-3f);
+      const float y0 = _basecurve_curve_value(self, ax);
+      selected = _add_node(basecurve, &p->basecurve_nodes[0], ax, y0);
+      nodes = p->basecurve_nodes[0];
+    }
+    else
+      return;
+  }
+
+  basecurve[selected].y = CLAMP(basecurve[selected].y + delta, 0.0f, 1.0f);
+  p->basecurve_nodes[0] = nodes;
+  dt_dev_add_history_item_target(darktable.develop, self, TRUE, self->widget);
+  if(g->selected >= 0 && g->selected < nodes)
+  {
+    dt_bauhaus_slider_set(g->node_x_slider, basecurve[g->selected].x);
+    dt_bauhaus_slider_set(g->node_y_slider, basecurve[g->selected].y);
+  }
+  gtk_widget_queue_draw(GTK_WIDGET(g->area));
+}
+
+/* switch_cursors — hide the native cursor and rely on the custom indicator
+ * drawn by gui_post_expose() while hover editing is active. */
+static void _switch_cursors(dt_iop_module_t *self)
+{
+  dt_iop_basecurve_gui_data_t *g = self->gui_data;
+  if(!g || !self->dev->gui_attached) return;
+
+  if(in_mask_editing(self) || dt_iop_canvas_not_sensitive(self->dev))
+  {
+    dt_control_change_cursor("default");
+    return;
+  }
+
+  if(!self->expanded) return;
+
+  if(g->hover_editing && g->cursor_valid)
+    dt_control_change_cursor("none");
+  else
+    dt_control_change_cursor("default");
+}
+
+/* hover_toggle_callback — crosshair toggle: enable/disable the hover+scroll
+ * service.  Turning it on kicks a preview reprocess so the under-cursor
+ * buffer is filled immediately and deactivates any active color picker. */
+static void _hover_toggle_callback(GtkToggleButton *togglebutton,
+                                   gpointer user_data)
+{
+  dt_iop_module_t *self = (dt_iop_module_t *)user_data;
+  dt_iop_basecurve_gui_data_t *g = self->gui_data;
+  if(!g) return;
+
+  g->hover_editing = gtk_toggle_button_get_active(togglebutton);
+  g->cursor_valid = FALSE;
+  g->reprocess_pending = FALSE;
+
+  if(g->hover_editing)
+  {
+    // deactivate any active color picker: the module picker AND the
+    // global/primary picker.  An active primary pipette keeps
+    // dt_iop_color_picker_is_visible() true and blocks mouse dispatch.
+    dt_iop_color_picker_reset(self, FALSE);
+    dt_iop_color_picker_reset(NULL, FALSE);
+    dt_preview_data_invalidate(&g->pd);
+    dt_dev_reprocess_preview(self->dev);
+  }
+  else
+  {
+    dt_preview_data_invalidate(&g->pd);
+  }
+
+  _switch_cursors(self);
+  dt_control_queue_redraw_center();
+}
+
+/* read the stored module-input RGB under the normalized cursor position. */
+static gboolean _read_pixel(dt_iop_module_t *self,
+                            const float pzx,
+                            const float pzy,
+                            float out[3])
+{
+  dt_iop_basecurve_gui_data_t *g = self->gui_data;
+  if(!g || !g->pd.buf || g->pd.width < 1 || g->pd.height < 1) return FALSE;
+
+  const int cx = CLAMP((int)(pzx * g->pd.width),  0, (int)g->pd.width  - 1);
+  const int cy = CLAMP((int)(pzy * g->pd.height), 0, (int)g->pd.height - 1);
+
+  gboolean have = FALSE;
+  dt_iop_gui_enter_critical_section(self);
+  const float *buf = g->pd.buf;
+  if(buf)
+  {
+    const size_t idx = (size_t)cy * g->pd.width + cx;
+    out[0] = buf[3 * idx + 0];
+    out[1] = buf[3 * idx + 1];
+    out[2] = buf[3 * idx + 2];
+    have = TRUE;
+  }
+  dt_iop_gui_leave_critical_section(self);
+  return have;
+}
+
+int mouse_moved(dt_iop_module_t *self,
+                const float pzx,
+                const float pzy,
+                const double pressure,
+                const int which,
+                const float zoom_scale)
+{
+  dt_iop_basecurve_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing) return 0;
+
+  if(in_mask_editing(self))
+  {
+    g->cursor_valid = FALSE;
+    _switch_cursors(self);
+    return 0;
+  }
+
+  if(!dt_preview_data_is_fresh(&g->pd))
+  {
+    if(!g->reprocess_pending)
+    {
+      g->reprocess_pending = TRUE;
+      dt_dev_reprocess_preview(self->dev);
+    }
+    return 0;
+  }
+
+  g->cursor_pos_x = pzx;
+  g->cursor_pos_y = pzy;
+
+  float rgb[3] = { 0.0f, 0.0f, 0.0f };
+  if(!_read_pixel(self, pzx, pzy, rgb))
+  {
+    g->cursor_valid = FALSE;
+    _switch_cursors(self);
+    dt_control_queue_redraw_center();
+    return 0;
+  }
+
+  // luminance of the module input pixel = the curve abscissa [0,1]
+  g->cursor_abscissa = CLAMP(0.2126f * rgb[0] + 0.7152f * rgb[1] + 0.0722f * rgb[2],
+                             0.0f, 1.0f);
+  g->cursor_valid = TRUE;
+  g->reprocess_pending = FALSE;
+  _switch_cursors(self);
+  dt_control_queue_redraw_center();
+  gtk_widget_queue_draw(GTK_WIDGET(g->area));
+  return 0;
+}
+
+int mouse_leave(dt_iop_module_t *self)
+{
+  dt_iop_basecurve_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing) return 0;
+
+  g->cursor_valid = FALSE;
+  g->reprocess_pending = FALSE;
+  dt_preview_data_invalidate(&g->pd);
+  _switch_cursors(self);
+  dt_control_queue_redraw_center();
+  gtk_widget_queue_draw(GTK_WIDGET(g->area));
+
+  return 1;
+}
+
+int scrolled(dt_iop_module_t *self,
+             const float x,
+             const float y,
+             const int up,
+             const uint32_t state)
+{
+  dt_iop_basecurve_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing) return 0;
+  if(in_mask_editing(self)) return 0;
+  if(!g->cursor_valid) return 0;
+
+  const float delta_y = up ? 1.0f : -1.0f;
+  _adjust_params_hover(self, delta_y / 250.0f);
+  return 1;
+}
+
+void gui_post_expose(dt_iop_module_t *self,
+                     cairo_t *cr,
+                     const float width,
+                     const float height,
+                     const float pointerx,
+                     const float pointery,
+                     const float zoom_scale)
+{
+  dt_iop_basecurve_gui_data_t *g = self->gui_data;
+  if(!g || !g->hover_editing || !self->dev->gui_attached) return;
+  if(in_mask_editing(self)) return;
+  if(!g->cursor_valid) return;
+
+  const float cx = g->cursor_pos_x * width;
+  const float cy = g->cursor_pos_y * height;
+
+  // in/out colors at the pixel under the cursor
+  float in_rgb[3] = { 0.5f, 0.5f, 0.5f };
+  _read_pixel(self, g->cursor_pos_x, g->cursor_pos_y, in_rgb);
+
+  const float in_norm = g->cursor_abscissa;
+  const float out_norm = _basecurve_curve_value(self, in_norm);
+
+  // approximate the module output color as the input scaled by the
+  // luminance ratio (matches the luminance-preserving curve application)
+  const float ratio = (in_norm > 0.0001f) ? out_norm / in_norm : 1.0f;
+  float out_rgb[3];
+  for(int c = 0; c < 3; c++)
+    out_rgb[c] = CLAMP(in_rgb[c] * ratio, 0.0f, 1.0f);
+  for(int c = 0; c < 3; c++)
+    in_rgb[c] = CLAMP(in_rgb[c], 0.0f, 1.0f);
+
+  float frame_color[3];
+  float bg_rgb[3];
+  dt_draw_backbuf_contrast(self->dev, g->cursor_pos_x, g->cursor_pos_y,
+                           bg_rgb, frame_color, 16.0f / (zoom_scale * width));
+
+  float correction_norm = out_norm - in_norm;
+  char text[64];
+  snprintf(text, sizeof(text), "%+.1f%%", (out_norm - in_norm) * 100.0f);
+
+  dt_draw_correction_cursor(cr, cx, cy,
+                            zoom_scale, correction_norm,
+                            frame_color, in_rgb, FALSE,
+                            out_rgb, FALSE, text);
+
+  gtk_widget_queue_draw(GTK_WIDGET(g->area));
+}
+
 static void _toggle_node_sliders_callback(GtkWidget *btn, dt_iop_module_t *self)
 {
   dt_iop_basecurve_gui_data_t *g = self->gui_data;
@@ -3690,6 +4096,20 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->colorpicker, _("pick luminance from image to show on curve"));
   gtk_box_pack_start(GTK_BOX(box_btns), g->colorpicker, FALSE, FALSE, 0);
   dt_action_define_iop(self, NULL, N_("pick luminance"), g->colorpicker, &dt_action_def_toggle);
+
+  /* Crosshair toggle: adjust curve on image via hover+scroll */
+  g->hover_toggle = dtgtk_togglebutton_new(dtgtk_cairo_paint_compass_star, 0, NULL);
+  dt_gui_add_class(g->hover_toggle, "dt_transparent_background");
+  gtk_widget_set_size_request(g->hover_toggle, DT_PIXEL_APPLY_DPI(14), DT_PIXEL_APPLY_DPI(14));
+  gtk_widget_set_tooltip_text(g->hover_toggle,
+                              _("adjust the curve directly on the image\n"
+                                "move the mouse over the image and use the scroll wheel\n"
+                                "a node is added automatically at the nearest position"));
+  dt_action_define_iop(self, N_("pickers"), N_("adjust on image"),
+                       g->hover_toggle, &dt_action_def_toggle);
+  g_signal_connect(G_OBJECT(g->hover_toggle), "toggled",
+                   G_CALLBACK(_hover_toggle_callback), self);
+  gtk_box_pack_start(GTK_BOX(box_btns), g->hover_toggle, FALSE, FALSE, 0);
 
   /* Eye button: toggle node x/y sliders below the graph */
   g->btn_toggle_sliders = dtgtk_button_new(dtgtk_cairo_paint_eye_toggle, 0, NULL);
@@ -3981,12 +4401,53 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->area), "leave-notify-event", G_CALLBACK(dt_iop_basecurve_leave_notify), self);
   g_signal_connect(G_OBJECT(g->area), "scroll-event", G_CALLBACK(_scrolled), self);
   g_signal_connect(G_OBJECT(g->area), "key-press-event", G_CALLBACK(dt_iop_basecurve_key_press), self);
+
+  dt_preview_data_alloc(&g->pd, self);
+  g->pd.components = 3;
+  g->hover_editing = FALSE;
+  g->cursor_valid = FALSE;
+  g->reprocess_pending = FALSE;
+  g->cursor_abscissa = 0.0f;
+  g->cursor_pos_x = 0.0f;
+  g->cursor_pos_y = 0.0f;
+
+  // hover+scroll on the image (gated by g->hover_editing)
+  self->mouse_moved = mouse_moved;
+  self->mouse_leave = mouse_leave;
+  self->scrolled = scrolled;
+  self->gui_post_expose = gui_post_expose;
 }
 
 void gui_cleanup(dt_iop_module_t *self)
 {
   dt_iop_basecurve_gui_data_t *g = self->gui_data;
+  dt_preview_data_free(&g->pd);
   dt_draw_curve_destroy(g->minmax_curve);
+}
+
+void gui_focus(dt_iop_module_t *self, gboolean in)
+{
+  dt_iop_basecurve_gui_data_t *g = self->gui_data;
+  if(in)
+  {
+    if(g && g->hover_editing && !dt_preview_data_is_fresh(&g->pd) && !g->reprocess_pending)
+    {
+      g->reprocess_pending = TRUE;
+      dt_dev_reprocess_preview(self->dev);
+    }
+    _switch_cursors(self);
+  }
+  else
+  {
+    if(g)
+    {
+      g->cursor_valid = FALSE;
+      g->reprocess_pending = FALSE;
+      dt_preview_data_invalidate(&g->pd);
+    }
+    _switch_cursors(self);
+    dt_control_queue_redraw_center();
+  }
 }
 
 // clang-format off
