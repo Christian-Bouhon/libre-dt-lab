@@ -2642,7 +2642,7 @@ static gboolean _iop_colorequalizer_draw(GtkWidget *widget,
   // shifted by hue_shift, so the hue is mapped directly to x.
   if(self->enabled && g->cursor_valid)
   {
-    float x_cursor = (g->cursor_hue / 360.0f + dx) * graph_width;
+    float x_cursor = (g->cursor_hue / 360.0f) * graph_width;
     x_cursor = fmodf(x_cursor, graph_width); // hue is periodic
     if(x_cursor < 0.0f) x_cursor += graph_width;
 
