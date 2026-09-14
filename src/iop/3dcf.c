@@ -3538,9 +3538,9 @@ int scrolled(dt_iop_module_t *self,
      the total correction per click unchanged. */
   const float prox_pivot = 1.0f - fabsf(ys_disp - pivot);
   const float prox_region = (ys_disp < pivot) ? (1.0f - ys_disp) : ys_disp;
-  const float inv_sum = 1.0f / (prox_pivot * prox_pivot + prox_region * prox_region + 1e-6f);
-  const float w_pivot = prox_pivot * prox_pivot * inv_sum;
-  const float w_region = prox_region * prox_region * inv_sum;
+  const float inv_sum = 1.0f / (prox_pivot * prox_pivot * prox_pivot + prox_region * prox_region * prox_region + 1e-6f);
+  const float w_pivot = prox_pivot * prox_pivot * prox_pivot * inv_sum;
+  const float w_region = prox_region * prox_region * prox_region * inv_sum;
   const float A = 0.03f;
 
   /* The pivot slider always follows the scroll direction (up -> rises,
