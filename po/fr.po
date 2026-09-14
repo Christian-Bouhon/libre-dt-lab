@@ -2542,7 +2542,7 @@ msgstr "Neutre"
 
 #: ../build/lib/darktable/plugins/introspection_3dcf.c:449
 msgid "natural look"
-msgstr "look naturel"
+msgstr "Naturel"
 
 #: ../build/lib/darktable/plugins/introspection_3dcf.c:450 ../build/lib/darktable/plugins/introspection_borders.c:350 ../src/imageio/format/pdf.c:621 ../src/libs/filtering.c:321
 #: ../src/libs/filters/ratio.c:120 ../src/libs/print_settings.c:2617
