@@ -46,7 +46,7 @@
 #include <gtk/gtk.h>
 #include <inttypes.h>
 
-DT_MODULE_INTROSPECTION(3, dt_iop_colorchecker_params_t)
+DT_MODULE_INTROSPECTION(4, dt_iop_colorchecker_params_t)
 
 static const int colorchecker_patches = 24;
 static const float colorchecker_Lab[] =
@@ -106,6 +106,7 @@ typedef struct dt_iop_colorchecker_params_t
   int32_t num_patches;
   dt_iop_colorchecker_colorspace_t colorspace; // $DEFAULT: DT_IOP_CC_CS_XYZ $DESCRIPTION: "color space"
   dt_iop_colorchecker_anchor_t anchor;         // $DEFAULT: DT_IOP_CC_ANCHOR_WHITE $DESCRIPTION: "exposure reference"
+  float smoothness;                            // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "color smoothness"
 } dt_iop_colorchecker_params_t;
 
 typedef struct dt_iop_colorchecker_gui_data_t
@@ -257,18 +258,16 @@ int legacy_params(dt_iop_module_t *self,
     21.46, 0.06,   -0.95,  // black
   };
 
-  // NOTE: versions 3 to 5 of the params struct (intermediate steps of the
-  // colorspace/anchor/solving-strategy rework) were never published, so
-  // there is no on-disk XMP/database data using them. Only v1 and v2 -
-  // the versions that actually shipped - need a migration path to the
-  // current v3 struct (source/target Lab + num_patches + colorspace +
-  // anchor).
-  if(old_version >= 1 && old_version <= 2)
+  // Migration to the current v4 struct (source/target Lab + num_patches +
+  // colorspace + anchor + smoothness). v1/v2 are the pre-rework versions,
+  // v3 is the colorspace/anchor version without smoothness.
+  if(old_version >= 1 && old_version <= 3)
   {
     dt_iop_colorchecker_params_t *n = malloc(sizeof(dt_iop_colorchecker_params_t));
     memset(n, 0, sizeof(dt_iop_colorchecker_params_t));
     n->colorspace = DT_IOP_CC_CS_LAB;
     n->anchor = DT_IOP_CC_ANCHOR_WHITE;
+    n->smoothness = 0.0f;
 
     if(old_version == 1)
     {
@@ -291,7 +290,7 @@ int legacy_params(dt_iop_module_t *self,
         n->source_b[k] = colorchecker_Lab_v1[3 * k + 2];
       }
     }
-    else // old_version == 2
+    else if(old_version == 2)
     {
       typedef struct dt_iop_colorchecker_params_v2_t
       {
@@ -316,9 +315,38 @@ int legacy_params(dt_iop_module_t *self,
         n->target_b[k] = o->target_b[k];
       }
     }
+    else // old_version == 3
+    {
+      typedef struct dt_iop_colorchecker_params_v3_t
+      {
+        float source_L[MAX_PATCHES];
+        float source_a[MAX_PATCHES];
+        float source_b[MAX_PATCHES];
+        float target_L[MAX_PATCHES];
+        float target_a[MAX_PATCHES];
+        float target_b[MAX_PATCHES];
+        int32_t num_patches;
+        int32_t colorspace;
+        int32_t anchor;
+      } dt_iop_colorchecker_params_v3_t;
+
+      const dt_iop_colorchecker_params_v3_t *o = old_params;
+      n->num_patches = o->num_patches;
+      for(int k=0; k<MAX_PATCHES; k++)
+      {
+        n->source_L[k] = o->source_L[k];
+        n->source_a[k] = o->source_a[k];
+        n->source_b[k] = o->source_b[k];
+        n->target_L[k] = o->target_L[k];
+        n->target_a[k] = o->target_a[k];
+        n->target_b[k] = o->target_b[k];
+      }
+      n->colorspace = o->colorspace;
+      n->anchor = o->anchor;
+    }
     *new_params = n;
     *new_params_size = sizeof(dt_iop_colorchecker_params_t);
-    *new_version = 3;
+    *new_version = 4;
     return 0;
   }
   return 1;
@@ -1241,6 +1269,23 @@ void commit_params(dt_iop_module_t *self,
     // lower-right zero block
     for(unsigned j = N; j < N4; ++j)
       for(unsigned i = N; i < N4; ++i) A[j * N4 + i] = 0;
+
+    // Optional smoothing: a ridge on the radial basis block turns the exact
+    // interpolation into a (slightly) approximating spline. This lowers the
+    // local gradient of the mapping, which is what amplifies input noise and
+    // edges in steep colour regions (e.g. between blue and green). With
+    // smoothness == 0 the ridge vanishes and the spline stays exact; the
+    // identity mapping (source == target) is preserved whatever the value.
+    if(p->smoothness > 0.f && N > 1)
+    {
+      double rsum = 0.0;
+      for(unsigned i = 0; i < N; ++i)
+        for(unsigned j = 0; j < N; ++j)
+          if(i != j) rsum += fabs(A[i * N4 + j]);
+      const float lambda = p->smoothness * (float)(rsum / (double)(N * (N - 1)));
+      for(unsigned i = 0; i < N; ++i)
+        A[i * N4 + i] += lambda;
+    }
 
     // make coefficient matrix triangular
     int *pivot = malloc(sizeof(*pivot) * N4);
@@ -2846,6 +2891,18 @@ void gui_init(dt_iop_module_t *self)
                            == DT_IOP_CC_CS_XYZ);
   g_signal_connect(G_OBJECT(g->combobox_colorspace), "value-changed",
                    G_CALLBACK(_colorspace_callback), self);
+
+  GtkWidget *slider_smoothness = dt_bauhaus_slider_from_params(self, "smoothness");
+  dt_bauhaus_widget_set_label(slider_smoothness, NULL, N_("color smoothness"));
+  dt_bauhaus_slider_set_format(slider_smoothness, "%");
+  dt_bauhaus_slider_set_factor(slider_smoothness, 100.0);
+  dt_bauhaus_slider_set_digits(slider_smoothness, 1);
+  dt_bauhaus_slider_set_step(slider_smoothness, 0.005f);
+  gtk_widget_set_tooltip_text
+    (slider_smoothness,
+     _("smooth the colour mapping: reduces overshoot and noise/edge\n"
+       "amplification in steep colour regions, at the cost of a small\n"
+       "fit error. 0 keeps the exact interpolation."));
 
   // ---- color chart calibration ----
   dt_gui_new_collapsible_section
