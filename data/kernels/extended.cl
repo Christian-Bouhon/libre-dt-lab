@@ -1042,7 +1042,9 @@ float thinplate(const float4 x, const float4 y)
 
 kernel void
 colorchecker (read_only image2d_t in, write_only image2d_t out, const int width, const int height,
-              const int num_patches, global float4 *params)
+              const int num_patches, global float4 *params,
+              const int mode, constant float *matrix_in, constant float *matrix_out,
+              const float scale_in, const float scale_out)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -1057,12 +1059,32 @@ colorchecker (read_only image2d_t in, write_only image2d_t out, const int width,
 
   const float w = ipixel.w;
 
-  float4 opixel = poly_Lab[0] + poly_Lab[1] * ipixel.x + poly_Lab[2] * ipixel.y + poly_Lab[3] * ipixel.z;
+  float4 p = ipixel;
+  if(mode == 1)
+  {
+    // linear RGB -> CIE XYZ (D50), then normalize
+    p.x = (matrix_in[0] * ipixel.x + matrix_in[1] * ipixel.y + matrix_in[2] * ipixel.z) * scale_in;
+    p.y = (matrix_in[3] * ipixel.x + matrix_in[4] * ipixel.y + matrix_in[5] * ipixel.z) * scale_in;
+    p.z = (matrix_in[6] * ipixel.x + matrix_in[7] * ipixel.y + matrix_in[8] * ipixel.z) * scale_in;
+  }
+
+  float4 opixel = poly_Lab[0] + poly_Lab[1] * p.x + poly_Lab[2] * p.y + poly_Lab[3] * p.z;
 
   for(int k = 0; k < num_patches; k++)
   {
-    const float phi = thinplate(ipixel, source_Lab[k]);
+    const float phi = thinplate(p, source_Lab[k]);
     opixel += coeff_Lab[k] * phi;
+  }
+
+  if(mode == 1)
+  {
+    // denormalize, then CIE XYZ -> linear RGB
+    const float X = opixel.x * scale_out;
+    const float Y = opixel.y * scale_out;
+    const float Z = opixel.z * scale_out;
+    opixel.x = matrix_out[0] * X + matrix_out[1] * Y + matrix_out[2] * Z;
+    opixel.y = matrix_out[3] * X + matrix_out[4] * Y + matrix_out[5] * Z;
+    opixel.z = matrix_out[6] * X + matrix_out[7] * Y + matrix_out[8] * Z;
   }
 
   opixel.w = w;
