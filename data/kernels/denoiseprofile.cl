@@ -365,6 +365,34 @@ denoiseprofile_finish_v2(read_only image2d_t in, global float4* U2, write_only i
 
 
 
+// like denoiseprofile_finish, but only normalizes the NLM accumulator
+// (U2 / U2.w) without applying the inverse VST. used when running the
+// patch-matching kernels (dist/horiz/vert/accu) directly on a signed,
+// zero-mean wavelet detail band instead of on a VST-preconditioned
+// image: there is no Anscombe-type transform to invert on that band,
+// and finish_v2's inverse-transform math assumes a non-negative
+// domain, which would clip away the negative half of the detail
+// coefficients.
+kernel void
+denoiseprofile_finish_plain(read_only image2d_t in, global float4* U2, write_only image2d_t out,
+                            const int width, const int height)
+{
+  const int x = get_global_id(0);
+  const int y = get_global_id(1);
+  const int gidx = mad24(y, width, x);
+
+  if(x >= width || y >= height) return;
+
+  float4 u2 = U2[gidx];
+  const float alpha = readalpha(in, x, y);
+
+  float4 px = (u2.w > 0.0f ? u2 / u2.w : (float4)0.0f);
+  px.w = alpha;
+
+  write_imagef(out, (int2)(x, y), px);
+}
+
+
 kernel void
 denoiseprofile_backtransform(read_only image2d_t in, write_only image2d_t out, const int width, const int height,
                              const float4 a, const float4 sigma2)
