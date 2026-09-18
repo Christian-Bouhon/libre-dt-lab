@@ -2862,8 +2862,8 @@ void init(dt_iop_module_t *self)
 
   dt_iop_denoiseprofile_params_t *d = self->default_params;
 
-  // default curve favours detail preservation
-  _set_wavelet_curve_preset(d, DENOISE_CURVE_PRESERVE_DETAILS);
+  // default curve
+  _set_wavelet_curve_preset(d, DENOISE_CURVE_NEUTRAL);
   memcpy(d->custom_x, d->x, sizeof(d->custom_x));
   memcpy(d->custom_y, d->y, sizeof(d->custom_y));
   d->custom_curve_valid = TRUE;
@@ -2893,7 +2893,7 @@ void reload_defaults(dt_iop_module_t *self)
   // wavelets
   d->wavelets_enabled = TRUE;
   d->wavelets_auto = TRUE;
-  d->wavelets_strength = 0.5f;
+  d->wavelets_strength = 0.75f;
   d->wavelets_shadows = 1.0f;
   d->wavelets_bias = 0.0f;
   d->wavelets_overshooting = 1.0f;
@@ -2909,8 +2909,8 @@ void reload_defaults(dt_iop_module_t *self)
   d->nlmeans_scattering = 0.0f;
   d->nlmeans_central_pixel_weight = 0.1f;
   d->nlmeans_overshooting = 1.0f;
-  // default curve favours detail preservation
-  _set_wavelet_curve_preset(d, DENOISE_CURVE_PRESERVE_DETAILS);
+  // default curve
+  _set_wavelet_curve_preset(d, DENOISE_CURVE_NEUTRAL);
   memcpy(d->custom_x, d->x, sizeof(d->custom_x));
   memcpy(d->custom_y, d->y, sizeof(d->custom_y));
   d->custom_curve_valid = TRUE;
