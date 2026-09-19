@@ -157,6 +157,8 @@ changes (where available).
   lightness was set to zero. Such a target cannot be reached, so the
   correction is now left alone instead.
 
+- Fixed highlights laplacian OpenCL code.
+
 ## Lua
 
 ### API Version
