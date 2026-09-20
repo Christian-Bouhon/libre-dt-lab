@@ -137,10 +137,14 @@ typedef struct dt_iop_colorchecker_gui_data_t
   gboolean is_profiling_started; // the calibration section is expanded
   float *measured_lab;           // 3 * MAX_PATCHES measured patch colors (Lab)
   float *measured_XYZ;           // 3 * MAX_PATCHES same patches, raw CIE XYZ
-                                  // (only filled/valid when the calibration
-                                  // ran in XYZ mode, see measured_xyz_valid)
-  gboolean measured_xyz_valid;   // whether measured_XYZ reflects the colorspace
-                                  // mode that was active at extraction time
+                                  // (valid when a work profile was available
+                                  // at extraction time, see measured_xyz_valid)
+  gboolean measured_xyz_valid;   // whether measured_XYZ was computed with a
+                                  // valid work profile at extraction time
+  gboolean measure_as_target;    // write the measurement as target (look) instead
+                                  // of as source (calibration)
+  gboolean colors_only;          // only correct the colours, keep the source
+                                  // luminance (baked into the measured target)
   float *delta_E_in;             // per-patch delta E before correction
   gchar *delta_E_label_text;
   // cache of the last formatted report (gui_post_expose runs on every redraw)
@@ -150,23 +154,22 @@ typedef struct dt_iop_colorchecker_gui_data_t
 
   GtkWidget *checkers_list, *safety, *label_delta_E;
   GtkWidget *button_profile, *button_commit, *button_reuse;
+  GtkWidget *check_measure_as_target, *check_colors_only;
   dt_gui_collapsible_section_t cs;
 } dt_iop_colorchecker_gui_data_t;
 
 typedef struct dt_iop_colorchecker_data_t
 {
   int32_t num_patches;
-  int32_t colorspace;
-  int32_t anchor;
   float source_Lab[3*MAX_PATCHES];
   float coeff_L[MAX_PATCHES+4];
   float coeff_a[MAX_PATCHES+4];
   float coeff_b[MAX_PATCHES+4];
-  float scale_in;   // multiply input by this before the spline (XYZ mode)
-  float scale_out;  // multiply spline output by this after (XYZ mode)
-  float matrix_in[9];  // RGB -> XYZ (XYZ mode)
-  float matrix_out[9]; // XYZ -> RGB (XYZ mode)
-  gboolean has_matrix;
+  float scale_in;   // multiply the converted XYZ by this before the spline
+  float scale_out;  // multiply the spline output XYZ by this after (1 in Lab mode)
+  float matrix_in[9];  // scene-linear RGB -> CIE XYZ (work profile)
+  float matrix_out[9]; // CIE XYZ -> scene-linear RGB (work profile)
+  gboolean has_matrix; // FALSE when no valid work profile: pass through
 } dt_iop_colorchecker_data_t;
 
 typedef struct dt_iop_colorchecker_global_data_t
@@ -190,9 +193,9 @@ const char **description(dt_iop_module_t *self)
   return dt_iop_set_description
     (self, _("perform color space corrections and apply looks"),
      _("corrective or creative"),
-     _("linear or non-linear, Lab or XYZ, scene or display-referred"),
-     _("defined by profile, Lab or XYZ"),
-     _("linear or non-linear, Lab or XYZ, scene or display-referred"));
+     _("scene-referred linear RGB"),
+     _("convert to CIE XYZ and Lab, apply the correction spline, convert back"),
+     _("scene-referred linear RGB"));
 }
 
 int default_group()
@@ -209,18 +212,25 @@ dt_iop_colorspace_type_t default_colorspace(dt_iop_module_t *self,
                                             dt_dev_pixelpipe_t *pipe,
                                             dt_dev_pixelpipe_iop_t *piece)
 {
-  const dt_iop_colorchecker_params_t *const p = self->params;
-  if(!p || p->colorspace == DT_IOP_CC_CS_LAB)
-    return IOP_CS_LAB;
-
-  // XYZ mode works on linear RGB, but only if we have a valid work profile
-  // to convert it to CIE XYZ. Otherwise stay in Lab to avoid a mismatch.
-  if(pipe)
-  {
-    const dt_iop_order_iccprofile_info_t *const wp = dt_ioppr_get_pipe_work_profile_info(pipe);
-    if(!wp || !dt_is_valid_colormatrix(wp->matrix_in[0][0]))
-      return IOP_CS_LAB;
-  }
+  // This module always runs on scene-linear RGB so it can sit before the tone
+  // mapper without clipping HDR / wide-gamut data. The RGB <-> CIE XYZ <-> Lab
+  // conversions are done inside the module (see commit_params()/process())
+  // using the pipe work profile.
+  //
+  // This MUST stay independent of the module params: the pipeline evaluates it
+  // at process time, while the actual pixels are driven by the committed
+  // history params, and the two can differ (snapshot pipes never call
+  // dt_dev_pop_history_items_ext(), so module->params stays at the defaults,
+  // and preset changes are not atomic). A params-dependent colorspace used to
+  // hand Lab data to a module that then processed it as RGB (white/black
+  // images).
+  //
+  // Compatibility note: this is a deliberate behaviour break for existing Lab
+  // edits. Unmasked edits render identically (the module now does the same
+  // RGB->Lab->RGB round trip the pipeline used to do around it), but the
+  // pipeline inserts an RGB island where it previously stayed in Lab, so
+  // out-of-gamut Lab colours can clip on the way in. The blend colourspace is
+  // not affected: it is persisted per edit in blendop_params->blend_cst.
   return IOP_CS_RGB;
 }
 
@@ -754,10 +764,10 @@ void process(dt_iop_module_t *self,
   }
 
   const dt_iop_colorchecker_data_t *const data = piece->data;
-  // in XYZ mode the pipeline hands us linear RGB: convert to XYZ, apply the
-  // spline (trained in normalized XYZ) and convert back. In Lab mode the
-  // pipeline already gives us Lab, so this is a pure pass-through.
-  const gboolean xyz_mode = (data->colorspace == DT_IOP_CC_CS_XYZ) && data->has_matrix;
+  // the pipeline always hands us scene-linear RGB: convert to CIE XYZ, apply
+  // the spline (solved in Lab) and convert back. `has_matrix` is FALSE only
+  // when no valid work profile is available, in which case we pass through.
+  const gboolean convert = data->has_matrix;
   const float scale_in = data->scale_in;
   const float scale_out = data->scale_out;
   const size_t npixels = (size_t)roi_out->height * (size_t)roi_out->width;
@@ -804,18 +814,24 @@ void process(dt_iop_module_t *self,
     dt_aligned_pixel_t inpx;
     copy_pixel(inpx, ((float *)ivoid) + 4*k);
 
+    if(!convert)
+    {
+      // no valid work profile: we cannot move to CIE XYZ/Lab, so leave the
+      // pixel untouched instead of feeding RGB to a spline solved in Lab
+      copy_pixel_nontemporal(out + 4*k, inpx);
+      continue;
+    }
+
+    // scene-linear RGB -> CIE XYZ (work profile), normalized by the exposure
+    // anchor (XYZ mode), then moved to Lab where the spline is actually solved
     dt_aligned_pixel_t working_in;
-    if(xyz_mode)
-    {
-      working_in[0] = (min[0]*inpx[0] + min[1]*inpx[1] + min[2]*inpx[2]) * scale_in;
-      working_in[1] = (min[3]*inpx[0] + min[4]*inpx[1] + min[5]*inpx[2]) * scale_in;
-      working_in[2] = (min[6]*inpx[0] + min[7]*inpx[1] + min[8]*inpx[2]) * scale_in;
-      working_in[3] = 0.0f;
-    }
-    else
-    {
-      copy_pixel(working_in, inpx);
-    }
+    dt_aligned_pixel_t xyz;
+    xyz[0] = (min[0]*inpx[0] + min[1]*inpx[1] + min[2]*inpx[2]) * scale_in;
+    xyz[1] = (min[3]*inpx[0] + min[4]*inpx[1] + min[5]*inpx[2]) * scale_in;
+    xyz[2] = (min[6]*inpx[0] + min[7]*inpx[1] + min[8]*inpx[2]) * scale_in;
+    xyz[3] = 0.0f;
+    dt_XYZ_to_Lab(xyz, working_in);
+    working_in[3] = 0.0f;
 
     // polynomial part:
     dt_aligned_pixel_t poly_L, poly_a, poly_b;
@@ -840,22 +856,16 @@ void process(dt_iop_module_t *self,
         working_res[c] += patches[p][c] * phi;
     }
 
+    // Lab (spline output) -> CIE XYZ -> denormalize -> scene-linear RGB
     dt_aligned_pixel_t outpx;
-    if(xyz_mode)
-    {
-      const float x = working_res[0] * scale_out;
-      const float y = working_res[1] * scale_out;
-      const float z = working_res[2] * scale_out;
-      outpx[0] = mout[0]*x + mout[1]*y + mout[2]*z;
-      outpx[1] = mout[3]*x + mout[4]*y + mout[5]*z;
-      outpx[2] = mout[6]*x + mout[7]*y + mout[8]*z;
-      outpx[3] = inpx[3];
-    }
-    else
-    {
-      copy_pixel(outpx, working_res);
-      outpx[3] = inpx[3];
-    }
+    dt_Lab_to_XYZ(working_res, xyz);
+    const float x = xyz[0] * scale_out;
+    const float y = xyz[1] * scale_out;
+    const float z = xyz[2] * scale_out;
+    outpx[0] = mout[0]*x + mout[1]*y + mout[2]*z;
+    outpx[1] = mout[3]*x + mout[4]*y + mout[5]*z;
+    outpx[2] = mout[6]*x + mout[7]*y + mout[8]*z;
+    outpx[3] = inpx[3];
     copy_pixel_nontemporal(out + 4*k, outpx);
   }
   dt_omploop_sfence();
@@ -879,7 +889,7 @@ int process_cl(dt_iop_module_t *self,
   const int width = roi_out->width;
   const int height = roi_out->height;
   const int num_patches = d->num_patches;
-  const int mode = (d->colorspace == DT_IOP_CC_CS_XYZ && d->has_matrix) ? 1 : 0;
+  const int convert = d->has_matrix ? 1 : 0;
 
   cl_int err = DT_OPENCL_DEFAULT_ERROR;
   cl_mem dev_params = NULL;
@@ -925,7 +935,7 @@ int process_cl(dt_iop_module_t *self,
                                          CLARG(width), CLARG(height),
                                          CLARG(num_patches),
                                          CLARG(dev_params),
-                                         CLARG(mode),
+                                         CLARG(convert),
                                          CLARG(dev_matrix_in),
                                          CLARG(dev_matrix_out),
                                          CLARG(d->scale_in), CLARG(d->scale_out));
@@ -954,8 +964,6 @@ void commit_params(dt_iop_module_t *self,
     if(g->run_profile) piece->process_cl_ready = FALSE;
   }
 
-  d->colorspace = p->colorspace;
-  d->anchor = p->anchor;
   d->scale_in = 1.0f;
   d->scale_out = 1.0f;
   d->has_matrix = FALSE;
@@ -967,29 +975,37 @@ void commit_params(dt_iop_module_t *self,
   dt_iop_colorchecker_params_t cal = *p;
   // If that measurement was taken in XYZ mode, its raw (pre-Lab) XYZ is
   // still cached on the gui data: reuse it below instead of converting
-  // the Lab it was derived from back to XYZ a second time.
-  gboolean have_cached_source_xyz = FALSE;
-  const float *cached_source_XYZ = NULL;
+  // the Lab it was derived from back to XYZ a second time. The cache always
+  // describes the *measured* colours, which are the source in calibration
+  // mode and the target in "measure as target" (look) mode.
+  gboolean measured_as_target = FALSE;
+  gboolean have_cached_measured_xyz = FALSE;
+  const float *cached_measured_XYZ = NULL;
   if(self->dev->gui_attached && self->gui_data)
   {
     const dt_iop_colorchecker_gui_data_t *const g = self->gui_data;
     if(g->profile_ready && g->measured_lab && g->checker)
     {
+      measured_as_target = g->measure_as_target;
+      const gboolean colors_only = g->colors_only;
       const int n = MIN(MAX_PATCHES, (int)g->checker->patches);
       cal.num_patches = n;
       for(int k = 0; k < n; k++)
       {
-        cal.source_L[k] = g->measured_lab[3 * k + 0];
-        cal.source_a[k] = g->measured_lab[3 * k + 1];
-        cal.source_b[k] = g->measured_lab[3 * k + 2];
-        cal.target_L[k] = g->checker->values[k].Lab[0];
-        cal.target_a[k] = g->checker->values[k].Lab[1];
-        cal.target_b[k] = g->checker->values[k].Lab[2];
+        const float *const meas = g->measured_lab + 3 * k;
+        const float *const ref = g->checker->values[k].Lab;
+        const float *const src = measured_as_target ? ref : meas;
+        const float *const tgt = measured_as_target ? meas : ref;
+        cal.source_L[k] = src[0]; cal.source_a[k] = src[1]; cal.source_b[k] = src[2];
+        cal.target_L[k] = tgt[0]; cal.target_a[k] = tgt[1]; cal.target_b[k] = tgt[2];
+        // "colors only": keep the source luminance so the calibration/look
+        // does not alter the tone
+        if(colors_only) cal.target_L[k] = cal.source_L[k];
       }
-      // g->measured_xyz_valid reflects the colorspace mode that was active
-      // at extraction time; only trust the cache if that still matches.
-      have_cached_source_xyz = g->measured_xyz_valid && g->measured_XYZ;
-      cached_source_XYZ = g->measured_XYZ;
+      // g->measured_xyz_valid says whether the cache was built with a valid
+      // work profile; only trust it if that still holds.
+      have_cached_measured_xyz = g->measured_xyz_valid && g->measured_XYZ;
+      cached_measured_XYZ = g->measured_XYZ;
     }
   }
 
@@ -998,84 +1014,119 @@ void commit_params(dt_iop_module_t *self,
   const unsigned N4 = N + 4;
 
   // Working copy of the patch coordinates in the space where the spline is
-  // solved: CIE Lab as-is, or CIE XYZ (D50) in XYZ mode. In XYZ mode the Lab
-  // references are converted to XYZ and normalized by the luminance of an
-  // anchor patch (white or middle gray) so that the spline sees a scale
-  // comparable to the reference chart while the image exposure is preserved.
+  // solved. In Lab mode they are used as-is. In "XYZ" mode the Lab references
+  // are converted to XYZ (D50), normalized by the luminance of an anchor patch
+  // (white or middle gray) so the image exposure is preserved, and then moved
+  // back to Lab: the spline is always solved in Lab (perceptually uniform)
+  // even though the pixel pipeline stays scene-linear RGB.
   dt_iop_colorchecker_params_t wp = cal;
 
-  if(p->colorspace == DT_IOP_CC_CS_XYZ)
+  // The module always runs on scene-linear RGB (constant IOP_CS_RGB) and does
+  // the RGB <-> CIE XYZ <-> Lab conversions internally, so the work profile
+  // matrices are needed in both colorspace modes. Profiles with nonlinear
+  // transfer curves are rejected: the internal conversion only applies the
+  // matrix and would otherwise silently ignore those curves.
+  const dt_iop_order_iccprofile_info_t *profile =
+    dt_ioppr_get_pipe_work_profile_info(pipe);
+  if(profile && !profile->nonlinearlut
+     && dt_is_valid_colormatrix(profile->matrix_in[0][0])
+     && dt_is_valid_colormatrix(profile->matrix_out[0][0]))
   {
-    const dt_iop_order_iccprofile_info_t *profile = dt_ioppr_get_pipe_work_profile_info(pipe);
-    if(profile && dt_is_valid_colormatrix(profile->matrix_in[0][0])
-       && dt_is_valid_colormatrix(profile->matrix_out[0][0]))
-    {
-      d->has_matrix = TRUE;
-      for(int r = 0; r < 3; r++)
-        for(int c = 0; c < 3; c++)
-        {
-          d->matrix_in[3 * r + c] = profile->matrix_in[r][c];
-          d->matrix_out[3 * r + c] = profile->matrix_out[r][c];
-        }
-    }
-
-    if(d->has_matrix)
-    {
-      for(unsigned k = 0; k < N; k++)
+    d->has_matrix = TRUE;
+    for(int r = 0; r < 3; r++)
+      for(int c = 0; c < 3; c++)
       {
-        dt_aligned_pixel_t lab, xyz;
-        if(have_cached_source_xyz)
-        {
-          // already computed once from the raw measurement in _extract_patches()
-          xyz[0] = cached_source_XYZ[3 * k + 0];
-          xyz[1] = cached_source_XYZ[3 * k + 1];
-          xyz[2] = cached_source_XYZ[3 * k + 2];
-        }
-        else
-        {
-          lab[0] = wp.source_L[k]; lab[1] = wp.source_a[k]; lab[2] = wp.source_b[k]; lab[3] = 0.0f;
-          dt_Lab_to_XYZ(lab, xyz);
-        }
-        wp.source_L[k] = xyz[0]; wp.source_a[k] = xyz[1]; wp.source_b[k] = xyz[2];
+        d->matrix_in[3 * r + c] = profile->matrix_in[r][c];
+        d->matrix_out[3 * r + c] = profile->matrix_out[r][c];
+      }
+  }
 
-        // the chart reference is only ever available in Lab, so the target
-        // always needs this conversion
+  // "XYZ" mode additionally normalizes the exposure with an anchor patch and
+  // solves the spline in Lab; Lab mode uses the absolute Lab values as-is
+  // (scale_in/scale_out stay 1).
+  if(p->colorspace == DT_IOP_CC_CS_XYZ && d->has_matrix)
+  {
+    for(unsigned k = 0; k < N; k++)
+    {
+      dt_aligned_pixel_t lab, xyz;
+
+      // source (measured in calibration mode, reference in look mode)
+      if(have_cached_measured_xyz && !measured_as_target)
+      {
+        // already computed once from the raw measurement in _extract_patches()
+        xyz[0] = cached_measured_XYZ[3 * k + 0];
+        xyz[1] = cached_measured_XYZ[3 * k + 1];
+        xyz[2] = cached_measured_XYZ[3 * k + 2];
+      }
+      else
+      {
+        lab[0] = wp.source_L[k]; lab[1] = wp.source_a[k]; lab[2] = wp.source_b[k]; lab[3] = 0.0f;
+        dt_Lab_to_XYZ(lab, xyz);
+      }
+      wp.source_L[k] = xyz[0]; wp.source_a[k] = xyz[1]; wp.source_b[k] = xyz[2];
+
+      // target (reference in calibration mode, measured in look mode)
+      if(have_cached_measured_xyz && measured_as_target)
+      {
+        xyz[0] = cached_measured_XYZ[3 * k + 0];
+        xyz[1] = cached_measured_XYZ[3 * k + 1];
+        xyz[2] = cached_measured_XYZ[3 * k + 2];
+      }
+      else
+      {
         lab[0] = wp.target_L[k]; lab[1] = wp.target_a[k]; lab[2] = wp.target_b[k]; lab[3] = 0.0f;
         dt_Lab_to_XYZ(lab, xyz);
-        wp.target_L[k] = xyz[0]; wp.target_a[k] = xyz[1]; wp.target_b[k] = xyz[2];
       }
+      wp.target_L[k] = xyz[0]; wp.target_a[k] = xyz[1]; wp.target_b[k] = xyz[2];
+    }
 
-      // generic channel indices: 0 = X, 1 = Y, 2 = Z
-      float ws = 1.0f, wt = 1.0f;
-      if(p->anchor != DT_IOP_CC_ANCHOR_NONE && N > 0)
-      {
-        int best = 0;
-        float best_score = -FLT_MAX;
-        for(unsigned k = 0; k < N; k++)
-        {
-          const float score = (p->anchor == DT_IOP_CC_ANCHOR_GRAY)
-                                ? -fabsf(wp.target_a[k] - 0.18f) // closest to middle gray
-                                : wp.target_a[k];                // brightest patch (white)
-          if(score > best_score)
-          {
-            best_score = score;
-            best = k;
-          }
-        }
-        ws = wp.source_a[best];
-        wt = wp.target_a[best];
-      }
-      if(ws <= 1e-6f) ws = 1.0f;
-      if(wt <= 1e-6f) wt = 1.0f;
-
-      d->scale_in = 1.0f / ws;
-      d->scale_out = ws; // preserve the image exposure
-
+    // generic channel indices: 0 = X, 1 = Y, 2 = Z
+    float ws = 1.0f, wt = 1.0f;
+    if(p->anchor != DT_IOP_CC_ANCHOR_NONE && N > 0)
+    {
+      int best = 0;
+      float best_score = -FLT_MAX;
       for(unsigned k = 0; k < N; k++)
       {
-        wp.source_L[k] /= ws; wp.source_a[k] /= ws; wp.source_b[k] /= ws;
-        wp.target_L[k] /= wt; wp.target_a[k] /= wt; wp.target_b[k] /= wt;
+        const float score = (p->anchor == DT_IOP_CC_ANCHOR_GRAY)
+                              ? -fabsf(wp.target_a[k] - 0.18f) // closest to middle gray
+                              : wp.target_a[k];                // brightest patch (white)
+        if(score > best_score)
+        {
+          best_score = score;
+          best = k;
+        }
       }
+      ws = wp.source_a[best];
+      wt = wp.target_a[best];
+    }
+    if(ws <= 1e-6f) ws = 1.0f;
+    if(wt <= 1e-6f) wt = 1.0f;
+
+    d->scale_in = 1.0f / ws;
+    d->scale_out = ws; // preserve the image exposure
+
+    // The spline is solved in Lab, not in XYZ: XYZ is not perceptually
+    // uniform, its luminance axis dominates the RBF distances and the
+    // neutral (diagonal) axis drifts, which showed up as a magenta cast on
+    // neutral tones. We therefore normalize in XYZ (exposure anchor, as
+    // above) and then move the normalized coordinates to Lab for the solve.
+    for(unsigned k = 0; k < N; k++)
+    {
+      dt_aligned_pixel_t xyz, lab;
+      xyz[0] = wp.source_L[k] / ws;
+      xyz[1] = wp.source_a[k] / ws;
+      xyz[2] = wp.source_b[k] / ws;
+      xyz[3] = 0.0f;
+      dt_XYZ_to_Lab(xyz, lab);
+      wp.source_L[k] = lab[0]; wp.source_a[k] = lab[1]; wp.source_b[k] = lab[2];
+
+      xyz[0] = wp.target_L[k] / wt;
+      xyz[1] = wp.target_a[k] / wt;
+      xyz[2] = wp.target_b[k] / wt;
+      xyz[3] = 0.0f;
+      dt_XYZ_to_Lab(xyz, lab);
+      wp.target_L[k] = lab[0]; wp.target_a[k] = lab[1]; wp.target_b[k] = lab[2];
     }
   }
 
@@ -1376,9 +1427,12 @@ void _colorchecker_update_sliders(dt_iop_module_t *self)
   dt_iop_colorchecker_params_t *p = self->params;
   dt_iop_colorchecker_gui_data_t *g = self->gui_data;
 
-  // while a measurement is pending, show the measured source and the reference
-  // target instead of the committed parameters
+  // while a measurement is pending, show the measured colours instead of the
+  // committed parameters. In calibration mode the measured colours are the
+  // source and the chart reference the target; in "measure as target" (look)
+  // mode it is the other way round.
   const gboolean preview = g->profile_ready && g->measured_lab && g->checker;
+  const gboolean look = preview && g->measure_as_target;
   const int n_patches = preview ? (int)g->checker->patches : p->num_patches;
 
   if(g->patch >= n_patches
@@ -1388,12 +1442,13 @@ void _colorchecker_update_sliders(dt_iop_module_t *self)
   float src[3], tgt[3];
   if(preview)
   {
-    src[0] = g->measured_lab[3 * g->patch + 0];
-    src[1] = g->measured_lab[3 * g->patch + 1];
-    src[2] = g->measured_lab[3 * g->patch + 2];
-    tgt[0] = g->checker->values[g->patch].Lab[0];
-    tgt[1] = g->checker->values[g->patch].Lab[1];
-    tgt[2] = g->checker->values[g->patch].Lab[2];
+    const float *const meas = g->measured_lab + 3 * g->patch;
+    const float *const ref = g->checker->values[g->patch].Lab;
+    const float *const s = look ? ref : meas;
+    const float *const t = look ? meas : ref;
+    src[0] = s[0]; src[1] = s[1]; src[2] = s[2];
+    tgt[0] = t[0]; tgt[1] = t[1]; tgt[2] = t[2];
+    if(g->colors_only) tgt[0] = src[0];
   }
   else
   {
@@ -1476,21 +1531,14 @@ void cleanup_global(dt_iop_module_so_t *self)
   self->data = NULL;
 }
 
-// The color picker returns values in the module input colorspace: Lab in Lab
-// mode, linear RGB in XYZ mode. Patch values are always stored in Lab, so
-// convert the picked RGB to Lab when needed.
+// The color picker returns values in the module input colorspace, which is
+// always scene-linear RGB (see default_colorspace()). Patch values are stored
+// in Lab, so convert the picked RGB to Lab with the work profile.
 static void _picked_to_lab(dt_iop_module_t *self,
                            const float in[3],
                            dt_aligned_pixel_t out)
 {
-  const dt_iop_colorchecker_params_t *const p = self->params;
   out[3] = 0.0f;
-
-  if(!p || p->colorspace == DT_IOP_CC_CS_LAB)
-  {
-    out[0] = in[0]; out[1] = in[1]; out[2] = in[2];
-    return;
-  }
 
   const dt_iop_order_iccprofile_info_t *const wp =
     self->dev ? dt_ioppr_get_iop_work_profile_info(self, self->dev->iop) : NULL;
@@ -1751,6 +1799,7 @@ static gboolean checker_draw(GtkWidget *widget,
   // while a measurement is pending, show the measured colors instead of the
   // committed ones so they can be reviewed before accepting
   const gboolean preview = g->profile_ready && g->measured_lab && g->checker;
+  const gboolean look = preview && g->measure_as_target;
   const int n_patches = preview ? (int)g->checker->patches : p->num_patches;
   const int cells_x = n_patches > 24 ? 7 : 6;
   const int cells_y = n_patches > 24 ? 7 : 4;
@@ -1765,12 +1814,13 @@ static gboolean checker_draw(GtkWidget *widget,
       dt_aligned_pixel_t Lab_tgt = { 0.f, 0.f, 0.f, 0.f };
       if(preview)
       {
-        Lab[0] = g->measured_lab[3 * patch + 0];
-        Lab[1] = g->measured_lab[3 * patch + 1];
-        Lab[2] = g->measured_lab[3 * patch + 2];
-        Lab_tgt[0] = g->checker->values[patch].Lab[0];
-        Lab_tgt[1] = g->checker->values[patch].Lab[1];
-        Lab_tgt[2] = g->checker->values[patch].Lab[2];
+        const float *const meas = g->measured_lab + 3 * patch;
+        const float *const ref = g->checker->values[patch].Lab;
+        const float *const s = look ? ref : meas;
+        const float *const t = look ? meas : ref;
+        Lab[0] = s[0]; Lab[1] = s[1]; Lab[2] = s[2];
+        Lab_tgt[0] = t[0]; Lab_tgt[1] = t[1]; Lab_tgt[2] = t[2];
+        if(g->colors_only) Lab_tgt[0] = Lab[0];
       }
       else
       {
@@ -1821,8 +1871,11 @@ static gboolean checker_draw(GtkWidget *widget,
     const int draw_i = g->drawn_patch % cells_x;
     const int draw_j = g->drawn_patch / cells_x;
     float color = 1.0;
-    const float src_L = preview ? g->measured_lab[3 * g->drawn_patch + 0]
-                                : p->source_L[g->drawn_patch];
+    // the drawn cell is filled with the source colour, so use its lightness
+    const float src_L = preview
+                          ? (look ? g->checker->values[g->drawn_patch].Lab[0]
+                                  : g->measured_lab[3 * g->drawn_patch + 0])
+                          : p->source_L[g->drawn_patch];
     if(src_L > 80) color = 0.0;
     cairo_set_line_width(cr, DT_PIXEL_APPLY_DPI(2.));
     cairo_set_source_rgb(cr, color, color, color);
@@ -2469,10 +2522,10 @@ static void _extract_patches(const float *const restrict in,
                              dt_iop_colorchecker_gui_data_t *g,
                              const dt_iop_order_iccprofile_info_t *const work_profile)
 {
-  const dt_iop_colorchecker_params_t *const p = self->params;
-  const gboolean xyz_mode = (p->colorspace == DT_IOP_CC_CS_XYZ)
-                            && work_profile
-                            && dt_is_valid_colormatrix(work_profile->matrix_in[0][0]);
+  // the module input is always scene-linear RGB, so the measured patches must
+  // always be converted to CIE XYZ (then Lab) with the work profile
+  const gboolean convert = work_profile
+                           && dt_is_valid_colormatrix(work_profile->matrix_in[0][0]);
   const size_t width = roi_in->width;
   const size_t height = roi_in->height;
   const float radius_x =
@@ -2486,11 +2539,11 @@ static void _extract_patches(const float *const restrict in,
   if(!g->delta_E_in)
     g->delta_E_in = dt_alloc_align_float(MAX_PATCHES);
 
-  // remember which mode this extraction pass was done in: commit_params()
-  // only trusts measured_XYZ when the module is still in XYZ mode at
-  // commit time, so it never reuses a cache computed under a different
-  // (or invalid) work profile / colorspace setting.
-  g->measured_xyz_valid = xyz_mode;
+  // remember whether this extraction pass could convert with a valid work
+  // profile: commit_params() only trusts the cached measured_XYZ when that
+  // still holds, so it never reuses a cache computed under a different (or
+  // invalid) work profile.
+  g->measured_xyz_valid = convert;
 
   for(size_t k = 0; k < g->checker->patches; k++)
   {
@@ -2538,13 +2591,15 @@ static void _extract_patches(const float *const restrict in,
     if(num > 0)
     {
       for_three_channels(c) mean[c] /= (float)num;
-      if(xyz_mode)
+      if(convert)
       {
         dot_product(mean, work_profile->matrix_in, XYZ);
         dt_XYZ_to_Lab(XYZ, lab);
       }
       else
       {
+        // no valid work profile: the measured RGB cannot be converted to Lab,
+        // keep it as-is (commit_params() will not reuse the XYZ cache)
         copy_pixel(lab, mean);
       }
     }
@@ -2652,6 +2707,39 @@ static void _safety_changed_callback(GtkWidget *widget, dt_iop_module_t *self)
   dt_control_queue_redraw_center();
 }
 
+static void _measure_as_target_callback(GtkWidget *widget, dt_iop_module_t *self)
+{
+  DT_GUARD_GUI_UPDATE();
+  dt_iop_colorchecker_gui_data_t *g = self->gui_data;
+
+  g->measure_as_target = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
+  dt_conf_set_bool("darkroom/modules/colorchecker/measure_as_target",
+                   g->measure_as_target);
+
+  // refresh the live preview if a measurement is already pending
+  if(g->profile_ready)
+    dt_dev_reprocess_preview(self->dev);
+  else
+    dt_control_queue_redraw_center();
+  if(g->area) gtk_widget_queue_draw(g->area);
+}
+
+static void _colors_only_callback(GtkWidget *widget, dt_iop_module_t *self)
+{
+  DT_GUARD_GUI_UPDATE();
+  dt_iop_colorchecker_gui_data_t *g = self->gui_data;
+
+  g->colors_only = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
+  dt_conf_set_bool("darkroom/modules/colorchecker/colors_only", g->colors_only);
+
+  // refresh the live preview if a measurement is already pending
+  if(g->profile_ready)
+    dt_dev_reprocess_preview(self->dev);
+  else
+    dt_control_queue_redraw_center();
+  if(g->area) gtk_widget_queue_draw(g->area);
+}
+
 static void _start_profiling_callback(GtkWidget *togglebutton, dt_iop_module_t *self)
 {
   DT_GUARD_GUI_UPDATE();
@@ -2695,15 +2783,24 @@ static void _commit_profile_callback(GtkWidget *widget, dt_iop_module_t *self)
 
   dt_iop_gui_enter_critical_section(self);
   const int n = MIN(MAX_PATCHES, (int)g->checker->patches);
+  const gboolean measured_as_target = g->measure_as_target;
+  const gboolean colors_only = g->colors_only;
   p->num_patches = n;
   for(int k = 0; k < n; k++)
   {
-    p->source_L[k] = g->measured_lab[3 * k + 0];
-    p->source_a[k] = g->measured_lab[3 * k + 1];
-    p->source_b[k] = g->measured_lab[3 * k + 2];
-    p->target_L[k] = g->checker->values[k].Lab[0];
-    p->target_a[k] = g->checker->values[k].Lab[1];
-    p->target_b[k] = g->checker->values[k].Lab[2];
+    const float *const meas = g->measured_lab + 3 * k;
+    const float *const ref = g->checker->values[k].Lab;
+    const float *const src = measured_as_target ? ref : meas;
+    const float *const tgt = measured_as_target ? meas : ref;
+    p->source_L[k] = src[0];
+    p->source_a[k] = src[1];
+    p->source_b[k] = src[2];
+    p->target_L[k] = tgt[0];
+    p->target_a[k] = tgt[1];
+    p->target_b[k] = tgt[2];
+    // "colors only": keep the source luminance so the calibration/look does
+    // not alter the tone (baked into the saved parameters)
+    if(colors_only) p->target_L[k] = p->source_L[k];
   }
   g->profile_ready = FALSE;
   dt_iop_gui_leave_critical_section(self);
@@ -2790,6 +2887,9 @@ void gui_init(dt_iop_module_t *self)
   g->checker = dt_get_color_checker(dt_conf_get_int("darkroom/modules/colorchecker/chart"));
   g->safety_margin = dt_conf_get_float("darkroom/modules/colorchecker/safety");
   if(g->safety_margin <= 0.f) g->safety_margin = 0.5f;
+  g->measure_as_target =
+    dt_conf_get_bool("darkroom/modules/colorchecker/measure_as_target");
+  g->colors_only = dt_conf_get_bool("darkroom/modules/colorchecker/colors_only");
   g->box[0].x = -1.0f; // mark the bounding box as not yet initialised
   g->box[1].y = -1.0f;
 
@@ -2941,6 +3041,35 @@ void gui_init(dt_iop_module_t *self)
   g_signal_connect(G_OBJECT(g->safety), "value-changed",
                    G_CALLBACK(_safety_changed_callback), self);
 
+  g->check_measure_as_target = gtk_check_button_new_with_label(_("measure as target"));
+  dt_action_define_iop(self, N_("calibrate"), N_("measure as target"),
+                       g->check_measure_as_target, &dt_action_def_toggle);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->check_measure_as_target),
+                               g->measure_as_target);
+  g_signal_connect(G_OBJECT(g->check_measure_as_target), "toggled",
+                   G_CALLBACK(_measure_as_target_callback), self);
+  gtk_widget_set_tooltip_text
+    (g->check_measure_as_target,
+     _("write the measurement as the target and the chart reference as the\n"
+       "source: this turns a calibration into a look, e.g. a film simulation\n"
+       "measured from an out-of-camera JPEG."));
+
+  g->check_colors_only =
+    gtk_check_button_new_with_label(_("measure only the colors, not the luminance"));
+  GtkWidget *colors_only_label = gtk_bin_get_child(GTK_BIN(g->check_colors_only));
+  if(colors_only_label) gtk_label_set_line_wrap(GTK_LABEL(colors_only_label), TRUE);
+  dt_action_define_iop(self, N_("calibrate"), N_("colors only"),
+                       g->check_colors_only, &dt_action_def_toggle);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->check_colors_only),
+                               g->colors_only);
+  g_signal_connect(G_OBJECT(g->check_colors_only), "toggled",
+                   G_CALLBACK(_colors_only_callback), self);
+  gtk_widget_set_tooltip_text
+    (g->check_colors_only,
+     _("keep the source luminance in the measured target, so the calibration\n"
+       "or look only alters the colours (the tone is left untouched). The\n"
+       "result is baked into the saved profile/preset."));
+
   g->label_delta_E = dt_ui_label_new("");
   gtk_label_set_ellipsize(GTK_LABEL(g->label_delta_E), PANGO_ELLIPSIZE_NONE);
   gtk_label_set_line_wrap(GTK_LABEL(g->label_delta_E), TRUE);
@@ -2973,6 +3102,7 @@ void gui_init(dt_iop_module_t *self)
                               _("reuse the last calibration done on another image"));
 
   dt_gui_box_add(g->cs.container, g->checkers_list, g->safety,
+                 g->check_measure_as_target, g->check_colors_only,
                  g->label_delta_E,
                  dt_gui_hbox(dt_gui_align_right(g->button_reuse),
                              g->button_profile, g->button_commit));
