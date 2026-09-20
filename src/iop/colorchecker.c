@@ -1393,6 +1393,32 @@ void cleanup_pipe(dt_iop_module_t *self,
 void gui_reset(dt_iop_module_t *self)
 {
   dt_iop_color_picker_reset(self, TRUE);
+
+  dt_iop_colorchecker_gui_data_t *g = self->gui_data;
+  if(!g) return;
+
+  // Drop any pending calibration measurement: commit_params() would otherwise
+  // keep overriding the freshly reset params with the live measurement, so the
+  // module would look like it did not reset.
+  dt_iop_gui_enter_critical_section(self);
+  g->profile_ready = FALSE;
+  g->run_profile = FALSE;
+  g->preview_pending = FALSE;
+  g->measured_xyz_valid = FALSE;
+  g->checker_ready = FALSE;
+  if(g->delta_E_in)
+  {
+    dt_free_align(g->delta_E_in);
+    g->delta_E_in = NULL;
+  }
+  g->delta_E_valid = FALSE;
+  dt_iop_gui_leave_critical_section(self);
+
+  // collapse the calibration section (the "toggled" handler is skipped while a
+  // GUI update is in progress, so update our flag here too)
+  g->is_profiling_started = FALSE;
+  if(g->cs.toggle)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->cs.toggle), FALSE);
 }
 
 void _colorchecker_rebuild_patch_list(dt_iop_module_t *self)
