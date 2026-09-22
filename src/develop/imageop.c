@@ -1540,11 +1540,10 @@ static void _init_presets(dt_iop_module_so_t *module_so)
       else
         auto_init = TRUE;
 
-      dt_print(DT_DEBUG_ALWAYS,
+      dt_print(DT_DEBUG_PARAMS,
                "[imageop_init_presets] updating '%s' preset '%s'"
-               " from version %d to version %d\nto:'%s'",
-               module_so->op, name, old_params_version, module_version,
-               dt_exif_xmp_encode(new_params, new_params_size, NULL));
+               " from version %d to version %d",
+               module_so->op, name, old_params_version, module_version);
 
       // and write the new params back to the database
       sqlite3_stmt *stmt2;
@@ -1581,7 +1580,7 @@ static void _init_presets(dt_iop_module_so_t *module_so)
 
     if(!old_blend_params || dt_develop_blend_version() > old_blend_params_version)
     {
-      dt_print(DT_DEBUG_ALWAYS,
+      dt_print(DT_DEBUG_PARAMS,
               "[imageop_init_presets] updating '%s' preset '%s' from blendop"
                " version %d to version %d",
                module_so->op, name, old_blend_params_version, dt_develop_blend_version());
