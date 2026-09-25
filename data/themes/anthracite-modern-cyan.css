@@ -1,0 +1,266 @@
+/*
+    This file is part of darktable,
+    Copyright (C) 2026 darktable developers.
+
+    darktable is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    darktable is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* -------------------------------------------------------------------------
+   anthracite-modern-cyan : dark, flat and airy theme tuned for long editing
+   sessions. Inspired by modern editors (Ansel, Capture One): rounded
+   controls, generous spacing, high text contrast and a single accent
+   color used for everything active.
+
+   ACCENT: to recolor the whole theme, only change @mt_accent and
+   @mt_accent_fg below. Ready-made variants are provided as
+   anthracite-modern-amber.css, anthracite-modern-red.css and
+   anthracite-modern-teal.css. Compact variants append -compact.
+   ------------------------------------------------------------------------- */
+
+@import url("darktable.css");
+
+/* -----------------------------------------
+   - Accent (change these two to recolor)  -
+   ----------------------------------------- */
+@define-color mt_accent     #4fb3d9;   /* cyan / sky blue  */
+@define-color mt_accent_fg  #10141a;   /* text on accent   */
+
+/* --------------
+   - Dark scale -
+   -------------- */
+@define-color mt_bg         #1c1f24;   /* main background            */
+@define-color mt_bg_2       #23272e;   /* side panels / plugin boxes */
+@define-color mt_bg_3       #2a2f38;   /* buttons / module headers   */
+@define-color mt_bg_4       #353c46;   /* hover / raised             */
+@define-color mt_fg         #e8ebf0;   /* main text                  */
+@define-color mt_fg_dim     #a8b0bc;   /* secondary text             */
+@define-color mt_fg_mute    #6d7683;   /* disabled / hints           */
+@define-color mt_border     #3b424d;   /* subtle borders             */
+
+/* -------------------
+   - General mapping -
+   ------------------- */
+@define-color selected_bg_color @mt_accent;   /* legacy stuff        */
+@define-color border_color @mt_border;
+@define-color bg_color @mt_bg;
+@define-color base_color @mt_bg;              /* legacy stuff        */
+@define-color fg_color @mt_fg;
+@define-color text_color @mt_bg;
+@define-color placeholder_text_color @mt_fg_mute;
+@define-color disabled_fg_color @mt_fg_mute;
+
+/* Scroll bars (sliders) */
+@define-color scroll_bar_inactive @mt_bg_4;
+@define-color scroll_bar_active @mt_accent;
+@define-color scroll_bar_bg @mt_bg_2;
+
+/* Modules box (plugins) */
+@define-color plugin_bg_color @mt_bg_2;
+@define-color section_label @mt_fg_dim;
+@define-color plugin_label_color @mt_fg_dim;
+@define-color collapsible_bg_color @mt_bg_3;
+
+/* Modules controls (sliders and comboboxes) */
+@define-color bauhaus_bg shade(@mt_bg, 0.7);
+@define-color bauhaus_fill @mt_accent;
+@define-color bauhaus_fg @mt_fg_dim;
+@define-color bauhaus_border shade(@mt_bg_3, 1.1);
+@define-color bauhaus_indicator_border shade(@mt_accent, 0.7);
+@define-color bauhaus_bg_hover @mt_bg_4;
+@define-color bauhaus_fg_hover @mt_fg;
+@define-color bauhaus_fg_selected @mt_fg;
+@define-color bauhaus_fg_insensitive alpha(@mt_fg, 0.4);
+
+/* GTK Buttons and tabs */
+@define-color button_bg @mt_bg_3;
+@define-color button_fg alpha(@mt_fg, 0.7);
+@define-color button_border shade(@mt_bg_3, 1.15);
+@define-color button_hover_bg @mt_bg_4;
+@define-color button_hover_fg @mt_fg;
+
+/* text fields */
+@define-color field_bg @mt_bg;
+@define-color field_fg @mt_fg;
+@define-color field_active_bg @mt_bg_3;
+@define-color field_active_fg @mt_fg;
+@define-color field_selected_bg @mt_accent;
+@define-color field_selected_fg @mt_accent_fg;
+@define-color field_hover_bg @mt_bg_4;
+@define-color field_hover_fg @mt_fg;
+
+/* Tooltips and contextual helpers */
+@define-color tooltip_bg_color @mt_bg_3;
+@define-color tooltip_fg_color @mt_fg;
+@define-color really_dark_bg_color @mt_bg;
+@define-color log_fg_color @mt_fg;
+
+/* Views : darkroom must stay middle grey for accurate assessment */
+@define-color darkroom_bg_color @grey_50;
+@define-color darkroom_preview_bg_color @darkroom_bg_color;
+@define-color lighttable_bg_color @mt_bg_2;
+@define-color lighttable_preview_bg_color @darkroom_bg_color;
+@define-color lighttable_bg_font_color @mt_fg;
+@define-color print_bg_color @lighttable_bg_color;
+
+/* Lighttable and film-strip */
+@define-color thumbnail_font_color @mt_fg_dim;
+@define-color thumbnail_bg_color @mt_bg_3;
+@define-color thumbnail_star_bg_color @mt_bg_4;
+@define-color thumbnail_star_hover_color @mt_fg;
+@define-color thumbnail_localcopy @mt_fg;
+@define-color thumbnail_fg_color @mt_fg_dim;
+@define-color thumbnail_bg50_color @mt_fg;
+@define-color thumbnail_selected_bg_color @mt_accent;
+@define-color thumbnail_hover_bg_color @mt_fg;
+@define-color thumbnail_hover_fg_color @mt_bg;
+@define-color filmstrip_bg_color @mt_bg_2;
+@define-color timeline_bg_color shade(@mt_bg_2, 0.9);
+@define-color timeline_fg_color @mt_fg;
+@define-color timeline_text_bg_color alpha(black, .8);
+@define-color timeline_text_fg_color alpha(white, .9);
+
+/* Graphs : histogram, navigation thumbnail and some items on tone curve */
+@define-color graph_bg @mt_bg;
+@define-color graph_exterior shade(@mt_bg, 0.85);
+@define-color graph_border @mt_bg_4;
+@define-color graph_fg @mt_fg_dim;
+@define-color graph_fg_active @mt_fg;
+@define-color graph_grid @mt_bg_3;
+@define-color graph_overlay @mt_fg_dim;
+@define-color inset_histogram alpha(@mt_fg, 0.5);
+
+
+/* =====================================================================
+   - Widget tweaks : rounded, airy, easier to read -
+   ===================================================================== */
+
+/* Modern typeface with graceful fallbacks. Monospace stays monospace
+   because .dt_monospace is more specific. */
+*
+{
+  font-family: "Inter", "Cantarell", "Segoe UI", "Roboto", "Noto Sans", sans-serif;
+}
+
+/* Module headers become soft cards, with an accent marker when active */
+#module-header
+{
+  border: none;
+  border-radius: 0.5em 0.5em 0 0;
+  margin: 0;
+  padding: 0.55em 0.6em;
+  background-color: @mt_bg_3;
+}
+
+#collapsible
+{
+  border: none;
+  border-radius: 0 0 0.5em 0.5em;
+  padding: 0.4em 0.5em;
+}
+
+#iop-expander
+{
+  margin: 0.18em 0.3em;
+}
+
+#iop-expander.dt_module_active #module-header
+{
+  border-left: 0.22em solid @mt_accent;
+  background-color: @mt_bg_4;
+}
+
+#iop-expander.dt_module_focus #module-header
+{
+  background-color: @mt_bg_4;
+}
+
+/* Bigger, bolder module titles and section titles for readability */
+#iop-panel-label,
+#lib-panel-label
+{
+  font-size: 1.15em;
+  font-weight: 600;
+  color: @mt_fg;
+}
+
+.dt_section_label:not(#blending-box),
+#blending-box .dt_section_label label,
+#blending-box .dt_section_label .dt_bauhaus
+{
+  font-weight: 600;
+  color: @mt_fg_dim;
+}
+
+/* Round the generic controls */
+button,
+checkbutton check,
+entry,
+textview,
+#non-flat
+{
+  border-radius: 0.4em;
+}
+
+entry,
+.combo,
+#dt-metadata-multi,
+textview
+{
+  border-radius: 0.4em;
+}
+
+/* Accent on the module power / enabled toggle */
+#right #module-header > button:first-child:checked,
+#right #basics-header-box > button:first-child:checked
+{
+  color: @mt_accent;
+}
+
+/* Notebook tabs : keep readable text, accent underline on the active one */
+notebook tab label
+{
+  color: @mt_fg_dim;
+}
+notebook tab:hover label
+{
+  color: @mt_fg;
+}
+notebook tab:checked label
+{
+  border-bottom-color: @mt_accent;
+  color: @mt_fg;
+}
+
+/* Tooltips */
+tooltip,
+#range-current
+{
+  border: 1px solid @mt_border;
+  border-radius: 0.5em;
+  background-color: @mt_bg_3;
+}
+
+/* Quiet, neutral separators instead of the colored default ones */
+menu separator,
+popover separator,
+tooltip separator
+{
+  background-color: alpha(@mt_fg, 0.15);
+}
+
+/* Quick access ("basic adjustments") block */
+#basics-box-labels widget
+{
+  border-top-color: @mt_border;
+}

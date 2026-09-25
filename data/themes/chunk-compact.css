@@ -1,0 +1,76 @@
+/*
+    This file is part of darktable,
+    Copyright (C) 2026 darktable developers.
+
+    darktable is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    darktable is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* Partial CSS (not listed as a theme) that reduces vertical space for the
+   laptop-friendly "-compact" variants of the anthracite-modern themes.
+   Imported after the main theme so these rules win in the cascade. */
+
+/* Tighten the module cards */
+#iop-expander
+{
+  margin: 0.05em 0.15em;
+}
+
+#module-header
+{
+  padding: 0.25em 0.45em;
+  border-radius: 0.35em 0.35em 0 0;
+}
+
+#collapsible
+{
+  padding: 0.15em 0.35em;
+  border-radius: 0 0 0.35em 0.35em;
+}
+
+#collapse-block
+{
+  margin: 0.08em 0;
+}
+
+.dt_section_label
+{
+  margin: 0.1em 0;
+}
+
+/* Sliders and collapsible sections */
+.dt_bauhaus
+{
+  margin: 0.08em 0;
+}
+
+#bauhaus-slider
+{
+  padding: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+/* Module body padding */
+.dt_plugin_ui_main,
+#blending-box,
+#guides-module-combobox
+{
+  padding: 0.12em 0.5em;
+}
+
+/* Remove the 1px light border between widgets in the quick settings. */
+#basics-box-labels widget
+{
+  border: 0;
+}

@@ -1,0 +1,82 @@
+/*
+    This file is part of darktable,
+    Copyright (C) 2026 darktable developers.
+
+    darktable is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    darktable is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* Compact variant of the elegant-grey theme, tuned for laptop screens.
+   Inherits all colors from darktable-elegant-grey and only reduces the
+   vertical space used by the modules. */
+
+@import url("darktable-elegant-grey.css");
+
+@define-color header_color shade(@plugin_bg_color, 0.85);
+@define-color active_module_icon_fg #F65B3C;
+@define-color active_module_icon_fg_hover #F65B3C;
+
+
+/* Shape and border of module headers. */
+#left #module-header,
+#right #module-header,
+#right #basics-header-box {
+  background-color: @header_color;
+  border-radius: 0px;
+  margin: 0px;
+  padding: 2px;
+}
+#left #module-header {
+  border-top-right-radius: 10px;
+}
+#right #module-header,
+#right #basics-header-box {
+  border-top-left-radius: 10px;
+}
+
+
+/* Remove the 1px light gray border between widgets in the quick settings. */
+#basics-box-labels widget {
+  border: 0px;
+}
+
+
+/* Make active modules stand out a bit more. */
+#right #module-header > button:first-child:checked,
+#right #basics-header-box > button:first-child:checked {
+  color: @active_module_icon_fg;
+}
+#right #module-header > button:first-child:hover,
+#right #basics-header-box > button:first-child:hover {
+  background-color: black;
+}
+
+
+/* Special handling for "module order". */
+#right > box:last-child #module-header {
+  background-color: @bg_color;
+  border-radius: 0px;
+  margin-right: 0.9em;
+}
+
+
+/* reduction of vertical space in modules (laptop screen) */
+#bauhaus-slider {
+  padding: 0px;
+  margin-top: 0px;
+  margin-bottom: 0px;
+}
+#collapsible {
+  margin-bottom: 0px;
+  padding: 0px;
+}

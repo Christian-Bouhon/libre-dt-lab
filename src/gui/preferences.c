@@ -108,6 +108,11 @@ static GtkWidget *_preferences_dialog;
 
 ///////////// gui theme selection
 
+static gint compare_theme_names(gconstpointer a, gconstpointer b)
+{
+  return g_strcmp0((const gchar *)a, (const gchar *)b);
+}
+
 static void load_themes_dir(const char *basedir)
 {
   char *themes_dir = g_build_filename(basedir, "themes", NULL);
@@ -145,6 +150,9 @@ static void load_themes(void)
 
   load_themes_dir(datadir);
   load_themes_dir(configdir);
+
+  // present the themes in alphabetical order in the preferences
+  darktable.themes = g_list_sort(darktable.themes, compare_theme_names);
 }
 
 static void reload_ui_last_theme(void)

@@ -1080,7 +1080,10 @@ void commit_params(dt_iop_module_t *self,
       wp.target_L[k] = xyz[0]; wp.target_a[k] = xyz[1]; wp.target_b[k] = xyz[2];
     }
 
-    // generic channel indices: 0 = X, 1 = Y, 2 = Z
+    // generic channel indices: 0 = X, 1 = Y, 2 = Z. The anchor is selected on
+    // the *source* (the measured/reference side, which the target sliders do
+    // not move): selecting it on the target made the exposure scale collapse
+    // as soon as a non-white patch was brightened past the white patch.
     float ws = 1.0f, wt = 1.0f;
     if(p->anchor != DT_IOP_CC_ANCHOR_NONE && N > 0)
     {
@@ -1089,8 +1092,8 @@ void commit_params(dt_iop_module_t *self,
       for(unsigned k = 0; k < N; k++)
       {
         const float score = (p->anchor == DT_IOP_CC_ANCHOR_GRAY)
-                              ? -fabsf(wp.target_a[k] - 0.18f) // closest to middle gray
-                              : wp.target_a[k];                // brightest patch (white)
+                              ? -fabsf(wp.source_a[k] - 0.18f) // closest to middle gray
+                              : wp.source_a[k];                // brightest patch (white)
         if(score > best_score)
         {
           best_score = score;
