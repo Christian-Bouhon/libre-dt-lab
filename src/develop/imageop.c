@@ -1284,7 +1284,7 @@ void dt_iop_gui_set_enable_button(dt_iop_module_t *module)
     dt_iop_gui_set_enable_button_icon(GTK_WIDGET(module->off), module);
   }
 
-  if(module->detach_enable_toggle)
+  if(module->detach_enable_toggle && GTK_IS_TOGGLE_BUTTON(module->detach_enable_toggle))
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(module->detach_enable_toggle), module->enabled);
 
   _update_module_active_class(module);
@@ -2263,6 +2263,7 @@ void dt_iop_gui_cleanup_module(dt_iop_module_t *module)
     gtk_widget_destroy(module->detach_placeholder);
     module->detach_window = NULL;
     module->detach_placeholder = NULL;
+    module->detach_enable_toggle = NULL;
     module->detached = FALSE;
   }
   gtk_widget_destroy(module->expander ? module->expander : module->widget);
@@ -3388,6 +3389,44 @@ static gboolean _gui_detach_focus(GtkWidget *win, GdkEventFocus *event, dt_iop_m
   return FALSE;
 }
 
+// does the saved position still sit on one of the connected monitors ?
+static gboolean _detach_position_valid(const gint x,
+                                       const gint y,
+                                       const gint w,
+                                       const gint h)
+{
+  GdkDisplay *display = gdk_display_get_default();
+  if(!display) return FALSE;
+  const gint n = gdk_display_get_n_monitors(display);
+  for(gint i = 0; i < n; i++)
+  {
+    GdkMonitor *mon = gdk_display_get_monitor(display, i);
+    GdkRectangle g;
+    gdk_monitor_get_workarea(mon, &g);
+    if(x < g.x + g.width && x + w > g.x && y < g.y + g.height && y + h > g.y)
+      return TRUE;
+  }
+  return FALSE;
+}
+
+// remember where the detached window was moved and how it was resized, so it
+// reopens at the same place and with the same size
+static gboolean _gui_detach_configure(GtkWidget *widget,
+                                      GdkEventConfigure *event,
+                                      dt_iop_module_t *module)
+{
+  if(!module) return FALSE;
+  gint x, y, w, h;
+  gtk_window_get_position(GTK_WINDOW(widget), &x, &y);
+  gtk_window_get_size(GTK_WINDOW(widget), &w, &h);
+  gchar *key = g_strdup_printf("plugins/darkroom/%s/detach_geometry", module->op);
+  gchar *geom = g_strdup_printf("%d,%d,%d,%d", x, y, w, h);
+  dt_conf_set_string(key, geom);
+  g_free(geom);
+  g_free(key);
+  return FALSE;
+}
+
 static void _gui_detach(dt_iop_module_t *module)
 {
   if(module->detached) return;
@@ -3435,7 +3474,6 @@ static void _gui_detach(dt_iop_module_t *module)
   char title[256];
   snprintf(title, sizeof(title), "%s — %s", module->name(), _("libre-dt-lab"));
   gtk_window_set_title(GTK_WINDOW(win), title);
-  gtk_window_set_default_size(GTK_WINDOW(win), 400, 500);
   gtk_window_set_transient_for(GTK_WINDOW(win),
       GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
 
@@ -3466,21 +3504,103 @@ static void _gui_detach(dt_iop_module_t *module)
   gtk_box_pack_start (GTK_BOX(win_box), sw, TRUE, TRUE, 0);
   
   gtk_container_add(GTK_CONTAINER(win), win_box);
-  g_object_unref(G_OBJECT(iopw));
-  gtk_widget_show_all(win);
 
   // connecting close -> re-attach
   g_signal_connect(G_OBJECT(win), "delete-event",
                    G_CALLBACK(_gui_reattach_on_close), module);
   g_signal_connect(G_OBJECT(win), "focus-in-event",
                    G_CALLBACK(_gui_detach_focus), module);
+  g_signal_connect(G_OBJECT(win), "configure-event",
+                   G_CALLBACK(_gui_detach_configure), module);
 
   module->detach_window = win;
   module->detach_placeholder = placeholder;
   module->detached = TRUE;
 
-  // the quick access panel switches this module to a shortcut entry
+  // the quick access panel switches this module to a shortcut entry, and this
+  // gives the module back the widgets it had lent to the panel. It must run
+  // before measuring the content, otherwise the height is underestimated.
   dt_dev_modulegroups_update_visibility(darktable.develop);
+
+  // size the window to the module content (dynamic height) and reopen it where
+  // it was last time instead of the middle of the screen
+  gint nat_w = 400, nat_h = 400;
+  gtk_widget_get_preferred_width(iopw, NULL, &nat_w);
+  gtk_widget_get_preferred_height(iopw, NULL, &nat_h);
+
+  GdkDisplay *display = gdk_display_get_default();
+  GdkMonitor *monitor = display ? gdk_display_get_monitor(display, 0) : NULL;
+  GdkRectangle geo = { 0, 0, 1280, 800 };
+  if(monitor) gdk_monitor_get_workarea(monitor, &geo);
+
+  gint win_w = CLAMP(nat_w, 320, MAX(320, geo.width - 80));
+  gint win_h = CLAMP(nat_h + 60, 240, MAX(240, geo.height - 80));
+
+  gint win_x = 0, win_y = 0;
+  gboolean have_pos = FALSE;
+
+  // geometry is stored as "x,y,w,h". Older builds stored only "x,y" under a
+  // different key; keep reading it as a fallback.
+  gchar *gkey = g_strdup_printf("plugins/darkroom/%s/detach_geometry", module->op);
+  gchar *geom = dt_conf_get_string(gkey);
+  if(!geom || !geom[0])
+  {
+    g_free(geom);
+    g_free(gkey);
+    gkey = g_strdup_printf("plugins/darkroom/%s/detach_position", module->op);
+    geom = dt_conf_get_string(gkey);
+  }
+  if(geom && geom[0])
+  {
+    gint sx, sy, gw = 0, gh = 0;
+    const int n = sscanf(geom, "%d,%d,%d,%d", &sx, &sy, &gw, &gh);
+    if(n >= 2)
+    {
+      const gint cw = (n == 4) ? CLAMP(gw, 320, MAX(320, geo.width - 40)) : win_w;
+      const gint ch = (n == 4) ? CLAMP(gh, 200, MAX(200, geo.height - 40)) : win_h;
+      if(_detach_position_valid(sx, sy, cw, ch))
+      {
+        win_x = sx;
+        win_y = sy;
+        have_pos = TRUE;
+        if(n == 4)
+        {
+          win_w = cw;
+          win_h = ch;
+        }
+      }
+    }
+  }
+  g_free(geom);
+  g_free(gkey);
+
+  if(!have_pos)
+  {
+    GtkWindow *main_win = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
+    gint mx = 0, my = 0;
+    if(main_win) gtk_window_get_position(main_win, &mx, &my);
+
+    // by default, entirely outside on the left of the main window
+    win_x = mx - win_w - 20;
+    win_y = my + 80;
+
+    if(!_detach_position_valid(win_x, win_y, win_w, win_h))
+    {
+      // no room outside (e.g. maximized window): place it at the left edge of
+      // the image area instead, without covering the panels
+      GtkBox *left_panel =
+        dt_ui_get_container(darktable.gui->ui, DT_UI_CONTAINER_PANEL_LEFT_CENTER);
+      gint panel_w = left_panel ? gtk_widget_get_allocated_width(GTK_WIDGET(left_panel)) : 0;
+      win_x = mx + panel_w + 20;
+      win_x = CLAMP(win_x, geo.x + 8, geo.x + MAX(8, geo.width - win_w - 8));
+      win_y = CLAMP(win_y, geo.y + 8, geo.y + MAX(8, geo.height - win_h - 8));
+    }
+  }
+
+  gtk_window_set_default_size(GTK_WINDOW(win), win_w, win_h);
+  gtk_window_move(GTK_WINDOW(win), win_x, win_y);
+  g_object_unref(G_OBJECT(iopw));
+  gtk_widget_show_all(win);
 
   // keep the module focused/expanded so its on-image interactions keep working,
   // even when the current group (e.g. quick access) would not show it
@@ -3521,6 +3641,7 @@ void dt_iop_gui_attach(dt_iop_module_t *module)
   // destroy window + placeholder
   gtk_widget_destroy(module->detach_placeholder);
   gtk_widget_destroy(module->detach_window);
+  module->detach_enable_toggle = NULL; // destroyed with the window
 
   // put iopw back into the expander's body event box
   GtkWidget *body_evb = dtgtk_expander_get_body_event_box(DTGTK_EXPANDER(module->expander));
