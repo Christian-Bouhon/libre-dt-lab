@@ -3376,6 +3376,18 @@ static void _gui_detach_enable_toggled(GtkToggleButton *toggle, dt_iop_module_t 
   }
 }
 
+// the detached window becoming active gives the module back the focus it needs
+// for its on-image interactions (hover, scroll, drag)
+static gboolean _gui_detach_focus(GtkWidget *win, GdkEventFocus *event, dt_iop_module_t *module)
+{
+  if(!DT_IN_GUI_UPDATE())
+  {
+    module->expanded = TRUE;
+    dt_iop_request_focus(module);
+  }
+  return FALSE;
+}
+
 static void _gui_detach(dt_iop_module_t *module)
 {
   if(module->detached) return;
@@ -3460,10 +3472,20 @@ static void _gui_detach(dt_iop_module_t *module)
   // connecting close -> re-attach
   g_signal_connect(G_OBJECT(win), "delete-event",
                    G_CALLBACK(_gui_reattach_on_close), module);
+  g_signal_connect(G_OBJECT(win), "focus-in-event",
+                   G_CALLBACK(_gui_detach_focus), module);
 
   module->detach_window = win;
   module->detach_placeholder = placeholder;
   module->detached = TRUE;
+
+  // the quick access panel switches this module to a shortcut entry
+  dt_dev_modulegroups_update_visibility(darktable.develop);
+
+  // keep the module focused/expanded so its on-image interactions keep working,
+  // even when the current group (e.g. quick access) would not show it
+  module->expanded = TRUE;
+  dt_iop_request_focus(module);
 }
 
 void dt_iop_gui_detach(dt_iop_module_t *module)
@@ -3512,6 +3534,9 @@ void dt_iop_gui_attach(dt_iop_module_t *module)
   module->detach_window = NULL;
   module->detach_placeholder = NULL;
   module->detached = FALSE;
+
+  // the quick access panel can take its widgets back now
+  dt_dev_modulegroups_update_visibility(darktable.develop);
 }
 
 void dt_iop_nap(int32_t usec)

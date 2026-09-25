@@ -402,9 +402,42 @@ static void _basics_hide(dt_lib_module_t *self)
   d->vbox_basic = NULL;
 }
 
+static gboolean _basics_detach_module(GtkWidget *w, GdkEventButton *e, gpointer user_data)
+{
+  dt_iop_module_t *module = (dt_iop_module_t *)(user_data);
+  if(module->detached)
+    dt_iop_gui_attach(module);
+  else
+    dt_iop_gui_detach(module);
+  return TRUE;
+}
+
+static GtkWidget *_basics_detach_button(dt_iop_module_t *module)
+{
+  const gboolean detached = module->detached;
+  GtkWidget *dbt = dtgtk_button_new(detached ? dtgtk_cairo_paint_cancel
+                                             : dtgtk_cairo_paint_display2, 0, NULL);
+  gtk_widget_set_tooltip_text(dbt, detached
+                                   ? _("re-attach module to panel")
+                                   : _("detach module to separate window"));
+  gtk_widget_set_name(dbt, "basics-detach");
+  gtk_widget_set_valign(dbt, GTK_ALIGN_CENTER);
+  g_signal_connect(G_OBJECT(dbt), "button-press-event", G_CALLBACK(_basics_detach_module), module);
+  gtk_widget_show(dbt);
+  return dbt;
+}
+
 static gboolean _basics_goto_module(GtkWidget *w, GdkEventButton *e, gpointer user_data)
 {
   dt_iop_module_t *module = (dt_iop_module_t *)(user_data);
+
+  // if the module is detached, the "go to module" link raises its window
+  if(module->detached && module->detach_window)
+  {
+    gtk_window_present(GTK_WINDOW(module->detach_window));
+    return TRUE;
+  }
+
   dt_dev_modulegroups_switch(darktable.develop, module);
   const gboolean single = dt_conf_get_bool("darkroom/ui/single_module");
   dt_iop_gui_set_expanded(module, TRUE, single);
@@ -448,11 +481,17 @@ static void _basics_add_widget(dt_lib_module_t *self, dt_lib_modulegroups_basic_
     if(item->widget) return; // we shouldn't arrive here !
   }
 
+  // when the module is detached, its widgets live in the detach window and
+  // cannot be reparented here. We show a lightweight shortcut (name + on/off)
+  // instead, so the panel and the detached window can be used together.
+  const gboolean module_detached = item->module && item->module->detached;
+
   // what type of ui we have ?
-  const gboolean compact_ui = !dt_conf_get_bool("plugins/darkroom/modulegroups_basics_sections_labels");
+  const gboolean compact_ui =
+    module_detached || !dt_conf_get_bool("plugins/darkroom/modulegroups_basics_sections_labels");
 
   // we retrieve parents, positions, etc... so we can put the widget back in its module
-  if(item->widget_type == WIDGET_TYPE_ACTIVATE_BTN)
+  if(item->widget_type == WIDGET_TYPE_ACTIVATE_BTN || module_detached)
   {
     // we only show the on-off widget for compact ui. otherwise the button is included in the header
     if(compact_ui)
@@ -649,15 +688,22 @@ static void _basics_add_widget(dt_lib_module_t *self, dt_lib_modulegroups_basic_
 
       gtk_widget_set_valign(btn, GTK_ALIGN_CENTER);
       dt_gui_add_class(btn, "dt_transparent_background");
+      // detach / re-attach button, right next to the on-off button
+      gtk_box_pack_start(GTK_BOX(header_box), _basics_detach_button(item->module), FALSE, FALSE, 0);
       // we add to the module header the section label and the link to the full iop
       GtkWidget *sect = dt_ui_section_label_new(item->module->name());
       gtk_label_set_xalign(GTK_LABEL(sect), 0.5); // we center the module name
       gtk_widget_show(sect);
       gtk_box_pack_start(GTK_BOX(header_box), sect, TRUE, TRUE, 0);
     }
-    else if(item_pos == FIRST_MODULE)
-      // if there is no label, we handle separately in css the first module header
-      gtk_widget_set_name(header_box, "basics-header-box-first");
+    else
+    {
+      // compact ui: the on-off is in the widget row, put the detach button there too
+      gtk_box_pack_end(GTK_BOX(hbox_basic), _basics_detach_button(item->module), FALSE, FALSE, 0);
+      if(item_pos == FIRST_MODULE)
+        // if there is no label, we handle separately in css the first module header
+        gtk_widget_set_name(header_box, "basics-header-box-first");
+    }
   }
 
   if(item->box) gtk_box_pack_start(GTK_BOX(d->mod_vbox_basic), item->box, FALSE, FALSE, 0);
@@ -762,6 +808,24 @@ static void _basics_show(dt_lib_module_t *self)
 
     if(!dt_iop_is_hidden(module) && !(module->flags() & IOP_FLAGS_DEPRECATED) && module->iop_order != INT_MAX)
     {
+      // detached modules keep their widgets in the detach window, so we cannot
+      // reparent them here. We add a single lightweight shortcut entry instead.
+      if(module->detached)
+      {
+        for(const GList *l = d->basics; l; l = g_list_next(l))
+        {
+          dt_lib_modulegroups_basic_item_t *item = l->data;
+          if(!item->module && g_strcmp0(item->module_op, module->op) == 0)
+          {
+            item->module = module;
+            _basics_add_widget(self, item, NULL, item_pos);
+            item_pos = NORMAL;
+            break;
+          }
+        }
+        continue;
+      }
+
       // first, we add on-off buttons if any
       for(const GList *l = d->basics; l; l = g_list_next(l))
       {

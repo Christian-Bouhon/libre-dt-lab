@@ -498,6 +498,15 @@ static inline gboolean _preview2_request(dt_develop_t *dev)
      && GTK_IS_WIDGET(dev->preview2.widget);
 }
 
+// on-image module interactions (hover, scroll, drag, overlays) are normally
+// disabled while the quick access panel is the active group. A module detached
+// in its own window is still visible and must keep these interactions.
+static gboolean _module_image_events_enabled(const dt_develop_t *dev)
+{
+  return dt_dev_modulegroups_test_activated((dt_develop_t *)dev)
+      || (dev->gui_module && dev->gui_module->detached);
+}
+
 static void _module_gui_post_expose(dt_iop_module_t *module,
                                     cairo_t *cri,
                                     const float width,
@@ -835,7 +844,7 @@ _("libre-dt-lab could not load `%s', switching to lighttable now.\n\n"
   // display mask if we have a current module activated or if the
   // masks manager module is expanded
   const gboolean display_masks =
-    (dmod && dmod->enabled && dt_dev_modulegroups_test_activated(darktable.develop))
+    (dmod && dmod->enabled && _module_image_events_enabled(dev))
     || dt_lib_gui_get_expanded(dt_lib_get_module("masks"));
 
   if(dev->form_visible && display_masks)
@@ -899,7 +908,7 @@ _("libre-dt-lab could not load `%s', switching to lighttable now.\n\n"
       }
 
       // gui active module
-      if(dmod->gui_post_expose && dt_dev_modulegroups_test_activated(darktable.develop))
+      if(dmod->gui_post_expose && _module_image_events_enabled(dev))
       {
         dt_print_pipe(DT_DEBUG_EXPOSE,
                       "expose module",
@@ -3872,7 +3881,7 @@ void mouse_moved(dt_view_t *self,
      && !handled
      && !darktable.develop->darkroom_skip_mouse_events
      && !dt_iop_color_picker_is_visible(dev)
-     && dt_dev_modulegroups_test_activated(darktable.develop))
+     && _module_image_events_enabled(dev))
   {
     _get_zoom_pos(&dev->full, x, y, &zoom_x, &zoom_y, &zoom_scale);
     handled = dev->gui_module->mouse_moved(dev->gui_module, zoom_x, zoom_y,
@@ -3955,7 +3964,7 @@ int button_released(dt_view_t *self,
   }
   // module
   if(dev->gui_module && dev->gui_module->button_released
-     && dt_dev_modulegroups_test_activated(darktable.develop))
+     && _module_image_events_enabled(dev))
   {
     _get_zoom_pos(&dev->full, x, y, &zoom_x, &zoom_y, &zoom_scale);
     handled = dev->gui_module->button_released(dev->gui_module, zoom_x, zoom_y,
@@ -4134,7 +4143,7 @@ int button_pressed(dt_view_t *self,
   }
   // module
   if(dev->gui_module && dev->gui_module->button_pressed
-     && dt_dev_modulegroups_test_activated(darktable.develop))
+     && _module_image_events_enabled(dev))
   {
     _get_zoom_pos(&dev->full, x, y, &zoom_x, &zoom_y, &zoom_scale);
     handled = dev->gui_module->button_pressed(dev->gui_module, zoom_x, zoom_y,
@@ -4195,7 +4204,7 @@ void scrolled(dt_view_t *self,
   if(dev->gui_module && dev->gui_module->scrolled
      && !darktable.develop->darkroom_skip_mouse_events
      && !dt_iop_color_picker_is_visible(dev)
-     && dt_dev_modulegroups_test_activated(darktable.develop))
+     && _module_image_events_enabled(dev))
   {
     _get_zoom_pos(&dev->full, x, y, &zoom_x, &zoom_y, &zoom_scale);
     handled = dev->gui_module->scrolled(dev->gui_module, zoom_x, zoom_y, up, state);
@@ -4236,7 +4245,7 @@ gboolean gesture_pan(dt_view_t *self,
   if(dev->gui_module && dev->gui_module->scrolled
      && !darktable.develop->darkroom_skip_mouse_events
      && !dt_iop_color_picker_is_visible(dev)
-     && dt_dev_modulegroups_test_activated(darktable.develop))
+     && _module_image_events_enabled(dev))
   {
     dt_print(DT_DEBUG_INPUT,
              "[darkroom pan] ignored: active module '%s' consumes scroll",
