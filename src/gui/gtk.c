@@ -3676,8 +3676,8 @@ void dt_gui_load_theme(const char *theme)
       // fallback to default theme
       g_free(path);
       // NOTE: When changing the default theme, don't forget to change it here!
-      path = g_build_filename(datadir, "themes", "anthracite-modern-cyan.css", NULL);
-      dt_conf_set_string("ui_last/theme", "anthracite-modern-cyan");
+      path = g_build_filename(datadir, "themes", "ardoise-modern-neutral.css", NULL);
+      dt_conf_set_string("ui_last/theme", "ardoise-modern-neutral");
     }
     else
       dt_conf_set_string("ui_last/theme", theme);

@@ -153,6 +153,32 @@ static void load_themes(void)
 
   // present the themes in alphabetical order in the preferences
   darktable.themes = g_list_sort(darktable.themes, compare_theme_names);
+
+  // but always keep the default theme, and its "-compact" variant, at the
+  // very top of the list so the default is immediately visible
+  const char *default_theme = dt_confgen_get("ui_last/theme", DT_DEFAULT);
+  if(default_theme)
+  {
+    gchar *default_css = g_strconcat(default_theme, ".css", NULL);
+    GList *node = g_list_find_custom(darktable.themes, default_css, compare_theme_names);
+    g_free(default_css);
+    if(node)
+    {
+      gpointer data = node->data;
+      darktable.themes = g_list_delete_link(darktable.themes, node);
+      darktable.themes = g_list_prepend(darktable.themes, data);
+    }
+
+    gchar *compact_css = g_strconcat(default_theme, "-compact.css", NULL);
+    node = g_list_find_custom(darktable.themes, compact_css, compare_theme_names);
+    g_free(compact_css);
+    if(node)
+    {
+      gpointer data = node->data;
+      darktable.themes = g_list_delete_link(darktable.themes, node);
+      darktable.themes = g_list_insert(darktable.themes, data, 1);
+    }
+  }
 }
 
 static void reload_ui_last_theme(void)

@@ -1,0 +1,51 @@
+/*
+    This file is part of darktable,
+    Copyright (C) 2026 darktable developers.
+
+    darktable is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    darktable is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* -------------------------------------------------------------------------
+   ardoise-modern-neutral :
+   Thème optimisé pour l'évaluation neutre de la couleur, du contraste
+   et de la luminosité (dans l'esprit de la norme ISO 12646).
+
+   - Toute la palette est achromatique (R = G = B) : aucune dominante
+     bleue/cyan ne vient influencer la perception des couleurs.
+   - Le canvas entourant la photo reste un gris moyen neutre (L* ≈ 50).
+   - Les panneaux sont éclaircis vers un gris moyen tout en conservant
+     un texte clair bien lisible (contraste ≈ 8:1).
+   ------------------------------------------------------------------------- */
+
+@import url("anthracite-modern-cyan.css");
+
+/* Accent neutre (achromatique), lisible comme état actif */
+@define-color mt_accent     #c6c6c6;
+@define-color mt_accent_fg  #1a1a1a;
+
+/* Échelle de gris neutre, éclaircie vers un gris moyen */
+@define-color mt_bg         #4e4e4e;   /* fond global              */
+@define-color mt_bg_2       #565656;   /* panneaux                 */
+@define-color mt_bg_3       #606060;   /* en-têtes / boutons       */
+@define-color mt_bg_4       #6c6c6c;   /* survol / éléments relevés*/
+@define-color mt_fg         #f3f3f3;   /* texte principal          */
+@define-color mt_fg_dim     #d0d0d0;   /* texte secondaire         */
+@define-color mt_fg_mute    #a9a9a9;   /* désactivé / incitations  */
+@define-color mt_border     #747474;   /* bordures discrètes       */
+
+/* Zone de travail : le canvas autour de la photo doit rester un gris
+   moyen neutre (L* ≈ 50). */
+@define-color darkroom_bg_color #777777;
+@define-color darkroom_preview_bg_color @darkroom_bg_color;
+@define-color lighttable_preview_bg_color @darkroom_bg_color;
