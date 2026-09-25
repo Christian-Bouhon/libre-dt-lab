@@ -108,8 +108,18 @@ static GtkWidget *_preferences_dialog;
 
 ///////////// gui theme selection
 
+// when set, themes whose name starts with this prefix (the family of the
+// default theme, e.g. "ardoise-") are sorted before the other families
+static gchar *sort_family_prefix = NULL;
+
 static gint compare_theme_names(gconstpointer a, gconstpointer b)
 {
+  if(sort_family_prefix)
+  {
+    const gboolean family_a = g_str_has_prefix((const gchar *)a, sort_family_prefix);
+    const gboolean family_b = g_str_has_prefix((const gchar *)b, sort_family_prefix);
+    if(family_a != family_b) return family_a ? -1 : 1;
+  }
   return g_strcmp0((const gchar *)a, (const gchar *)b);
 }
 
@@ -151,12 +161,26 @@ static void load_themes(void)
   load_themes_dir(datadir);
   load_themes_dir(configdir);
 
-  // present the themes in alphabetical order in the preferences
+  const char *default_theme = dt_confgen_get("ui_last/theme", DT_DEFAULT);
+
+  // show the family of the default theme (e.g. all "ardoise-*" themes) first,
+  // before the other families, so the user's themes are grouped together
+  g_free(sort_family_prefix);
+  sort_family_prefix = NULL;
+  if(default_theme)
+  {
+    const gchar *dash = strchr(default_theme, '-');
+    if(dash) sort_family_prefix = g_strndup(default_theme, dash - default_theme + 1);
+  }
+
+  // alphabetical order within each family
   darktable.themes = g_list_sort(darktable.themes, compare_theme_names);
 
-  // but always keep the default theme, and its "-compact" variant, at the
-  // very top of the list so the default is immediately visible
-  const char *default_theme = dt_confgen_get("ui_last/theme", DT_DEFAULT);
+  g_free(sort_family_prefix);
+  sort_family_prefix = NULL;
+
+  // then keep the default theme, and its "-compact" variant, at the very top
+  // of the list so the default is immediately visible
   if(default_theme)
   {
     gchar *default_css = g_strconcat(default_theme, ".css", NULL);

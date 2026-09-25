@@ -868,6 +868,16 @@ void dt_bauhaus_load_theme()
     bh->border_width = 2.0f;
     bh->marker_size = (bh->baseline_size + bh->border_width) * 0.95f;
   }
+
+  // slimmer slider bar for the anthracite-*/ardoise-* "-compact" themes,
+  // while keeping the text and the marker size unchanged
+  const gchar *theme = dt_conf_get_string_const("ui_last/theme");
+  if(theme && g_str_has_suffix(theme, "-compact")
+     && (g_str_has_prefix(theme, "anthracite-") || g_str_has_prefix(theme, "ardoise-")))
+  {
+    bh->baseline_size = bh->line_height / 5.0f;
+    bh->border_width = 1.0f;
+  }
 }
 
 void dt_bauhaus_init()

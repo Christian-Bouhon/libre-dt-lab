@@ -1,0 +1,35 @@
+/*
+    This file is part of darktable,
+    Copyright (C) 2026 darktable developers.
+
+    darktable is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    darktable is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with darktable.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+/* ardoise-modern, "ocre" (muted amber) accent, tuned for the
+   medium-grey palette. */
+
+@import url("ardoise-modern-neutral.css");
+
+@define-color mt_accent     #d9a441;
+@define-color mt_accent_fg  #16181a;
+
+@define-color selected_bg_color @mt_accent;
+@define-color field_selected_bg @mt_accent;
+@define-color field_selected_fg @mt_accent_fg;
+@define-color bauhaus_fill @mt_accent;
+@define-color bauhaus_indicator_border shade(@mt_accent, 0.7);
+@define-color scroll_bar_active @mt_accent;
+@define-color thumbnail_selected_bg_color @mt_accent;
+@define-color range_cursor_color alpha(@mt_accent, 0.85);
+@define-color range_sel_color alpha(@mt_accent, 0.4);
