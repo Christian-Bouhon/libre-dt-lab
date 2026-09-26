@@ -3600,7 +3600,19 @@ static void _gui_detach(dt_iop_module_t *module)
   gtk_window_set_default_size(GTK_WINDOW(win), win_w, win_h);
   gtk_window_move(GTK_WINDOW(win), win_x, win_y);
   g_object_unref(G_OBJECT(iopw));
-  gtk_widget_show_all(win);
+
+  // show only the widgets we just created, then the module body as-is.
+  // We must NOT use gtk_widget_show_all() here: it would recurse into the
+  // module and force visible every control the module deliberately hides
+  // (e.g. 3DCF's lock-dependent sliders, Color Calibration's illuminant-
+  // dependent sliders), making the detached window differ from the panel.
+  gtk_widget_show(hdr);
+  gtk_widget_show(hdr_label);
+  gtk_widget_show(enable_toggle);
+  gtk_widget_show(win_box);
+  gtk_widget_show(sw);
+  gtk_widget_show(iopw);
+  gtk_widget_show(win);
 
   // keep the module focused/expanded so its on-image interactions keep working,
   // even when the current group (e.g. quick access) would not show it
