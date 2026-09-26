@@ -180,13 +180,13 @@ typedef struct dt_iop_toneequalizer_params_t
   float speculars; // $MIN: -2.0 $MAX: 2.0 $DEFAULT: 0.0  $DESCRIPTION: "speculars"
   float blending; // $MIN: 0.01 $MAX: 100.0 $DEFAULT: 5.0 $DESCRIPTION: "smoothing diameter"
   float smoothing; // $DEFAULT: 1.414213562 sqrtf(2.0f)
-  float feathering; // $MIN: 0.01 $MAX: 10000.0 $DEFAULT: 1.0 $DESCRIPTION: "edges refinement/feathering"
+  float feathering; // $MIN: 0.01 $MAX: 10000.0 $DEFAULT: 7.0 $DESCRIPTION: "edges refinement/feathering"
   float quantization; // $MIN: 0.0 $MAX: 2.0 $DEFAULT: 0.0 $DESCRIPTION: "mask quantization"
-  float contrast_boost; // $MIN: -16.0 $MAX: 16.0 $DEFAULT: 0.0 $DESCRIPTION: "mask contrast compensation"
-  float exposure_boost; // $MIN: -16.0 $MAX: 16.0 $DEFAULT: 0.0 $DESCRIPTION: "mask exposure compensation"
+  float contrast_boost; // $MIN: -16.0 $MAX: 16.0 $DEFAULT: -0.10 $DESCRIPTION: "mask contrast compensation"
+  float exposure_boost; // $MIN: -16.0 $MAX: 16.0 $DEFAULT: -1.95 $DESCRIPTION: "mask exposure compensation"
   dt_iop_toneequalizer_filter_t details; // $DEFAULT: DT_TONEEQ_EIGF $DESCRIPTION: "preserve details"
   dt_iop_luminance_mask_method_t method; // $DEFAULT: DT_TONEEQ_NORM_2 $DESCRIPTION: "luminance estimator"
-  int iterations; // $MIN: 1 $MAX: 20 $DEFAULT: 1 $DESCRIPTION: "filter diffusion"
+  int iterations; // $MIN: 1 $MAX: 20 $DEFAULT: 3 $DESCRIPTION: "filter diffusion"
 } dt_iop_toneequalizer_params_t;
 
 
