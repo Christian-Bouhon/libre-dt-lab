@@ -92,14 +92,13 @@ static const char *THEME_BASES[]     = { "ardoise", "anthracite" };
 static const int   THEME_N_BASES     = G_N_ELEMENTS(THEME_BASES);
 static const char *THEME_ACCENTS[]   = { "neutral", "cyan", "amber", "red", "teal" };
 static const int   THEME_N_ACCENTS   = G_N_ELEMENTS(THEME_ACCENTS);
-static const char *THEME_DENSITIES[] = { "normal", "compact" };
-static const int   THEME_N_DENSITIES = G_N_ELEMENTS(THEME_DENSITIES);
 
 // translatable labels (ids above stay untranslated for the conf value)
 static const char *THEME_BASE_LABELS[]    = { N_("ardoise"), N_("anthracite") };
 static const char *THEME_ACCENT_LABELS[]  = { N_("neutral"), N_("cyan"), N_("amber"),
                                               N_("red"), N_("teal") };
 static const char *THEME_DENSITY_LABELS[] = { N_("normal"), N_("compact (laptop)") };
+static const int   THEME_N_DENSITIES      = G_N_ELEMENTS(THEME_DENSITY_LABELS);
 
 // colours used by the mini preview, indexed by base then accent
 typedef struct
