@@ -24,8 +24,9 @@
 
    ACCENT: to recolor the whole theme, only change @mt_accent and
    @mt_accent_fg below. Ready-made variants are provided as
-   anthracite-modern-amber.css, anthracite-modern-red.css and
-   anthracite-modern-teal.css. Compact variants append -compact.
+   anthracite-modern-amber.css, anthracite-modern-neutral.css,
+   anthracite-modern-red.css and anthracite-modern-teal.css.
+   Compact variants append -compact.
    ------------------------------------------------------------------------- */
 
 @import url("darktable.css");
