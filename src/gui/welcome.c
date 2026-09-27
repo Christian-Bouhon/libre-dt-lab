@@ -16,6 +16,9 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include <pango/pangocairo.h>
+
+#include "bauhaus/bauhaus.h"
 #include "welcome.h"
 #include "common/darktable.h"
 #include "common/usermanual_url.h"
@@ -49,6 +52,7 @@ typedef enum
   DT_QUESTION_DIRCHOOSER,
   DT_QUESTION_PARAGRAPH,
   DT_QUESTION_COMBOBOX,
+  DT_QUESTION_THEME,
 } _dt_question_type_t;
 
 typedef struct
@@ -75,7 +79,42 @@ typedef struct
                          // labels are looked up via g_dpgettext2 at display
                          // time so translators can localize them
   int n_options;
+  // THEME only (widgets are owned by GTK, not freed here):
+  GtkWidget *combo_base;
+  GtkWidget *combo_accent;
+  GtkWidget *combo_density;
+  GtkWidget *preview;
 } _dt_question_t;
+
+// ── theme picker data (fixed lists) ───────────────────────────────────────────
+
+static const char *THEME_BASES[]     = { "ardoise", "anthracite" };
+static const int   THEME_N_BASES     = G_N_ELEMENTS(THEME_BASES);
+static const char *THEME_ACCENTS[]   = { "neutral", "cyan", "amber", "red", "teal" };
+static const int   THEME_N_ACCENTS   = G_N_ELEMENTS(THEME_ACCENTS);
+static const char *THEME_DENSITIES[] = { "normal", "compact" };
+static const int   THEME_N_DENSITIES = G_N_ELEMENTS(THEME_DENSITIES);
+
+// translatable labels (ids above stay untranslated for the conf value)
+static const char *THEME_BASE_LABELS[]    = { N_("ardoise"), N_("anthracite") };
+static const char *THEME_ACCENT_LABELS[]  = { N_("neutral"), N_("cyan"), N_("amber"),
+                                              N_("red"), N_("teal") };
+static const char *THEME_DENSITY_LABELS[] = { N_("normal"), N_("compact (laptop)") };
+
+// colours used by the mini preview, indexed by base then accent
+typedef struct
+{
+  const char *bg;
+  const char *fg;
+  const char *accent[5];
+} _theme_preview_t;
+
+static const _theme_preview_t THEME_PREVIEW[] = {
+  // ardoise (medium neutral grey)
+  { "#4e4e4e", "#f3f3f3", { "#c6c6c6", "#7db8d6", "#d9a441", "#e9906f", "#69b3a2" } },
+  // anthracite (dark charcoal)
+  { "#1c1f24", "#e8ebf0", { "#c6c6c6", "#4fb3d9", "#e6a23c", "#f65b3c", "#35b9a0" } },
+};
 
 struct _dt_welcome_screen_t
 {
@@ -208,6 +247,163 @@ static void _on_combo_changed(GtkComboBox *combo, gpointer data)
       dt_gui_apply_theme();
     }
   }
+}
+
+// ── theme picker callbacks ────────────────────────────────────────────────────
+
+// Parse a "{base}-modern-{accent}[-compact]" theme name. Anything that does
+// not follow the convention leaves the defaults (ardoise/neutral/normal).
+static void _theme_parse(const char *name, int *base, int *accent, int *density)
+{
+  *base = 0;    // ardoise
+  *accent = 0;  // neutral
+  *density = 0; // normal
+
+  if(!name) return;
+
+  const char *modern = strstr(name, "-modern-");
+  if(!modern) return;
+
+  if(g_str_has_prefix(name, "ardoise-"))
+    *base = 0;
+  else if(g_str_has_prefix(name, "anthracite-"))
+    *base = 1;
+  else
+    return; // unknown family: keep defaults and don't touch conf
+
+  *density = g_str_has_suffix(name, "-compact") ? 1 : 0;
+
+  const char *a = modern + strlen("-modern-");
+  gsize len = strlen(a);
+  if(g_str_has_suffix(a, "-compact"))
+    len -= strlen("-compact");
+
+  for(int i = 0; i < THEME_N_ACCENTS; i++)
+  {
+    if(len == strlen(THEME_ACCENTS[i])
+       && !g_ascii_strncasecmp(a, THEME_ACCENTS[i], len))
+    {
+      *accent = i;
+      break;
+    }
+  }
+}
+
+static void _theme_compose(const int base, const int accent, const int density,
+                           char *out, const gsize out_size)
+{
+  g_snprintf(out, out_size, "%s-modern-%s%s",
+             THEME_BASES[base], THEME_ACCENTS[accent],
+             density ? "-compact" : "");
+}
+
+static void _on_theme_changed(GtkComboBox *combo, gpointer data)
+{
+  _dt_question_t *q = data;
+  (void)combo;
+
+  if(!q->combo_base || !q->combo_accent || !q->combo_density) return;
+
+  const int base = CLAMP(gtk_combo_box_get_active(GTK_COMBO_BOX(q->combo_base)),
+                         0, THEME_N_BASES - 1);
+  const int accent = CLAMP(gtk_combo_box_get_active(GTK_COMBO_BOX(q->combo_accent)),
+                           0, THEME_N_ACCENTS - 1);
+  const int density = CLAMP(gtk_combo_box_get_active(GTK_COMBO_BOX(q->combo_density)),
+                            0, THEME_N_DENSITIES - 1);
+
+  char name[128];
+  _theme_compose(base, accent, density, name, sizeof(name));
+
+  // apply live so the user can judge the surround before moving on
+  dt_conf_set_string("ui_last/theme", name);
+  dt_gui_load_theme(name);
+  dt_gui_apply_theme();
+  dt_bauhaus_load_theme();
+
+  if(q->preview) gtk_widget_queue_draw(q->preview);
+}
+
+static gboolean _on_theme_preview_draw(GtkWidget *widget, cairo_t *cr, gpointer data)
+{
+  _dt_question_t *q = data;
+  if(!q->combo_base || !q->combo_accent) return FALSE;
+
+  int base = gtk_combo_box_get_active(GTK_COMBO_BOX(q->combo_base));
+  int accent = gtk_combo_box_get_active(GTK_COMBO_BOX(q->combo_accent));
+  if(base < 0 || base >= (int)G_N_ELEMENTS(THEME_PREVIEW)) base = 0;
+  if(accent < 0 || accent >= THEME_N_ACCENTS) accent = 0;
+
+  GdkRGBA bg, fg, acc;
+  gdk_rgba_parse(&bg, THEME_PREVIEW[base].bg);
+  gdk_rgba_parse(&fg, THEME_PREVIEW[base].fg);
+  gdk_rgba_parse(&acc, THEME_PREVIEW[base].accent[accent]);
+
+  const double width = gtk_widget_get_allocated_width(widget);
+  const double height = gtk_widget_get_allocated_height(widget);
+  const double r = 6.0;
+
+  // background
+  gdk_cairo_set_source_rgba(cr, &bg);
+  cairo_new_sub_path(cr);
+  cairo_arc(cr, width - r, r, r, -G_PI_2, 0);
+  cairo_arc(cr, width - r, height - r, r, 0, G_PI_2);
+  cairo_arc(cr, r, height - r, r, G_PI_2, G_PI);
+  cairo_arc(cr, r, r, r, G_PI, 3 * G_PI_2);
+  cairo_close_path(cr);
+  cairo_fill(cr);
+
+  // accent capsule (mock slider / active control)
+  const double bar_x = 10.0;
+  const double bar_y = 9.0;
+  const double bar_h = 8.0;
+  const double bar_w = MAX(bar_h, width - 20.0);
+  gdk_cairo_set_source_rgba(cr, &acc);
+  cairo_new_sub_path(cr);
+  cairo_arc(cr, bar_x + bar_h / 2.0, bar_y + bar_h / 2.0, bar_h / 2.0, -G_PI_2, G_PI_2);
+  cairo_arc(cr, bar_x + bar_w - bar_h / 2.0, bar_y + bar_h / 2.0, bar_h / 2.0,
+            G_PI_2, 3 * G_PI_2);
+  cairo_close_path(cr);
+  cairo_fill(cr);
+
+  // sample text in the theme foreground colour
+  PangoLayout *layout = gtk_widget_create_pango_layout(widget, "Aa");
+  gdk_cairo_set_source_rgba(cr, &fg);
+  cairo_move_to(cr, 10.0, height - 24.0);
+  pango_cairo_show_layout(cr, layout);
+  g_object_unref(layout);
+
+  return FALSE;
+}
+
+// A [bold label][combo] row; returns the row and sets *out_combo.
+static GtkWidget *_theme_add_row(GtkWidget *col, const char *label_text,
+                                 GtkWidget **out_combo)
+{
+  GtkWidget *row = dt_gui_hbox();
+
+  GtkWidget *lbl = gtk_label_new(label_text);
+  gtk_widget_set_name(lbl, "welcome-answer");
+  gtk_widget_set_halign(lbl, GTK_ALIGN_START);
+  gtk_widget_set_valign(lbl, GTK_ALIGN_CENTER);
+  gtk_widget_set_hexpand(lbl, TRUE);
+  {
+    char *esc = g_markup_escape_text(label_text, -1);
+    char *mu = g_strdup_printf("<b>%s</b>", esc);
+    gtk_label_set_markup(GTK_LABEL(lbl), mu);
+    g_free(esc);
+    g_free(mu);
+  }
+
+  GtkWidget *combo = gtk_combo_box_text_new();
+  gtk_widget_set_name(combo, "welcome-combo");
+  gtk_widget_set_halign(combo, GTK_ALIGN_END);
+  gtk_widget_set_valign(combo, GTK_ALIGN_CENTER);
+
+  dt_gui_box_add(GTK_BOX(row), lbl, combo);
+  dt_gui_box_add(GTK_BOX(col), row);
+
+  if(out_combo) *out_combo = combo;
+  return row;
 }
 
 // ── navigation state ──────────────────────────────────────────────────────────
@@ -417,6 +613,81 @@ static GtkWidget *_build_page_widget(_dt_page_t *pg)
 
       dt_gui_box_add(GTK_BOX(box), col);
     }
+    else if(q->qtype == DT_QUESTION_THEME)
+    {
+      GtkWidget *col = dt_gui_vbox();
+      gtk_widget_set_hexpand(col, TRUE);
+
+      // panel title
+      GtkWidget *title = gtk_label_new(NULL);
+      {
+        char *esc = g_markup_escape_text(q->label, -1);
+        char *mu = g_strdup_printf("<b>%s</b>", esc);
+        gtk_label_set_markup(GTK_LABEL(title), mu);
+        g_free(esc);
+        g_free(mu);
+      }
+      gtk_widget_set_name(title, "welcome-answer");
+      gtk_widget_set_halign(title, GTK_ALIGN_START);
+      gtk_widget_set_valign(title, GTK_ALIGN_CENTER);
+      dt_gui_box_add(GTK_BOX(col), title);
+
+      if(q->description && q->description[0])
+      {
+        GtkWidget *desc = gtk_label_new(NULL);
+        gtk_label_set_markup(GTK_LABEL(desc), q->description);
+        gtk_widget_set_name(desc, "welcome-question-description");
+        gtk_widget_set_halign(desc, GTK_ALIGN_FILL);
+        gtk_widget_set_hexpand(desc, TRUE);
+        gtk_label_set_xalign(GTK_LABEL(desc), 0.0f);
+        gtk_label_set_line_wrap(GTK_LABEL(desc), TRUE);
+        dt_gui_box_add(GTK_BOX(col), desc);
+      }
+
+      // mini preview of the selected theme
+      q->preview = gtk_drawing_area_new();
+      gtk_widget_set_name(q->preview, "welcome-theme-preview");
+      gtk_widget_set_size_request(q->preview, 150, 40);
+      gtk_widget_set_valign(q->preview, GTK_ALIGN_CENTER);
+      g_signal_connect(G_OBJECT(q->preview), "draw",
+                       G_CALLBACK(_on_theme_preview_draw), q);
+
+      // base row
+      _theme_add_row(col, _("base"), &q->combo_base);
+      for(int i = 0; i < THEME_N_BASES; i++)
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(q->combo_base),
+                                       _(THEME_BASE_LABELS[i]));
+
+      // accent row (+ preview)
+      GtkWidget *accent_row = _theme_add_row(col, _("accent"), &q->combo_accent);
+      for(int i = 0; i < THEME_N_ACCENTS; i++)
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(q->combo_accent),
+                                       _(THEME_ACCENT_LABELS[i]));
+      dt_gui_box_add(GTK_BOX(accent_row), q->preview);
+
+      // display density row
+      _theme_add_row(col, _("display"), &q->combo_density);
+      for(int i = 0; i < THEME_N_DENSITIES; i++)
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(q->combo_density),
+                                       _(THEME_DENSITY_LABELS[i]));
+
+      // initial selection: done before connecting so that merely displaying
+      // the page does not write anything to the config
+      int base = 0, accent = 0, density = 0;
+      _theme_parse(dt_conf_get_string_const("ui_last/theme"), &base, &accent, &density);
+      gtk_combo_box_set_active(GTK_COMBO_BOX(q->combo_base), base);
+      gtk_combo_box_set_active(GTK_COMBO_BOX(q->combo_accent), accent);
+      gtk_combo_box_set_active(GTK_COMBO_BOX(q->combo_density), density);
+
+      g_signal_connect(G_OBJECT(q->combo_base), "changed",
+                       G_CALLBACK(_on_theme_changed), q);
+      g_signal_connect(G_OBJECT(q->combo_accent), "changed",
+                       G_CALLBACK(_on_theme_changed), q);
+      g_signal_connect(G_OBJECT(q->combo_density), "changed",
+                       G_CALLBACK(_on_theme_changed), q);
+
+      dt_gui_box_add(GTK_BOX(box), col);
+    }
     else
     {
       // CHECKBOX: row 1 = [bold label (left)] [checkbox (right)]
@@ -559,6 +830,19 @@ static void _page_add_combobox(dt_welcome_screen_t *ws,
       q->option_labels[i] = NULL;
     }
   }
+  g_ptr_array_add(pg->questions, q);
+}
+
+static void _page_add_theme(dt_welcome_screen_t *ws,
+                            int page_idx,
+                            const char *label,
+                            const char *description)
+{
+  _dt_page_t *pg = ws->pages->pdata[page_idx];
+  _dt_question_t *q = g_new0(_dt_question_t, 1);
+  q->qtype = DT_QUESTION_THEME;
+  q->label = g_strdup(label);
+  q->description = g_strdup(description ? description : "");
   g_ptr_array_add(pg->questions, q);
 }
 
@@ -824,6 +1108,8 @@ static dt_welcome_screen_t *_build_welcome_screen(void)
     if(dt_confgen_get_welcome_dirchooser(key))
       dt_welcome_screen_page_add_dirchooser
         (ws, page_idx, _(dt_confgen_get_label(key)), desc, key);
+    else if(!g_strcmp0(key, "ui_last/theme"))
+      _page_add_theme(ws, page_idx, _(dt_confgen_get_label(key)), desc);
     else
       dt_welcome_screen_page_add_conf(ws, page_idx, key, desc);
   }

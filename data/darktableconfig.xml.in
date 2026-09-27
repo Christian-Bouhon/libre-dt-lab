@@ -3784,9 +3784,9 @@
     <name>ui_last/theme</name>
     <type>string</type>
     <default>ardoise-modern-cyan</default>
-    <shortdescription>darktable theme</shortdescription>
-    <longdescription><![CDATA[the shade around your photo affects how you see its colors and tones while editing. grey is recommended because it's the most neutral – it doesn't push your eye in any direction\n\n<b>grey:</b> best for accurate color work\n\n<b>dark:</b> less distracting around your image\n\n<b>darker:</b> good for dimly-lit rooms]]></longdescription>
-    <welcomescreen pagenum="6" questionnum="1" options="ardoise-modern-cyan|ardoise,darktable-elegant-grey|grey,darktable-elegant-dark|dark,darktable-elegant-darker|darker"/>
+    <shortdescription>interface theme</shortdescription>
+    <longdescription><![CDATA[the theme shapes the interface around your photo: pick a base, an accent colour for the active controls, and the layout density. The preview updates live.\n\n<b>base:</b> ardoise is a medium neutral grey, the most reliable achromatic surround for judging colour, contrast and brightness (in the spirit of ISO 12646). anthracite is a dark charcoal, less distracting and easier on the eyes in dim rooms.\n\n<b>accent:</b> colour of active controls, sliders and selections. neutral is perfectly achromatic; the other tints stay soft so they don't bias your perception.\n\n<b>display:</b> compact tightens the modules and slims the sliders, so more controls fit on a laptop screen.]]></longdescription>
+    <welcomescreen pagenum="6" questionnum="1"/>
   </dtconfig>
   <dtconfig prefs="misc" section="interface">
     <name>ui_last/display_profile_source</name>
@@ -3909,8 +3909,8 @@
       </enum>
     </type>
     <default>scene-referred (3DCF)</default>
-    <shortdescription>auto-apply pixel workflow defaults</shortdescription>
-    <longdescription><![CDATA[selects which workflow will be used by default in the darkroom\n\n<b>scene-referred (sigmoid)</b> modern workflow, fewer tonemapper controls\n\n<b>scene-referred (filmic)</b> modern workflow, more tone mapping controls\n\n<b>scene-referred (AgX)</b> modern workflow, maximum tone mapping control\n\n<b>scene-referred (3DCF)</b> advanced 3D colorimetric film tone mapping workflow\n\n<b>display-referred (legacy)</b> legacy workflow (not recommended)\n\n<b>none</b> do not use a predefined workflow]]></longdescription>
+    <shortdescription>auto-apply tonemapper</shortdescription>
+    <longdescription><![CDATA[selects the tonemapper (TM) that is auto-applied by default in the darkroom; you can still enable or replace it per image from the tone group.\n\nLibre DT-Lab adds three scene-referred tonemappers.\n\n<b>base curve</b> — classic view transform based on a personal or camera-maker look, adapted here to a scene-referred workflow.\n\n<b>ACES 2.0 Reference Rendering</b> — the Academy Color Encoding System (ACES) 2.0 reference rendering transform, a standardised, neutral tone mapping.\n\n<b>3D Colorimetric Film</b> — spectral, three-dimensional colorimetric film rendering.\n\ndarktable's tonemappers are also available:\n\n<b>sigmoid</b> — simple, robust tone mapping with few controls.\n\n<b>filmic rgb</b> — complete tone mapping with more control over the curve.\n\n<b>AgX</b> — tone mapping with the finest control over highlights and colour.]]></longdescription>
     <welcomescreen pagenum="1" questionnum="1"/>
   </dtconfig>
   <dtconfig prefs="processing" section="general">
