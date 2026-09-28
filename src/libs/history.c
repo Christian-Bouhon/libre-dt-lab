@@ -56,6 +56,7 @@ typedef struct dt_lib_history_t
   GtkWidget *history_box;
   GtkWidget *create_button;
   GtkWidget *compress_button;
+  GtkWidget *remove_disabled_button;
   gboolean record_undo;
   int record_history_level; // set to +1 in signal DT_SIGNAL_DEVELOP_HISTORY_WILL_CHANGE
                             // and back to -1 in DT_SIGNAL_DEVELOP_HISTORY_CHANGE. We want
@@ -74,6 +75,10 @@ static void _lib_history_compress_clicked_callback(GtkButton *widget,
 static gboolean _lib_history_compress_pressed_callback(GtkWidget *widget,
                                                        GdkEventButton *e,
                                                        gpointer user_data);
+
+/* remove disabled modules from history stack */
+static void _lib_history_remove_disabled_clicked_callback(GtkButton *widget,
+                                                          gpointer user_data);
 
 static gboolean _lib_history_button_clicked_callback(GtkWidget *widget,
                                                      GdkEventButton *e,
@@ -154,9 +159,22 @@ void gui_init(dt_lib_module_t *self)
                    N_("create style from history"),
                    d->create_button, &dt_action_def_button);
 
+  /* add toolbar button for removing disabled modules from history */
+  d->remove_disabled_button = dtgtk_button_new(dtgtk_cairo_paint_remove, CPF_NONE, NULL);
+  g_signal_connect(G_OBJECT(d->remove_disabled_button), "clicked",
+                   G_CALLBACK(_lib_history_remove_disabled_clicked_callback), self);
+  gtk_widget_set_name(d->remove_disabled_button, "non-flat");
+  gtk_widget_set_tooltip_text(d->remove_disabled_button,
+                              _("remove disabled modules from the history\n"
+                                "the image is left unchanged"));
+  dt_action_define(DT_ACTION(self), NULL,
+                   N_("remove disabled modules from history"),
+                   d->remove_disabled_button, &dt_action_def_button);
+
   self->widget = dt_gui_vbox
     (dt_ui_resize_wrap(d->history_box, 1, "plugins/darkroom/history/windowheight"),
-     dt_gui_hbox(dt_gui_expand(d->compress_button), d->create_button));
+     dt_gui_hbox(dt_gui_expand(d->compress_button), d->remove_disabled_button,
+                 d->create_button));
   gtk_widget_set_name(self->widget, "history-ui");
   gtk_widget_show_all(self->widget);
 
@@ -1249,6 +1267,101 @@ static gboolean _lib_history_compress_pressed_callback(GtkWidget *widget,
   _lib_history_truncate(compress);
 
   return TRUE;
+}
+
+/*
+  Remove from the history stack all module instances whose latest active
+  entry is switched off. The whole instance is removed (all its entries) so
+  that an earlier enabled state is not resurrected, which would change the
+  resulting image. Always-on/default-on modules are kept as they are
+  re-enabled automatically when the history is loaded, and the mask manager
+  is kept as it is required by the masks.
+*/
+static void _lib_history_remove_disabled_clicked_callback(GtkButton *widget,
+                                                          gpointer user_data)
+{
+  dt_develop_t *dev = darktable.develop;
+  const dt_imgid_t imgid = dev->image_storage.id;
+  if(!dt_is_valid_imgid(imgid)) return;
+
+  // find, for each module instance used in the active history, its latest entry
+  GHashTable *last_item = g_hash_table_new(g_direct_hash, g_direct_equal);
+  GHashTable *to_remove = g_hash_table_new(g_direct_hash, g_direct_equal);
+
+  int idx = 0;
+  for(GList *history = dev->history;
+      history && idx < dev->history_end;
+      history = g_list_next(history), idx++)
+  {
+    dt_dev_history_item_t *hist = history->data;
+    if(hist->module)
+      g_hash_table_insert(last_item, hist->module, hist);
+  }
+
+  GHashTableIter iter;
+  gpointer key, value;
+  g_hash_table_iter_init(&iter, last_item);
+  while(g_hash_table_iter_next(&iter, &key, &value))
+  {
+    dt_iop_module_t *module = (dt_iop_module_t *)key;
+    const dt_dev_history_item_t *hist = (dt_dev_history_item_t *)value;
+
+    if(hist->enabled
+       || module->default_enabled
+       || (module->flags() & IOP_FLAGS_NO_HISTORY_STACK)
+       || !g_strcmp0(hist->op_name, "mask_manager"))
+      continue;
+
+    g_hash_table_add(to_remove, module);
+  }
+  g_hash_table_destroy(last_item);
+
+  if(g_hash_table_size(to_remove) == 0)
+  {
+    g_hash_table_destroy(to_remove);
+    return;
+  }
+
+  dt_dev_undo_start_record(dev);
+
+  // drop every history entry belonging to a disabled module instance
+  dt_pthread_mutex_lock(&dev->history_mutex);
+  idx = 0;
+  GList *history = dev->history;
+  while(history)
+  {
+    GList *next = g_list_next(history);
+    dt_dev_history_item_t *hist = history->data;
+
+    if(hist->module && g_hash_table_contains(to_remove, hist->module))
+    {
+      if(idx < dev->history_end) dev->history_end--;
+      dt_dev_free_history_item(hist);
+      dev->history = g_list_delete_link(dev->history, history);
+    }
+    else
+      idx++;
+
+    history = next;
+  }
+  g_hash_table_destroy(to_remove);
+
+  dt_dev_write_history(dev);
+  dt_pthread_mutex_unlock(&dev->history_mutex);
+
+  // remove the now orphaned module instances from dev->iop
+  if(_check_deleted_instances(dev, &dev->iop, dev->history))
+    dt_dev_reorder_gui_module_list(dev);
+
+  dt_dev_reload_history_items(dev);
+  dt_image_synch_xmp(imgid);
+
+  dt_dev_undo_end_record(dev);
+
+  dt_dev_modulegroups_set(dev, dt_dev_modulegroups_get(dev));
+
+  DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_DEVELOP_HISTORY_INVALIDATED);
+  dt_control_queue_redraw_center();
 }
 
 static gboolean _lib_history_button_clicked_callback(GtkWidget *widget,

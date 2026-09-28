@@ -28435,6 +28435,18 @@ msgstr "Créer un style depuis l’historique actuel"
 msgid "create style from history"
 msgstr "Créer un style depuis l’historique"
 
+#: ../src/libs/history.c:168
+msgid ""
+"remove disabled modules from the history\n"
+"the image is left unchanged"
+msgstr ""
+"Supprimer de l’historique les modules désactivés.\n"
+"L’image reste inchangée."
+
+#: ../src/libs/history.c:171
+msgid "remove disabled modules from history"
+msgstr "Supprimer les modules désactivés de l’historique"
+
 #: ../src/libs/history.c:208
 msgid "always-on module"
 msgstr "Module toujours activé"
