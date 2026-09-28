@@ -2638,6 +2638,25 @@ void dtgtk_cairo_paint_display2(cairo_t *cr, const gint x, const gint y, const g
   FINISH
 }
 
+void dtgtk_cairo_paint_compact(cairo_t *cr, const gint x, const gint y, const gint w, const gint h, gint flags, void *data)
+{
+  PREAMBLE(1, 1, 0, 0)
+
+  // screen
+  cairo_rectangle(cr, 0.18, 0.05, 0.64, 0.52);
+  cairo_stroke(cr);
+
+  // keyboard / base
+  cairo_move_to(cr, 0.10, 0.72);
+  cairo_line_to(cr, 0.90, 0.72);
+  cairo_line_to(cr, 0.98, 0.86);
+  cairo_line_to(cr, 0.02, 0.86);
+  cairo_close_path(cr);
+  cairo_stroke(cr);
+
+  FINISH
+}
+
 void dtgtk_cairo_paint_rect_landscape(cairo_t *cr, const gint x, const gint y, const gint w, const gint h, gint flags, void *data)
 {
   PREAMBLE(1, 1, 0, 0)

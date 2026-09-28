@@ -45,6 +45,7 @@
 #include "dtgtk/button.h"
 #include "dtgtk/stylemenu.h"
 #include "dtgtk/thumbtable.h"
+#include "dtgtk/togglebutton.h"
 #include "gui/accelerators.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/drag_and_drop.h"
@@ -103,6 +104,9 @@ static void _dev_change_image(dt_develop_t *dev, const dt_imgid_t imgid);
 static void _darkroom_display_second_window(dt_develop_t *dev);
 static void _darkroom_ui_second_window_write_config(GtkWidget *widget);
 static void _darkroom_ui_second_window_cleanup(dt_develop_t *dev);
+
+// footer button switching the theme between normal and compact spacing
+static GtkWidget *compact_button = NULL;
 
 const char *name(const dt_view_t *self)
 {
@@ -1695,6 +1699,79 @@ static void _second_window_quickbutton_clicked(GtkWidget *w,
     _darkroom_display_second_window(dev);
 }
 
+// ── compact interface toggle ─────────────────────────────────────────────────
+
+static gboolean _theme_is_compactable(const char *theme)
+{
+  return theme
+    && (g_str_has_prefix(theme, "ardoise-") || g_str_has_prefix(theme, "anthracite-"));
+}
+
+static gboolean _theme_file_exists(const char *theme)
+{
+  gchar *css = g_strconcat(theme, ".css", NULL);
+  char datadir[PATH_MAX] = { 0 };
+  char configdir[PATH_MAX] = { 0 };
+  dt_loc_get_datadir(datadir, sizeof(datadir));
+  dt_loc_get_user_config_dir(configdir, sizeof(configdir));
+  gchar *user = g_build_filename(configdir, "themes", css, NULL);
+  gchar *sys = g_build_filename(datadir, "themes", css, NULL);
+  const gboolean found = g_file_test(user, G_FILE_TEST_EXISTS)
+                      || g_file_test(sys, G_FILE_TEST_EXISTS);
+  g_free(user);
+  g_free(sys);
+  g_free(css);
+  return found;
+}
+
+static void _set_theme_compact(const gboolean compact)
+{
+  const char *cur = dt_conf_get_string_const("ui_last/theme");
+  if(!_theme_is_compactable(cur)) return;
+
+  gchar *target = NULL;
+  if(compact)
+    target = g_strconcat(cur, "-compact", NULL);
+  else if(g_str_has_suffix(cur, "-compact"))
+    target = g_strndup(cur, strlen(cur) - strlen("-compact"));
+
+  if(!target || !_theme_file_exists(target))
+  {
+    dt_print(DT_DEBUG_ALWAYS, "[darkroom] compact theme not found for '%s'\n", cur);
+    g_free(target);
+    return;
+  }
+
+  dt_conf_set_string("ui_last/theme", target);
+  dt_gui_load_theme(target);
+  dt_gui_apply_theme();
+  dt_bauhaus_load_theme(); // refresh slider thickness for the new density
+  g_free(target);
+}
+
+static void _compact_button_update_state(void)
+{
+  if(!compact_button) return;
+
+  const char *cur = dt_conf_get_string_const("ui_last/theme");
+  const gboolean compactable = _theme_is_compactable(cur);
+  const gboolean compact = compactable && g_str_has_suffix(cur, "-compact");
+
+  gtk_widget_set_sensitive(compact_button, compactable);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(compact_button), compact);
+  dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(compact_button),
+                               compact ? dtgtk_cairo_paint_compact
+                                       : dtgtk_cairo_paint_display,
+                               0, NULL);
+}
+
+static void _compact_button_clicked(GtkWidget *w, dt_develop_t *dev)
+{
+  (void)dev;
+  _set_theme_compact(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w)));
+  _compact_button_update_state();
+}
+
 /** toolbar buttons */
 
 static gboolean _toolbar_show_popup(gpointer user_data)
@@ -2922,6 +2999,18 @@ void gui_init(dt_view_t *self)
   dt_view_manager_view_toolbox_add(darktable.view_manager,
                                    dev->second_wnd_button, DT_VIEW_DARKROOM);
 
+  /* create the compact/normal interface toggle (right of the second window) */
+  compact_button = dtgtk_togglebutton_new(dtgtk_cairo_paint_display, 0, NULL);
+  dt_action_define(sa, NULL, N_("compact interface"),
+                   compact_button, &dt_action_def_toggle);
+  gtk_widget_set_tooltip_text(compact_button,
+                              _("toggle the compact interface for laptop screens"));
+  g_signal_connect(G_OBJECT(compact_button), "clicked",
+                   G_CALLBACK(_compact_button_clicked), dev);
+  dt_view_manager_view_toolbox_add(darktable.view_manager,
+                                   compact_button, DT_VIEW_DARKROOM);
+  _compact_button_update_state();
+
   /* Register a toggle-pin action for the second window as a command so the
      shortcut works independently of the pin button widget.  The pin button
      is wired to this same action in _darkroom_ui_second_window_init() for
@@ -3467,6 +3556,9 @@ void enter(dt_view_t *self)
 
   dt_print(DT_DEBUG_CONTROL, "[run_job+] 11 %f in darkroom mode", dt_get_wtime());
   dt_develop_t *dev = self->data;
+
+  // keep the footer compact/normal toggle in sync with the active theme
+  _compact_button_update_state();
 
   // Reset shutdown flags on all pipes - they may still be set from previous session
   if(dev->full.pipe)

@@ -197,6 +197,8 @@ void dtgtk_cairo_paint_softproof(cairo_t *cr, gint x, gint y, gint w, gint h, gi
 void dtgtk_cairo_paint_display(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** paint a display2 icon */
 void dtgtk_cairo_paint_display2(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
+/** paint a laptop / compact screen icon */
+void dtgtk_cairo_paint_compact(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** paint a landscape rectangle */
 void dtgtk_cairo_paint_rect_landscape(cairo_t *cr, gint x, gint y, gint w, gint h, gint flags, void *data);
 /** paint a portrait rectangle */
