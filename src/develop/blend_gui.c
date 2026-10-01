@@ -2698,6 +2698,8 @@ static void _module_mask_select(GtkButton *button, dt_iop_module_t *module);
 static void _module_mask_delete(GtkButton *button, dt_iop_module_t *module);
 static void _module_mask_invert_toggled(GtkToggleButton *button, dt_iop_module_t *module);
 static void _module_mask_opacity_changed(GtkWidget *slider, dt_iop_module_t *module);
+static gboolean _module_mask_name_pressed(GtkWidget *widget, GdkEventButton *event,
+                                          dt_iop_module_t *module);
 
 // rebuild the scoped shape list of this module's mask. This is the personal
 // unified mask panel's core: the shapes that used to live only in the global
@@ -2751,6 +2753,8 @@ static void _update_module_masks_list(dt_iop_module_t *module)
     gtk_widget_set_hexpand(sel, TRUE);
     g_object_set_data(G_OBJECT(sel), "formid", GINT_TO_POINTER((int)pt->formid));
     g_signal_connect(sel, "clicked", G_CALLBACK(_module_mask_select), module);
+    g_signal_connect(sel, "button-press-event",
+                     G_CALLBACK(_module_mask_name_pressed), module);
 
     // per-shape opacity
     GtkWidget *op = dt_bauhaus_slider_new_with_range(module, 0, 100, 0,
@@ -2901,6 +2905,61 @@ static void _module_mask_opacity_changed(GtkWidget *slider, dt_iop_module_t *mod
     g_source_remove(bd->masks_opacity_timer);
   bd->masks_opacity_timer = g_timeout_add(250, _module_mask_opacity_commit, module);
   dt_control_queue_redraw_center();
+}
+
+static void _module_mask_rename_response(GtkDialog *dlg, gint response,
+                                         gpointer user_data)
+{
+  dt_iop_module_t *module = user_data;
+  if(response == GTK_RESPONSE_ACCEPT)
+  {
+    GtkWidget *entry = g_object_get_data(G_OBJECT(dlg), "entry");
+    const dt_mask_id_t id
+      = (dt_mask_id_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(dlg), "formid"));
+    dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, id);
+    if(entry && form)
+    {
+      g_strlcpy(form->name, gtk_entry_get_text(GTK_ENTRY(entry)), sizeof(form->name));
+      dt_dev_add_masks_history_item(darktable.develop, module, TRUE);
+      _update_module_masks_list(module);
+    }
+  }
+  gtk_widget_destroy(GTK_WIDGET(dlg));
+}
+
+// double-click a shape name to rename it
+static gboolean _module_mask_name_pressed(GtkWidget *widget, GdkEventButton *event,
+                                          dt_iop_module_t *module)
+{
+  if(event->type != GDK_2BUTTON_PRESS || event->button != GDK_BUTTON_PRIMARY)
+    return FALSE;
+
+  const dt_mask_id_t id
+    = (dt_mask_id_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "formid"));
+  dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, id);
+  if(!form) return TRUE;
+
+  GtkWidget *dlg = gtk_dialog_new_with_buttons(
+    _("rename mask shape"),
+    GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)),
+    GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+    _("cancel"), GTK_RESPONSE_CANCEL,
+    _("rename"), GTK_RESPONSE_ACCEPT, NULL);
+
+  GtkWidget *entry = gtk_entry_new();
+  gtk_entry_set_text(GTK_ENTRY(entry), form->name);
+  gtk_entry_set_activates_default(GTK_ENTRY(entry), TRUE);
+  gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(dlg))),
+                     entry, TRUE, TRUE, 8);
+
+  g_object_set_data(G_OBJECT(dlg), "entry", entry);
+  g_object_set_data(G_OBJECT(dlg), "formid", GINT_TO_POINTER((int)id));
+  g_signal_connect(dlg, "response",
+                   G_CALLBACK(_module_mask_rename_response), module);
+
+  gtk_dialog_set_default_response(GTK_DIALOG(dlg), GTK_RESPONSE_ACCEPT);
+  gtk_widget_show_all(dlg);
+  return TRUE;
 }
 
 void dt_iop_gui_update_masks(dt_iop_module_t *module)
