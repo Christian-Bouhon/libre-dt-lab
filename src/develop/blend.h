@@ -354,6 +354,8 @@ typedef struct dt_iop_gui_blend_data_t
   // scoped list of the shapes composing this module's mask, shown right in
   // the module's blend section (personal unified mask panel, phase 1)
   GtkBox *masks_list;
+  gboolean masks_list_updating; // guard while (re)building the list
+  guint masks_opacity_timer;    // debounce for per-shape opacity commits
 
   // single container holding the whole mask UI (mode tabs, drawn, parametric,
   // raster and refinement) so it can be detached as one panel

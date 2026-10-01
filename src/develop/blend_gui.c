@@ -2696,6 +2696,8 @@ void dt_iop_gui_init_blendif(GtkWidget *blendw, dt_iop_module_t *module)
 
 static void _module_mask_select(GtkButton *button, dt_iop_module_t *module);
 static void _module_mask_delete(GtkButton *button, dt_iop_module_t *module);
+static void _module_mask_invert_toggled(GtkToggleButton *button, dt_iop_module_t *module);
+static void _module_mask_opacity_changed(GtkWidget *slider, dt_iop_module_t *module);
 
 // rebuild the scoped shape list of this module's mask. This is the personal
 // unified mask panel's core: the shapes that used to live only in the global
@@ -2706,6 +2708,8 @@ static void _update_module_masks_list(dt_iop_module_t *module)
   dt_iop_gui_blend_data_t *bd = module->blend_data;
   if(!bd || !bd->masks_list) return;
 
+  bd->masks_list_updating = TRUE;
+
   GList *children = gtk_container_get_children(GTK_CONTAINER(bd->masks_list));
   for(const GList *c = children; c; c = g_list_next(c))
     gtk_widget_destroy(GTK_WIDGET(c->data));
@@ -2714,7 +2718,10 @@ static void _update_module_masks_list(dt_iop_module_t *module)
   dt_masks_form_t *grp
     = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
   if(!grp || !(grp->type & DT_MASKS_GROUP) || !grp->points)
+  {
+    bd->masks_list_updating = FALSE;
     return;
+  }
 
   for(GList *p = grp->points; p; p = g_list_next(p))
   {
@@ -2725,6 +2732,15 @@ static void _update_module_masks_list(dt_iop_module_t *module)
     GtkWidget *row = dt_gui_hbox();
     dt_gui_add_class(row, "dt_masks_module_row");
 
+    // invert toggle
+    GtkWidget *inv = dtgtk_togglebutton_new(dtgtk_cairo_paint_plusminus, 0, NULL);
+    gtk_widget_set_tooltip_text(inv, _("invert this shape"));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(inv),
+                                 (pt->state & DT_MASKS_STATE_INVERSE) != 0);
+    g_object_set_data(G_OBJECT(inv), "formid", GINT_TO_POINTER((int)pt->formid));
+    g_signal_connect(inv, "toggled", G_CALLBACK(_module_mask_invert_toggled), module);
+
+    // name (click selects the shape on the canvas)
     GtkWidget *sel
       = gtk_button_new_with_label(form->name[0] ? form->name : _("shape"));
     gtk_button_set_relief(GTK_BUTTON(sel), GTK_RELIEF_NONE);
@@ -2736,16 +2752,29 @@ static void _update_module_masks_list(dt_iop_module_t *module)
     g_object_set_data(G_OBJECT(sel), "formid", GINT_TO_POINTER((int)pt->formid));
     g_signal_connect(sel, "clicked", G_CALLBACK(_module_mask_select), module);
 
+    // per-shape opacity
+    GtkWidget *op = dt_bauhaus_slider_new_with_range(module, 0, 100, 0,
+                                                     pt->opacity * 100.0f, 0);
+    dt_bauhaus_slider_set_format(op, "%");
+    gtk_widget_set_tooltip_text(op, _("opacity of this shape"));
+    g_object_set_data(G_OBJECT(op), "formid", GINT_TO_POINTER((int)pt->formid));
+    g_signal_connect(op, "value-changed",
+                     G_CALLBACK(_module_mask_opacity_changed), module);
+
     GtkWidget *del = dtgtk_button_new(dtgtk_cairo_paint_cancel, 0, NULL);
     gtk_widget_set_tooltip_text(del, _("delete this shape"));
     g_object_set_data(G_OBJECT(del), "formid", GINT_TO_POINTER((int)pt->formid));
     g_signal_connect(del, "clicked", G_CALLBACK(_module_mask_delete), module);
 
+    gtk_box_pack_start(GTK_BOX(row), inv, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(row), sel, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(row), op, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(row), del, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(bd->masks_list), row, FALSE, FALSE, 0);
     gtk_widget_show_all(row);
   }
+
+  bd->masks_list_updating = FALSE;
 }
 
 static void _module_mask_select(GtkButton *button, dt_iop_module_t *module)
@@ -2805,6 +2834,72 @@ static void _module_mask_delete(GtkButton *button, dt_iop_module_t *module)
   dt_dev_add_masks_history_item(darktable.develop, module, TRUE);
 
   _update_module_masks_list(module);
+  dt_control_queue_redraw_center();
+}
+
+// toggle a single shape's inversion (DT_MASKS_STATE_INVERSE on its group point)
+static void _module_mask_invert_toggled(GtkToggleButton *button, dt_iop_module_t *module)
+{
+  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  if(!bd || bd->masks_list_updating) return;
+
+  const dt_mask_id_t id
+    = (dt_mask_id_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "formid"));
+
+  dt_masks_form_t *grp
+    = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
+  if(!grp || !(grp->type & DT_MASKS_GROUP)) return;
+
+  for(GList *p = grp->points; p; p = g_list_next(p))
+  {
+    dt_masks_point_group_t *pt = p->data;
+    if(pt->formid == id)
+    {
+      pt->state ^= DT_MASKS_STATE_INVERSE;
+      dt_dev_add_masks_history_item(darktable.develop, module, TRUE);
+      dt_control_queue_redraw_center();
+      break;
+    }
+  }
+}
+
+static gboolean _module_mask_opacity_commit(gpointer data)
+{
+  dt_iop_module_t *module = data;
+  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  if(bd) bd->masks_opacity_timer = 0;
+  dt_dev_add_masks_history_item(darktable.develop, module, TRUE);
+  return G_SOURCE_REMOVE;
+}
+
+// per-shape opacity: update the group point in place and commit on a short
+// debounce, so dragging the slider does not rebuild the list under the cursor
+static void _module_mask_opacity_changed(GtkWidget *slider, dt_iop_module_t *module)
+{
+  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  if(!bd || bd->masks_list_updating) return;
+
+  const dt_mask_id_t id
+    = (dt_mask_id_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(slider), "formid"));
+
+  dt_masks_form_t *grp
+    = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
+  if(!grp || !(grp->type & DT_MASKS_GROUP)) return;
+
+  const float opacity = CLAMP(dt_bauhaus_slider_get(slider) / 100.0f, 0.05f, 1.0f);
+  for(GList *p = grp->points; p; p = g_list_next(p))
+  {
+    dt_masks_point_group_t *pt = p->data;
+    if(pt->formid == id)
+    {
+      pt->opacity = opacity;
+      break;
+    }
+  }
+
+  if(bd->masks_opacity_timer)
+    g_source_remove(bd->masks_opacity_timer);
+  bd->masks_opacity_timer = g_timeout_add(250, _module_mask_opacity_commit, module);
   dt_control_queue_redraw_center();
 }
 
@@ -3322,6 +3417,11 @@ void dt_iop_gui_cleanup_blending(dt_iop_module_t *module)
   dt_pthread_mutex_lock(&bd->lock);
   if(bd->timeout_handle)
     g_source_remove(bd->timeout_handle);
+  if(bd->masks_opacity_timer)
+  {
+    g_source_remove(bd->masks_opacity_timer);
+    bd->masks_opacity_timer = 0;
+  }
 
   g_list_free(bd->masks_modes);
   g_list_free(bd->masks_modes_toggles);
