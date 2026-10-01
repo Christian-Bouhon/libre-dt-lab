@@ -2868,22 +2868,31 @@ void dt_iop_gui_update_masks(dt_iop_module_t *module)
   _update_module_masks_list(module);
 }
 
-static void _module_masks_attach(dt_iop_module_t *module);
+static void _module_masks_attach_do(dt_iop_module_t *module);
+
+// reparenting the mask section must not run from inside the very signal
+// dispatch that fired on a descendant widget (GTK can be mid-dispatch on a
+// widget we are about to move), so defer to an idle callback.
+static gboolean _module_masks_attach_idle(gpointer data)
+{
+  _module_masks_attach_do((dt_iop_module_t *)data);
+  return G_SOURCE_REMOVE;
+}
 
 static void _module_masks_reattach_clicked(GtkButton *button, dt_iop_module_t *module)
 {
-  _module_masks_attach(module);
+  g_idle_add(_module_masks_attach_idle, module);
 }
 
 static gboolean _module_masks_reattach_on_close(GtkWidget *win, GdkEvent *event,
                                                 dt_iop_module_t *module)
 {
-  _module_masks_attach(module);
+  g_idle_add(_module_masks_attach_idle, module);
   return TRUE;
 }
 
 // re-attach the mask section into the module's blend panel at its old spot
-static void _module_masks_attach(dt_iop_module_t *module)
+static void _module_masks_attach_do(dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *bd = module->blend_data;
   if(!bd || !bd->masks_detached) return;
@@ -2923,9 +2932,22 @@ static void _module_masks_attach(dt_iop_module_t *module)
   dt_control_queue_redraw_center();
 }
 
+static void _module_masks_detach_do(dt_iop_module_t *module);
+
+static gboolean _module_masks_detach_idle(gpointer data)
+{
+  _module_masks_detach_do((dt_iop_module_t *)data);
+  return G_SOURCE_REMOVE;
+}
+
+static void _module_masks_detach_clicked(GtkButton *button, dt_iop_module_t *module)
+{
+  g_idle_add(_module_masks_detach_idle, module);
+}
+
 // detach the whole mask section (shape buttons + scoped shape list) into its
 // own floating window, mirroring the module detach mechanism.
-static void _module_masks_detach(GtkButton *button, dt_iop_module_t *module)
+static void _module_masks_detach_do(dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *bd = module->blend_data;
   if(!bd || bd->masks_detached || !bd->masks_box) return;
@@ -2997,6 +3019,7 @@ static void _module_masks_detach(GtkButton *button, dt_iop_module_t *module)
 
   // show only the new widgets: show_all would force-visible controls the
   // module deliberately hides (e.g. inactive mask modes)
+  gtk_widget_show(event_box);
   gtk_widget_show(sw);
   gtk_widget_show(win);
 }
@@ -3113,8 +3136,9 @@ void dt_iop_gui_init_masks(GtkWidget *blendw, dt_iop_module_t *module)
     GtkWidget *detach_btn = dtgtk_button_new(dtgtk_cairo_paint_display2, 0, NULL);
     gtk_widget_set_tooltip_text(detach_btn, _("detach mask panel to a separate window"));
     g_signal_connect(G_OBJECT(detach_btn), "clicked",
-                     G_CALLBACK(_module_masks_detach), module);
-    dt_gui_box_add(abox, detach_btn);
+                     G_CALLBACK(_module_masks_detach_clicked), module);
+    // first line of the mask section, next to the mask-mode combo/polarity
+    dt_gui_box_add(hbox, detach_btn);
 
     bd->masks_list = GTK_BOX(dt_gui_vbox());
     dt_gui_add_class(GTK_WIDGET(bd->masks_list), "dt_masks_module_list");
