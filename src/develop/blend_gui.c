@@ -2766,16 +2766,27 @@ static void _module_mask_select(GtkButton *button, dt_iop_module_t *module)
   // did nothing when its (lazy) tree had not been built yet.
   dt_iop_request_focus(module);
 
+  // toggling: a second click on the already-edited shape leaves mask editing.
+  // Clicking another shape keeps editing on and just retargets.
+  const gboolean same_shape_active
+    = (bd->masks_shown == DT_MASKS_EDIT_FULL)
+      && (darktable.develop->mask_form_selected_id == id);
+
   DT_ENTER_GUI_UPDATE();
-  bd->masks_shown = DT_MASKS_EDIT_FULL;
+  bd->masks_shown = same_shape_active ? DT_MASKS_EDIT_OFF : DT_MASKS_EDIT_FULL;
   if(bd->masks_edit)
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), TRUE);
-  dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit),
+                                 bd->masks_shown != DT_MASKS_EDIT_OFF);
+  dt_masks_set_edit_mode(module, bd->masks_shown);
   DT_LEAVE_GUI_UPDATE();
 
-  // remember which shape is targeted (used by the path resize/rotation tools)
-  darktable.develop->mask_form_selected_id = id;
-  dt_dev_masks_selection_change(darktable.develop, module, id);
+  if(!same_shape_active)
+  {
+    dt_dev_masks_selection_change(darktable.develop, module, id);
+    // remember which shape is targeted (used by the path resize/rotation tools)
+    darktable.develop->mask_form_selected_id = id;
+  }
+
   dt_control_queue_redraw_center();
 }
 
