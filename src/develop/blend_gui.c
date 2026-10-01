@@ -2891,6 +2891,17 @@ static gboolean _module_masks_reattach_on_close(GtkWidget *win, GdkEvent *event,
   return TRUE;
 }
 
+// close this module's floating mask panel, if any. Called when the module loses
+// focus or is folded, so leaving/collapsing a module never leaves its panel
+// dangling and only one panel can be open at a time.
+void dt_iop_gui_masks_close(dt_iop_module_t *module)
+{
+  if(!module) return;
+  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  if(!bd || !bd->masks_detached) return;
+  g_idle_add(_module_masks_attach_idle, module);
+}
+
 // re-attach the mask section into the module's blend panel at its old spot
 static void _module_masks_attach_do(dt_iop_module_t *module)
 {
@@ -3638,6 +3649,10 @@ void dt_iop_gui_blending_lose_focus(dt_iop_module_t *module)
 {
   DT_GUARD_GUI_UPDATE();
   if(!module) return;
+
+  // a module that loses focus (or is folded) must not keep its floating mask
+  // panel open: close it so a single panel is ever shown
+  dt_iop_gui_masks_close(module);
 
   const gboolean has_mask_display =
     module->request_mask_display
