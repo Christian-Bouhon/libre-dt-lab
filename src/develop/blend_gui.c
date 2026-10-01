@@ -2753,10 +2753,29 @@ static void _module_mask_select(GtkButton *button, dt_iop_module_t *module)
   const dt_mask_id_t id
     = (dt_mask_id_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "formid"));
 
-  dt_dev_masks_selection_change(darktable.develop, module, id);
+  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  if(!bd) return;
+
   dt_masks_form_t *grp
     = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
-  if(grp) dt_masks_change_form_gui(grp);
+  if(!grp || !(grp->type & DT_MASKS_GROUP) || !grp->points) return;
+
+  // clicking a row must actually do something: focus the module and enter full
+  // mask editing so the shape handles become live on the canvas. Selection
+  // otherwise used to go through the global mask manager proxy, which silently
+  // did nothing when its (lazy) tree had not been built yet.
+  dt_iop_request_focus(module);
+
+  DT_ENTER_GUI_UPDATE();
+  bd->masks_shown = DT_MASKS_EDIT_FULL;
+  if(bd->masks_edit)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), TRUE);
+  dt_masks_set_edit_mode(module, DT_MASKS_EDIT_FULL);
+  DT_LEAVE_GUI_UPDATE();
+
+  // remember which shape is targeted (used by the path resize/rotation tools)
+  darktable.develop->mask_form_selected_id = id;
+  dt_dev_masks_selection_change(darktable.develop, module, id);
   dt_control_queue_redraw_center();
 }
 
