@@ -2905,6 +2905,10 @@ static void _module_masks_attach_do(dt_iop_module_t *module)
     gtk_container_child_get(GTK_CONTAINER(container), bd->masks_detach_placeholder,
                             "position", &position, NULL);
 
+  // the floating window is the only owner of the box: take a reference before
+  // pulling it out, or removal drops the last ref and destroys it (which then
+  // re-inserted a freed widget and crashed on the next mask-mode switch)
+  if(box) g_object_ref(G_OBJECT(box));
   GtkWidget *parent = box ? gtk_widget_get_parent(box) : NULL;
   if(parent) gtk_container_remove(GTK_CONTAINER(parent), box);
 
@@ -2926,6 +2930,8 @@ static void _module_masks_attach_do(dt_iop_module_t *module)
     gtk_widget_show(box);
   }
 
+  if(box) g_object_unref(G_OBJECT(box));
+
   bd->masks_detached_box = NULL;
   bd->masks_detach_container = NULL;
   bd->masks_detached = FALSE;
@@ -2945,21 +2951,20 @@ static void _module_masks_detach_clicked(GtkButton *button, dt_iop_module_t *mod
   g_idle_add(_module_masks_detach_idle, module);
 }
 
-// detach the whole mask section (shape buttons + scoped shape list) into its
-// own floating window, mirroring the module detach mechanism.
+// detach the whole mask panel (mode tabs + drawn + parametric + raster +
+// refinement) into its own floating window, mirroring the module detach
+// mechanism.
 static void _module_masks_detach_do(dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *bd = module->blend_data;
-  if(!bd || bd->masks_detached || !bd->masks_box) return;
+  if(!bd || bd->masks_detached || !bd->masks_panel) return;
 
-  GtkWidget *box = GTK_WIDGET(bd->masks_box);
-  GtkWidget *revealer = gtk_widget_get_parent(box);
-  GtkWidget *event_box = revealer ? gtk_widget_get_parent(revealer) : NULL;
-  GtkWidget *container = event_box ? gtk_widget_get_parent(event_box) : NULL;
-  if(!event_box || !container || !GTK_IS_BOX(container)) return;
+  GtkWidget *panel = GTK_WIDGET(bd->masks_panel);
+  GtkWidget *container = gtk_widget_get_parent(panel);
+  if(!container || !GTK_IS_BOX(container)) return;
 
   int position = 0;
-  gtk_container_child_get(GTK_CONTAINER(container), event_box, "position", &position, NULL);
+  gtk_container_child_get(GTK_CONTAINER(container), panel, "position", &position, NULL);
 
   // placeholder shown in the panel while detached
   GtkWidget *placeholder = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
@@ -2975,11 +2980,11 @@ static void _module_masks_detach_do(dt_iop_module_t *module)
   gtk_box_pack_end(GTK_BOX(placeholder), reattach, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(container), placeholder, FALSE, FALSE, 0);
   gtk_box_reorder_child(GTK_BOX(container), placeholder, position);
-  gtk_widget_hide(event_box);
+  gtk_widget_hide(panel);
   gtk_widget_show_all(placeholder);
 
-  g_object_ref(G_OBJECT(event_box));
-  gtk_container_remove(GTK_CONTAINER(container), event_box);
+  g_object_ref(G_OBJECT(panel));
+  gtk_container_remove(GTK_CONTAINER(container), panel);
 
   GtkWidget *win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   char title[256];
@@ -2991,15 +2996,15 @@ static void _module_masks_detach_do(dt_iop_module_t *module)
   GtkWidget *sw = gtk_scrolled_window_new(NULL, NULL);
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(sw),
                                  GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-  gtk_container_add(GTK_CONTAINER(sw), event_box);
+  gtk_container_add(GTK_CONTAINER(sw), panel);
   gtk_container_add(GTK_CONTAINER(win), sw);
 
   g_signal_connect(G_OBJECT(win), "delete-event",
                    G_CALLBACK(_module_masks_reattach_on_close), module);
 
   gint nat_w = 400, nat_h = 300;
-  gtk_widget_get_preferred_width(event_box, NULL, &nat_w);
-  gtk_widget_get_preferred_height(event_box, NULL, &nat_h);
+  gtk_widget_get_preferred_width(panel, NULL, &nat_w);
+  gtk_widget_get_preferred_height(panel, NULL, &nat_h);
   gtk_window_set_default_size(GTK_WINDOW(win),
                               CLAMP(nat_w, 320, 900),
                               CLAMP(nat_h + 40, 240, 900));
@@ -3011,15 +3016,15 @@ static void _module_masks_detach_do(dt_iop_module_t *module)
 
   bd->masks_detach_window = win;
   bd->masks_detach_placeholder = placeholder;
-  bd->masks_detached_box = event_box;
+  bd->masks_detached_box = panel;
   bd->masks_detach_container = container;
   bd->masks_detached = TRUE;
 
-  g_object_unref(G_OBJECT(event_box));
+  g_object_unref(G_OBJECT(panel));
 
   // show only the new widgets: show_all would force-visible controls the
   // module deliberately hides (e.g. inactive mask modes)
-  gtk_widget_show(event_box);
+  gtk_widget_show(panel);
   gtk_widget_show(sw);
   gtk_widget_show(win);
 }
@@ -3957,18 +3962,25 @@ void dt_iop_gui_init_blending(GtkWidget *iopw,
     dt_gui_add_help_link(GTK_WIDGET(bd->masks_modes_box), "masks_blending");
     gtk_widget_set_name(GTK_WIDGET(bd->masks_modes_box), "blending-tabs");
 
-    GtkWidget *box = dt_gui_vbox(bd->masks_modes_box);
+    // the blend mode / opacity block is not a mask control: keep it in the
+    // module, above the mask panel
     bd->blend_box = GTK_BOX(dt_gui_vbox
       (gbox,
        dt_gui_hbox(dt_gui_expand(bd->blend_modes_combo), bd->blend_modes_blend_order),
        bd->blend_mode_parameter_slider,
        bd->opacity_slider));
-    _add_wrapped_box(box, bd->blend_box, NULL);
+    GtkWidget *blend_wrap = dt_gui_vbox();
+    _add_wrapped_box(blend_wrap, bd->blend_box, NULL);
+    dt_gui_box_add(iopw, blend_wrap);
 
-    dt_gui_box_add(iopw, box);
-    dt_iop_gui_init_masks(iopw, module);
-    dt_iop_gui_init_raster(iopw, module);
-    dt_iop_gui_init_blendif(iopw, module);
+    // the whole mask UI (mode tabs + drawn + parametric + raster + refinement)
+    // lives in one container so it can be detached as a single panel
+    bd->masks_panel = GTK_BOX(dt_gui_vbox());
+    dt_gui_box_add(iopw, bd->masks_panel);
+    dt_gui_box_add(bd->masks_panel, bd->masks_modes_box);
+    dt_iop_gui_init_masks(GTK_WIDGET(bd->masks_panel), module);
+    dt_iop_gui_init_raster(GTK_WIDGET(bd->masks_panel), module);
+    dt_iop_gui_init_blendif(GTK_WIDGET(bd->masks_panel), module);
 
     bd->refine_box = GTK_BOX(dt_gui_vbox
       (hbox,
@@ -3978,7 +3990,7 @@ void dt_iop_gui_init_blending(GtkWidget *iopw,
        bd->blur_radius_slider,
        bd->brightness_slider,
        bd->contrast_slider));
-    _add_wrapped_box(iopw, bd->refine_box, "masks_refinement");
+    _add_wrapped_box(GTK_WIDGET(bd->masks_panel), bd->refine_box, "masks_refinement");
 
     gtk_widget_set_name(GTK_WIDGET(iopw), "blending-wrapper");
 
