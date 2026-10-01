@@ -355,6 +355,13 @@ typedef struct dt_iop_gui_blend_data_t
   // the module's blend section (personal unified mask panel, phase 1)
   GtkBox *masks_list;
 
+  // detach-to-floating-window state for the mask section (phase 1c)
+  GtkWidget *masks_detach_window;
+  GtkWidget *masks_detach_placeholder;
+  GtkWidget *masks_detached_box;   // event box holding the mask section
+  GtkWidget *masks_detach_container; // original parent of that box
+  gboolean masks_detached;
+
   GtkWidget *raster_combo;
   GtkWidget *raster_polarity;
 

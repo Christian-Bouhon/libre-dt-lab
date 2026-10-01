@@ -2868,6 +2868,160 @@ void dt_iop_gui_update_masks(dt_iop_module_t *module)
   _update_module_masks_list(module);
 }
 
+static void _module_masks_attach(dt_iop_module_t *module);
+
+static void _module_masks_reattach_clicked(GtkButton *button, dt_iop_module_t *module)
+{
+  _module_masks_attach(module);
+}
+
+static gboolean _module_masks_reattach_on_close(GtkWidget *win, GdkEvent *event,
+                                                dt_iop_module_t *module)
+{
+  _module_masks_attach(module);
+  return TRUE;
+}
+
+// re-attach the mask section into the module's blend panel at its old spot
+static void _module_masks_attach(dt_iop_module_t *module)
+{
+  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  if(!bd || !bd->masks_detached) return;
+
+  GtkWidget *box = bd->masks_detached_box;
+  GtkWidget *container = bd->masks_detach_container;
+
+  int position = 0;
+  if(bd->masks_detach_placeholder && container && GTK_IS_BOX(container))
+    gtk_container_child_get(GTK_CONTAINER(container), bd->masks_detach_placeholder,
+                            "position", &position, NULL);
+
+  GtkWidget *parent = box ? gtk_widget_get_parent(box) : NULL;
+  if(parent) gtk_container_remove(GTK_CONTAINER(parent), box);
+
+  if(bd->masks_detach_placeholder)
+  {
+    gtk_widget_destroy(bd->masks_detach_placeholder);
+    bd->masks_detach_placeholder = NULL;
+  }
+  if(bd->masks_detach_window)
+  {
+    gtk_widget_destroy(bd->masks_detach_window);
+    bd->masks_detach_window = NULL;
+  }
+
+  if(box && container && GTK_IS_BOX(container))
+  {
+    gtk_box_pack_start(GTK_BOX(container), box, FALSE, FALSE, 0);
+    gtk_box_reorder_child(GTK_BOX(container), box, position);
+    gtk_widget_show(box);
+  }
+
+  bd->masks_detached_box = NULL;
+  bd->masks_detach_container = NULL;
+  bd->masks_detached = FALSE;
+  dt_control_queue_redraw_center();
+}
+
+// detach the whole mask section (shape buttons + scoped shape list) into its
+// own floating window, mirroring the module detach mechanism.
+static void _module_masks_detach(GtkButton *button, dt_iop_module_t *module)
+{
+  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  if(!bd || bd->masks_detached || !bd->masks_box) return;
+
+  GtkWidget *box = GTK_WIDGET(bd->masks_box);
+  GtkWidget *revealer = gtk_widget_get_parent(box);
+  GtkWidget *event_box = revealer ? gtk_widget_get_parent(revealer) : NULL;
+  GtkWidget *container = event_box ? gtk_widget_get_parent(event_box) : NULL;
+  if(!event_box || !container || !GTK_IS_BOX(container)) return;
+
+  int position = 0;
+  gtk_container_child_get(GTK_CONTAINER(container), event_box, "position", &position, NULL);
+
+  // placeholder shown in the panel while detached
+  GtkWidget *placeholder = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_widget_set_name(placeholder, "iop-detach-placeholder");
+  GtkWidget *plabel = gtk_label_new(_("mask panel detached"));
+  gtk_label_set_ellipsize(GTK_LABEL(plabel), PANGO_ELLIPSIZE_END);
+  gtk_widget_set_hexpand(plabel, TRUE);
+  GtkWidget *reattach = dtgtk_button_new(dtgtk_cairo_paint_cancel, 0, NULL);
+  gtk_widget_set_tooltip_text(reattach, _("re-attach mask panel"));
+  g_signal_connect(G_OBJECT(reattach), "clicked",
+                   G_CALLBACK(_module_masks_reattach_clicked), module);
+  gtk_box_pack_start(GTK_BOX(placeholder), plabel, TRUE, TRUE, 0);
+  gtk_box_pack_end(GTK_BOX(placeholder), reattach, FALSE, FALSE, 0);
+  gtk_box_pack_start(GTK_BOX(container), placeholder, FALSE, FALSE, 0);
+  gtk_box_reorder_child(GTK_BOX(container), placeholder, position);
+  gtk_widget_hide(event_box);
+  gtk_widget_show_all(placeholder);
+
+  g_object_ref(G_OBJECT(event_box));
+  gtk_container_remove(GTK_CONTAINER(container), event_box);
+
+  GtkWidget *win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+  char title[256];
+  snprintf(title, sizeof(title), "%s — %s", module->name(), _("mask panel"));
+  gtk_window_set_title(GTK_WINDOW(win), title);
+  gtk_window_set_transient_for(GTK_WINDOW(win),
+                               GTK_WINDOW(dt_ui_main_window(darktable.gui->ui)));
+
+  GtkWidget *sw = gtk_scrolled_window_new(NULL, NULL);
+  gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(sw),
+                                 GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+  gtk_container_add(GTK_CONTAINER(sw), event_box);
+  gtk_container_add(GTK_CONTAINER(win), sw);
+
+  g_signal_connect(G_OBJECT(win), "delete-event",
+                   G_CALLBACK(_module_masks_reattach_on_close), module);
+
+  gint nat_w = 400, nat_h = 300;
+  gtk_widget_get_preferred_width(event_box, NULL, &nat_w);
+  gtk_widget_get_preferred_height(event_box, NULL, &nat_h);
+  gtk_window_set_default_size(GTK_WINDOW(win),
+                              CLAMP(nat_w, 320, 900),
+                              CLAMP(nat_h + 40, 240, 900));
+
+  GtkWindow *main_win = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
+  gint mx = 0, my = 0;
+  if(main_win) gtk_window_get_position(main_win, &mx, &my);
+  gtk_window_move(GTK_WINDOW(win), mx + 40, my + 80);
+
+  bd->masks_detach_window = win;
+  bd->masks_detach_placeholder = placeholder;
+  bd->masks_detached_box = event_box;
+  bd->masks_detach_container = container;
+  bd->masks_detached = TRUE;
+
+  g_object_unref(G_OBJECT(event_box));
+
+  // show only the new widgets: show_all would force-visible controls the
+  // module deliberately hides (e.g. inactive mask modes)
+  gtk_widget_show(sw);
+  gtk_widget_show(win);
+}
+
+void dt_iop_gui_masks_detach_cleanup(dt_iop_module_t *module)
+{
+  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  if(!bd || !bd->masks_detached) return;
+
+  // the module is going away: drop the floating window and its content
+  if(bd->masks_detach_placeholder)
+  {
+    gtk_widget_destroy(bd->masks_detach_placeholder);
+    bd->masks_detach_placeholder = NULL;
+  }
+  if(bd->masks_detach_window)
+  {
+    gtk_widget_destroy(bd->masks_detach_window);
+    bd->masks_detach_window = NULL;
+  }
+  bd->masks_detached_box = NULL;
+  bd->masks_detach_container = NULL;
+  bd->masks_detached = FALSE;
+}
+
 void dt_iop_gui_init_masks(GtkWidget *blendw, dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *bd = module->blend_data;
@@ -2955,6 +3109,12 @@ void dt_iop_gui_init_masks(GtkWidget *blendw, dt_iop_module_t *module)
                                                   G_CALLBACK(_blendop_masks_add_shape),
                                                   FALSE, 0, 0,
                                                   dtgtk_cairo_paint_masks_brush, abox);
+
+    GtkWidget *detach_btn = dtgtk_button_new(dtgtk_cairo_paint_display2, 0, NULL);
+    gtk_widget_set_tooltip_text(detach_btn, _("detach mask panel to a separate window"));
+    g_signal_connect(G_OBJECT(detach_btn), "clicked",
+                     G_CALLBACK(_module_masks_detach), module);
+    dt_gui_box_add(abox, detach_btn);
 
     bd->masks_list = GTK_BOX(dt_gui_vbox());
     dt_gui_add_class(GTK_WIDGET(bd->masks_list), "dt_masks_module_list");
@@ -3122,6 +3282,9 @@ void dt_iop_gui_cleanup_blending(dt_iop_module_t *module)
 {
   if(!module->blend_data) return;
   dt_iop_gui_blend_data_t *bd = module->blend_data;
+
+  // drop a floating mask panel before freeing its state
+  dt_iop_gui_masks_detach_cleanup(module);
 
   dt_pthread_mutex_lock(&bd->lock);
   if(bd->timeout_handle)
