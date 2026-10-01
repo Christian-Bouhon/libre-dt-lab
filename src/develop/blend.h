@@ -351,6 +351,10 @@ typedef struct dt_iop_gui_blend_data_t
   int *masks_combo_ids;
   dt_masks_edit_mode_t masks_shown;
 
+  // scoped list of the shapes composing this module's mask, shown right in
+  // the module's blend section (personal unified mask panel, phase 1)
+  GtkBox *masks_list;
+
   GtkWidget *raster_combo;
   GtkWidget *raster_polarity;
 

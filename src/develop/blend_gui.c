@@ -2694,6 +2694,90 @@ void dt_iop_gui_init_blendif(GtkWidget *blendw, dt_iop_module_t *module)
   dt_gui_box_add(bd->blendif_box, bd->masks_combine_combo);
 }
 
+static void _module_mask_select(GtkButton *button, dt_iop_module_t *module);
+static void _module_mask_delete(GtkButton *button, dt_iop_module_t *module);
+
+// rebuild the scoped shape list of this module's mask. This is the personal
+// unified mask panel's core: the shapes that used to live only in the global
+// "mask manager" are now listed and editable directly in the module's blend
+// section.
+static void _update_module_masks_list(dt_iop_module_t *module)
+{
+  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  if(!bd || !bd->masks_list) return;
+
+  GList *children = gtk_container_get_children(GTK_CONTAINER(bd->masks_list));
+  for(const GList *c = children; c; c = g_list_next(c))
+    gtk_widget_destroy(GTK_WIDGET(c->data));
+  g_list_free(children);
+
+  dt_masks_form_t *grp
+    = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
+  if(!grp || !(grp->type & DT_MASKS_GROUP) || !grp->points)
+    return;
+
+  for(GList *p = grp->points; p; p = g_list_next(p))
+  {
+    dt_masks_point_group_t *pt = p->data;
+    dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, pt->formid);
+    if(!form) continue;
+
+    GtkWidget *row = dt_gui_hbox();
+    dt_gui_add_class(row, "dt_masks_module_row");
+
+    GtkWidget *sel
+      = gtk_button_new_with_label(form->name[0] ? form->name : _("shape"));
+    gtk_button_set_relief(GTK_BUTTON(sel), GTK_RELIEF_NONE);
+    gtk_widget_set_tooltip_text(sel, _("select this shape on the canvas"));
+    GtkWidget *lbl = gtk_bin_get_child(GTK_BIN(sel));
+    if(GTK_IS_LABEL(lbl))
+      gtk_label_set_ellipsize(GTK_LABEL(lbl), PANGO_ELLIPSIZE_END);
+    gtk_widget_set_hexpand(sel, TRUE);
+    g_object_set_data(G_OBJECT(sel), "formid", GINT_TO_POINTER((int)pt->formid));
+    g_signal_connect(sel, "clicked", G_CALLBACK(_module_mask_select), module);
+
+    GtkWidget *del = dtgtk_button_new(dtgtk_cairo_paint_cancel, 0, NULL);
+    gtk_widget_set_tooltip_text(del, _("delete this shape"));
+    g_object_set_data(G_OBJECT(del), "formid", GINT_TO_POINTER((int)pt->formid));
+    g_signal_connect(del, "clicked", G_CALLBACK(_module_mask_delete), module);
+
+    gtk_box_pack_start(GTK_BOX(row), sel, TRUE, TRUE, 0);
+    gtk_box_pack_end(GTK_BOX(row), del, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(bd->masks_list), row, FALSE, FALSE, 0);
+    gtk_widget_show_all(row);
+  }
+}
+
+static void _module_mask_select(GtkButton *button, dt_iop_module_t *module)
+{
+  const dt_mask_id_t id
+    = (dt_mask_id_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "formid"));
+
+  dt_dev_masks_selection_change(darktable.develop, module, id);
+  dt_masks_form_t *grp
+    = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
+  if(grp) dt_masks_change_form_gui(grp);
+  dt_control_queue_redraw_center();
+}
+
+static void _module_mask_delete(GtkButton *button, dt_iop_module_t *module)
+{
+  const dt_mask_id_t id
+    = (dt_mask_id_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "formid"));
+
+  dt_masks_form_t *grp
+    = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
+  dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, id);
+  if(!grp || !form) return;
+
+  dt_masks_clear_form_gui(darktable.develop);
+  dt_masks_form_remove(module, grp, form);
+  dt_dev_add_masks_history_item(darktable.develop, module, TRUE);
+
+  _update_module_masks_list(module);
+  dt_control_queue_redraw_center();
+}
+
 void dt_iop_gui_update_masks(dt_iop_module_t *module)
 {
   dt_iop_gui_blend_data_t *bd = module->blend_data;
@@ -2750,6 +2834,8 @@ void dt_iop_gui_update_masks(dt_iop_module_t *module)
   }
 
   DT_LEAVE_GUI_UPDATE();
+
+  _update_module_masks_list(module);
 }
 
 void dt_iop_gui_init_masks(GtkWidget *blendw, dt_iop_module_t *module)
@@ -2840,7 +2926,9 @@ void dt_iop_gui_init_masks(GtkWidget *blendw, dt_iop_module_t *module)
                                                   FALSE, 0, 0,
                                                   dtgtk_cairo_paint_masks_brush, abox);
 
-    bd->masks_box = GTK_BOX(dt_gui_vbox(hbox, abox));
+    bd->masks_list = GTK_BOX(dt_gui_vbox());
+    dt_gui_add_class(GTK_WIDGET(bd->masks_list), "dt_masks_module_list");
+    bd->masks_box = GTK_BOX(dt_gui_vbox(hbox, abox, bd->masks_list));
     _add_wrapped_box(blendw, bd->masks_box, "masks_drawn");
 
     bd->masks_inited = TRUE;
