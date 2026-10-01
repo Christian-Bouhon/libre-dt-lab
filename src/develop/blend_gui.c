@@ -3138,13 +3138,6 @@ void dt_iop_gui_init_masks(GtkWidget *blendw, dt_iop_module_t *module)
                                                   FALSE, 0, 0,
                                                   dtgtk_cairo_paint_masks_brush, abox);
 
-    GtkWidget *detach_btn = dtgtk_button_new(dtgtk_cairo_paint_display2, 0, NULL);
-    gtk_widget_set_tooltip_text(detach_btn, _("detach mask panel to a separate window"));
-    g_signal_connect(G_OBJECT(detach_btn), "clicked",
-                     G_CALLBACK(_module_masks_detach_clicked), module);
-    // first line of the mask section, next to the mask-mode combo/polarity
-    dt_gui_box_add(hbox, detach_btn);
-
     bd->masks_list = GTK_BOX(dt_gui_vbox());
     dt_gui_add_class(GTK_WIDGET(bd->masks_list), "dt_masks_module_list");
     bd->masks_box = GTK_BOX(dt_gui_vbox(hbox, abox, bd->masks_list));
@@ -3952,6 +3945,19 @@ void dt_iop_gui_init_blending(GtkWidget *iopw,
 
     //box enclosing the mask mode selection buttons
     bd->masks_modes_box = GTK_BOX(dt_gui_hbox());
+
+    // detach control lives on this always-visible row (so it stays available
+    // whatever mask mode is active, unlike the mask sections themselves),
+    // immediately left of the "off" (X) mode toggle
+    if(bd->masks_support)
+    {
+      GtkWidget *detach_btn = dtgtk_button_new(dtgtk_cairo_paint_display2, 0, NULL);
+      gtk_widget_set_tooltip_text(detach_btn, _("detach mask panel to a separate window"));
+      g_signal_connect(G_OBJECT(detach_btn), "clicked",
+                       G_CALLBACK(_module_masks_detach_clicked), module);
+      dt_gui_box_add(bd->masks_modes_box, detach_btn);
+    }
+
     //mask selection buttons packing in mask_box
     for(GList *l = bd->masks_modes_toggles; l; l = g_list_next(l))
     {
