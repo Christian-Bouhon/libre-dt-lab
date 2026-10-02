@@ -2805,7 +2805,8 @@ static void _update_module_masks_list(dt_iop_module_t *module)
       if(op == DT_MASKS_STATE_NONE) op = DT_MASKS_STATE_UNION;
       opbtn = dtgtk_button_new(_module_mask_op_paint_button, 0,
                                GINT_TO_POINTER((int)op));
-      gtk_widget_set_tooltip_text(opbtn, _("how this shape combines with the ones above"));
+      gtk_widget_set_tooltip_text(opbtn,
+                                  _("how this shape combines with the ones above"));
       g_object_set_data(G_OBJECT(opbtn), "formid", GINT_TO_POINTER((int)pt->formid));
       g_signal_connect(opbtn, "clicked",
                        G_CALLBACK(_module_mask_op_clicked), module);
@@ -2895,6 +2896,7 @@ static void _module_masks_sync_selection(dt_iop_module_t *module)
   if(!bd || !bd->masks_list) return;
 
   const dt_mask_id_t sel = darktable.develop->mask_form_selected_id;
+  const gboolean was_updating = bd->masks_list_updating;
 
   bd->masks_list_updating = TRUE;
   GList *rows = gtk_container_get_children(GTK_CONTAINER(bd->masks_list));
@@ -2910,7 +2912,7 @@ static void _module_masks_sync_selection(dt_iop_module_t *module)
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(btn), active);
   }
   g_list_free(rows);
-  bd->masks_list_updating = FALSE;
+  bd->masks_list_updating = was_updating;
 }
 
 // Show only one shape on the canvas, or none when id == 0. This mirrors the
@@ -2938,6 +2940,8 @@ static void _module_mask_isolate(dt_iop_module_t *module, const dt_mask_id_t id)
     dt_masks_form_t *grp2 = dt_masks_create(DT_MASKS_GROUP);
     grp2->formid = NO_MASKID;
     dt_masks_group_ungroup(grp2, grp);
+    // grp was only a vehicle to build grp2, which copied its points
+    dt_masks_free_form(grp);
     dev->form_visible = grp2;
     dev->form_gui->edit_mode = DT_MASKS_EDIT_FULL;
   }
@@ -3054,7 +3058,8 @@ static void _module_mask_rename_response(GtkDialog *dlg, gint response,
     dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, id);
     if(entry && form)
     {
-      g_strlcpy(form->name, gtk_entry_get_text(GTK_ENTRY(entry)), sizeof(form->name));
+      dt_strlcpy_to_fixed(form->name, gtk_entry_get_text(GTK_ENTRY(entry)),
+                          sizeof(form->name));
       dt_dev_add_masks_history_item(darktable.develop, module, TRUE);
       _update_module_masks_list(module);
     }

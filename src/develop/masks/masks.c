@@ -1851,9 +1851,9 @@ void dt_masks_iop_value_changed_callback(GtkWidget *widget,
     }
     else if(val == -3000000)
     {
-      // remove the shapes not used by any module
+      // remove the shapes not used by any module; the combo refresh at the end
+      // of this function rebuilds the list
       dt_masks_cleanup_unused(module->dev);
-      dt_masks_iop_update(module);
     }
     else if(val < 0)
     {
