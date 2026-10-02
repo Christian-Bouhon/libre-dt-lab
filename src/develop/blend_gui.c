@@ -2790,6 +2790,13 @@ static void _update_module_masks_list(dt_iop_module_t *module)
       g_signal_connect(opbtn, "clicked",
                        G_CALLBACK(_module_mask_op_clicked), module);
     }
+    else
+    {
+      // keep the operator column's width on the base row, so every shape name
+      // starts and ends at the same place
+      opbtn = dtgtk_button_new(NULL, 0, NULL);
+      gtk_widget_set_sensitive(opbtn, FALSE);
+    }
 
     // invert toggle
     GtkWidget *inv = dtgtk_togglebutton_new(dtgtk_cairo_paint_plusminus, 0, NULL);
