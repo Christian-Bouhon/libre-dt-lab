@@ -2742,6 +2742,20 @@ static void _module_mask_op_paint_button(cairo_t *cr,
   cairo_surface_destroy(cs);
 }
 
+// Row shortcut for the module's "display mask" toggle. Forward to the real
+// handler, passing it the blend-mask row button, so that button and the module
+// header indicator stay in sync (and Ctrl / Shift variants keep working).
+static gboolean _module_mask_showmask_shortcut(GtkWidget *widget,
+                                               GdkEventButton *event,
+                                               dt_iop_module_t *module)
+{
+  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  if(bd && bd->showmask)
+    return _blendop_blendif_showmask_clicked(GTK_TOGGLE_BUTTON(bd->showmask),
+                                             event, module);
+  return FALSE;
+}
+
 // rebuild the scoped shape list of this module's mask. This is the personal
 // unified mask panel's core: the shapes that used to live only in the global
 // "mask manager" are now listed and editable directly in the module's blend
@@ -2792,10 +2806,13 @@ static void _update_module_masks_list(dt_iop_module_t *module)
     }
     else
     {
-      // keep the operator column's width on the base row, so every shape name
-      // starts and ends at the same place
-      opbtn = dtgtk_button_new(NULL, 0, NULL);
-      gtk_widget_set_sensitive(opbtn, FALSE);
+      // the base shape has no combine operator: use the slot for a shortcut to
+      // the "display mask" toggle (same action as the blend-mask row button),
+      // keeping the operator column's width on every row
+      opbtn = dtgtk_button_new(dtgtk_cairo_paint_showmask, 0, NULL);
+      gtk_widget_set_tooltip_text(opbtn, _("display this mask"));
+      g_signal_connect(opbtn, "button-press-event",
+                       G_CALLBACK(_module_mask_showmask_shortcut), module);
     }
 
     // invert toggle
