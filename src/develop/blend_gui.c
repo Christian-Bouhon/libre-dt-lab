@@ -4086,22 +4086,21 @@ void dt_iop_gui_init_blending(GtkWidget *iopw,
     dt_gui_add_help_link(GTK_WIDGET(bd->masks_modes_box), "masks_blending");
     gtk_widget_set_name(GTK_WIDGET(bd->masks_modes_box), "blending-tabs");
 
-    // the blend mode / opacity block is not a mask control: keep it in the
-    // module, above the mask panel
+    // the whole mask UI (mode tabs + blend mask/mode/opacity + drawn +
+    // parametric + raster + refinement) lives in one container so it can be
+    // detached as a single panel. The blend mask / mode / opacity block sits
+    // right below the mask mode icons, as it did before the unified panel.
+    bd->masks_panel = GTK_BOX(dt_gui_vbox());
+    dt_gui_box_add(iopw, bd->masks_panel);
+    dt_gui_box_add(bd->masks_panel, bd->masks_modes_box);
+
     bd->blend_box = GTK_BOX(dt_gui_vbox
       (gbox,
        dt_gui_hbox(dt_gui_expand(bd->blend_modes_combo), bd->blend_modes_blend_order),
        bd->blend_mode_parameter_slider,
        bd->opacity_slider));
-    GtkWidget *blend_wrap = dt_gui_vbox();
-    _add_wrapped_box(blend_wrap, bd->blend_box, NULL);
-    dt_gui_box_add(iopw, blend_wrap);
+    _add_wrapped_box(GTK_WIDGET(bd->masks_panel), bd->blend_box, NULL);
 
-    // the whole mask UI (mode tabs + drawn + parametric + raster + refinement)
-    // lives in one container so it can be detached as a single panel
-    bd->masks_panel = GTK_BOX(dt_gui_vbox());
-    dt_gui_box_add(iopw, bd->masks_panel);
-    dt_gui_box_add(bd->masks_panel, bd->masks_modes_box);
     dt_iop_gui_init_masks(GTK_WIDGET(bd->masks_panel), module);
     dt_iop_gui_init_raster(GTK_WIDGET(bd->masks_panel), module);
     dt_iop_gui_init_blendif(GTK_WIDGET(bd->masks_panel), module);
