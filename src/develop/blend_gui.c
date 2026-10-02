@@ -2717,23 +2717,29 @@ static DTGTKCairoPaintIconFunc _module_mask_op_paint(const dt_masks_state_t op)
   }
 }
 
-// render an operator glyph to a pixbuf offscreen. These glyphs use
-// cairo_push_group with IN/CLEAR operators, which crashes inside XRender when
-// painted directly on a window surface as a button paint; the mask manager
-// renders them offscreen for the same reason.
-static GdkPixbuf *_module_mask_op_pixbuf(const DTGTKCairoPaintIconFunc paint)
+// Paint the combine-operator glyph for a dtgtk_button (so it is frameless, like
+// the other row icons). The glyph is rendered offscreen first because these
+// glyphs use cairo_push_group with IN/CLEAR operators, which crashes inside
+// XRender when painted straight on a window surface.
+static void _module_mask_op_paint_button(cairo_t *cr,
+                                         const gint x, const gint y,
+                                         const gint w, const gint h,
+                                         const gint flags, void *data)
 {
-  const int size = DT_PIXEL_APPLY_DPI(18);
-  cairo_surface_t *cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, size, size);
-  cairo_t *cr = cairo_create(cs);
+  const dt_masks_state_t op = (dt_masks_state_t)GPOINTER_TO_INT(data);
+  if(w <= 0 || h <= 0) return;
+
+  cairo_surface_t *cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+  cairo_t *cr2 = cairo_create(cs);
   // the glyph inherits the current source colour, so set it to the theme's
   // button foreground (as the mask manager does) or it comes out black
-  dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BUTTON_FG, 1.0);
-  paint(cr, 0, 0, size, size, 0, NULL);
-  cairo_destroy(cr);
-  GdkPixbuf *pb = gdk_pixbuf_get_from_surface(cs, 0, 0, size, size);
+  dt_gui_gtk_set_source_rgba(cr2, DT_GUI_COLOR_BUTTON_FG, 1.0);
+  _module_mask_op_paint(op)(cr2, 0, 0, w, h, flags, NULL);
+  cairo_destroy(cr2);
+
+  cairo_set_source_surface(cr, cs, x, y);
+  cairo_paint(cr);
   cairo_surface_destroy(cs);
-  return pb;
 }
 
 // rebuild the scoped shape list of this module's mask. This is the personal
@@ -2777,15 +2783,8 @@ static void _update_module_masks_list(dt_iop_module_t *module)
     {
       dt_masks_state_t op = pt->state & DT_MASKS_STATE_OP;
       if(op == DT_MASKS_STATE_NONE) op = DT_MASKS_STATE_UNION;
-      GdkPixbuf *pb = _module_mask_op_pixbuf(_module_mask_op_paint(op));
-      opbtn = gtk_button_new();
-      gtk_button_set_relief(GTK_BUTTON(opbtn), GTK_RELIEF_NONE);
-      gtk_widget_set_size_request(opbtn, DT_PIXEL_APPLY_DPI(24), -1);
-      if(pb)
-      {
-        gtk_container_add(GTK_CONTAINER(opbtn), gtk_image_new_from_pixbuf(pb));
-        g_object_unref(pb);
-      }
+      opbtn = dtgtk_button_new(_module_mask_op_paint_button, 0,
+                               GINT_TO_POINTER((int)op));
       gtk_widget_set_tooltip_text(opbtn, _("how this shape combines with the ones above"));
       g_object_set_data(G_OBJECT(opbtn), "formid", GINT_TO_POINTER((int)pt->formid));
       g_signal_connect(opbtn, "clicked",
