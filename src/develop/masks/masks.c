@@ -2282,8 +2282,12 @@ void dt_masks_cleanup_unused_from_list(GList *history_list)
       history = g_list_previous(history))
   {
     dt_dev_history_item_t *hist = history->data;
-    if(hist->forms
-       && strcmp(hist->op_name, "mask_manager") == 0)
+    // A forms snapshot only exists for a mask edit: the mask manager records
+    // its own "mask_manager" items, but the module mask panel records the edit
+    // on the iop itself. Prune unused forms from every one of them, not only
+    // the "mask_manager" ones, or the panel's "delete unused shapes" does
+    // nothing.
+    if(hist->forms)
     {
       _masks_cleanup_unused(&hist->forms, history_list, history_end);
       history_end = num - 1;
