@@ -1701,7 +1701,7 @@ void dt_masks_iop_combo_populate(GtkWidget *w, dt_iop_module_t **m)
   dt_iop_gui_blend_data_t *bd = module->blend_data;
 
   // we determine a higher approx of the entry number
-  const guint nbe = 5
+  const guint nbe = 7
     + g_list_length(darktable.develop->forms)
     + g_list_length(darktable.develop->iop);
 
@@ -1792,6 +1792,13 @@ void dt_masks_iop_combo_populate(GtkWidget *w, dt_iop_module_t **m)
     }
     pos2++;
   }
+
+  // remove the shapes that are not used by any module (like the mask manager's
+  // "delete unused shapes" context menu entry)
+  dt_bauhaus_combobox_add_section(combo, _("delete unused shapes"));
+  cids[pos++] = 0; // nothing to do
+  dt_bauhaus_combobox_add(combo, _("delete unused shapes"));
+  cids[pos++] = -3000000;
 }
 
 void dt_masks_iop_value_changed_callback(GtkWidget *widget,
@@ -1841,6 +1848,12 @@ void dt_masks_iop_value_changed_callback(GtkWidget *widget,
     {
       // add a brush shape
       _menu_add_shape(module, DT_MASKS_BRUSH);
+    }
+    else if(val == -3000000)
+    {
+      // remove the shapes not used by any module
+      dt_masks_cleanup_unused(module->dev);
+      dt_masks_iop_update(module);
     }
     else if(val < 0)
     {
