@@ -1762,15 +1762,18 @@ static void _set_theme_compact(const gboolean compact)
   const char *cur = dt_conf_get_string_const("ui_last/theme");
   if(!_theme_is_compactable(cur)) return;
 
-  gchar *target = NULL;
-  if(compact)
-    target = g_strconcat(cur, "-compact", NULL);
-  else if(g_str_has_suffix(cur, "-compact"))
-    target = g_strndup(cur, strlen(cur) - strlen("-compact"));
+  // nothing to do if we are already in the requested state (this also makes
+  // the function safe to call when the button state is synced at startup)
+  const gboolean is_compact = g_str_has_suffix(cur, "-compact");
+  if(compact == is_compact) return;
 
-  if(!target || !_theme_file_exists(target))
+  gchar *target = compact
+    ? g_strconcat(cur, "-compact", NULL)
+    : g_strndup(cur, strlen(cur) - strlen("-compact"));
+
+  if(!_theme_file_exists(target))
   {
-    dt_print(DT_DEBUG_ALWAYS, "[darkroom] compact theme not found for '%s'\n", cur);
+    dt_print(DT_DEBUG_ALWAYS, "[darkroom] compact theme not found: '%s'\n", target);
     g_free(target);
     return;
   }
@@ -1782,6 +1785,10 @@ static void _set_theme_compact(const gboolean compact)
   g_free(target);
 }
 
+// guard against the "clicked"/"toggled" signal that GtkToggleButton emits when
+// its state is changed programmatically (e.g. when syncing at startup)
+static gboolean compact_button_updating = FALSE;
+
 static void _compact_button_update_state(void)
 {
   if(!compact_button) return;
@@ -1791,7 +1798,9 @@ static void _compact_button_update_state(void)
   const gboolean compact = compactable && g_str_has_suffix(cur, "-compact");
 
   gtk_widget_set_sensitive(compact_button, compactable);
+  compact_button_updating = TRUE;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(compact_button), compact);
+  compact_button_updating = FALSE;
   dtgtk_togglebutton_set_paint(DTGTK_TOGGLEBUTTON(compact_button),
                                compact ? dtgtk_cairo_paint_compact
                                        : dtgtk_cairo_paint_display,
@@ -1801,6 +1810,8 @@ static void _compact_button_update_state(void)
 static void _compact_button_clicked(GtkWidget *w, dt_develop_t *dev)
 {
   (void)dev;
+  if(compact_button_updating) return;
+
   _set_theme_compact(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w)));
   _compact_button_update_state();
 }
