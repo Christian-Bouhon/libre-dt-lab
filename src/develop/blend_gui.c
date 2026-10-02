@@ -2844,7 +2844,7 @@ static void _update_module_masks_list(dt_iop_module_t *module)
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(sel),
                                  pt->formid == darktable.develop->mask_form_selected_id);
     g_object_set_data(G_OBJECT(sel), "formid", GINT_TO_POINTER((int)pt->formid));
-    g_signal_connect(sel, "clicked", G_CALLBACK(_module_mask_select), module);
+    g_signal_connect(sel, "toggled", G_CALLBACK(_module_mask_select), module);
     g_signal_connect(sel, "button-press-event",
                      G_CALLBACK(_module_mask_name_pressed), module);
 
@@ -2960,22 +2960,22 @@ static void _module_mask_isolate(dt_iop_module_t *module, const dt_mask_id_t id)
 
 static void _module_mask_select(GtkButton *button, dt_iop_module_t *module)
 {
+  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  if(!bd || bd->masks_list_updating) return;   // ignore programmatic set_active
+
   const dt_mask_id_t id
     = (dt_mask_id_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "formid"));
-
-  dt_iop_gui_blend_data_t *bd = module->blend_data;
-  if(!bd) return;
 
   dt_masks_form_t *grp
     = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
   if(!grp || !(grp->type & DT_MASKS_GROUP) || !grp->points) return;
 
-  dt_iop_request_focus(module);
+  // drive from the toggle's own state, so the outcome is the same however many
+  // times the signal is delivered: checked = isolate, unchecked = show nothing
+  const gboolean active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(button));
 
-  // a click isolates this shape, a second click shows nothing, and clicking
-  // another shape switches the isolation to it
-  const dt_mask_id_t sel = darktable.develop->mask_form_selected_id;
-  _module_mask_isolate(module, (sel == id) ? 0 : id);
+  dt_iop_request_focus(module);
+  _module_mask_isolate(module, active ? id : 0);
   _module_masks_sync_selection(module);
 }
 
