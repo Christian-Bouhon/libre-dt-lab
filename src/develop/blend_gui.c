@@ -2699,6 +2699,38 @@ static void _module_mask_delete(GtkButton *button, dt_iop_module_t *module);
 static void _module_mask_invert_toggled(GtkToggleButton *button, dt_iop_module_t *module);
 static gboolean _module_mask_name_pressed(GtkWidget *widget, GdkEventButton *event,
                                           dt_iop_module_t *module);
+static void _module_mask_op_clicked(GtkButton *button, dt_iop_module_t *module);
+static void _module_mask_op_selected(GtkMenuItem *item, dt_iop_module_t *module);
+
+// cairo glyph for a classic per-shape combine operator
+static DTGTKCairoPaintIconFunc _module_mask_op_paint(const dt_masks_state_t op)
+{
+  switch(op)
+  {
+    case DT_MASKS_STATE_INTERSECTION: return dtgtk_cairo_paint_masks_intersection;
+    case DT_MASKS_STATE_DIFFERENCE:   return dtgtk_cairo_paint_masks_difference;
+    case DT_MASKS_STATE_SUM:          return dtgtk_cairo_paint_masks_sum;
+    case DT_MASKS_STATE_EXCLUSION:    return dtgtk_cairo_paint_masks_exclusion;
+    default:
+    case DT_MASKS_STATE_UNION:        return dtgtk_cairo_paint_masks_union;
+  }
+}
+
+// render an operator glyph to a pixbuf offscreen. These glyphs use
+// cairo_push_group with IN/CLEAR operators, which crashes inside XRender when
+// painted directly on a window surface as a button paint; the mask manager
+// renders them offscreen for the same reason.
+static GdkPixbuf *_module_mask_op_pixbuf(const DTGTKCairoPaintIconFunc paint)
+{
+  const int size = DT_PIXEL_APPLY_DPI(14);
+  cairo_surface_t *cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, size, size);
+  cairo_t *cr = cairo_create(cs);
+  paint(cr, 0, 0, size, size, 0, NULL);
+  cairo_destroy(cr);
+  GdkPixbuf *pb = gdk_pixbuf_get_from_surface(cs, 0, 0, size, size);
+  cairo_surface_destroy(cs);
+  return pb;
+}
 
 // rebuild the scoped shape list of this module's mask. This is the personal
 // unified mask panel's core: the shapes that used to live only in the global
@@ -2724,7 +2756,8 @@ static void _update_module_masks_list(dt_iop_module_t *module)
     return;
   }
 
-  for(GList *p = grp->points; p; p = g_list_next(p))
+  int row_index = 0;
+  for(GList *p = grp->points; p; p = g_list_next(p), row_index++)
   {
     dt_masks_point_group_t *pt = p->data;
     dt_masks_form_t *form = dt_masks_get_from_id(darktable.develop, pt->formid);
@@ -2733,9 +2766,33 @@ static void _update_module_masks_list(dt_iop_module_t *module)
     GtkWidget *row = dt_gui_hbox();
     dt_gui_add_class(row, "dt_masks_module_row");
 
+    // per-shape combine operator (the first shape is the base: no operator).
+    // click the glyph to pick union/intersection/difference/sum/exclusion.
+    GtkWidget *opbtn = NULL;
+    if(row_index > 0)
+    {
+      dt_masks_state_t op = pt->state & DT_MASKS_STATE_OP;
+      if(op == DT_MASKS_STATE_NONE) op = DT_MASKS_STATE_UNION;
+      GdkPixbuf *pb = _module_mask_op_pixbuf(_module_mask_op_paint(op));
+      opbtn = gtk_button_new();
+      gtk_button_set_relief(GTK_BUTTON(opbtn), GTK_RELIEF_NONE);
+      if(pb)
+      {
+        gtk_container_add(GTK_CONTAINER(opbtn), gtk_image_new_from_pixbuf(pb));
+        g_object_unref(pb);
+      }
+      gtk_widget_set_tooltip_text(opbtn, _("how this shape combines with the ones above"));
+      g_object_set_data(G_OBJECT(opbtn), "formid", GINT_TO_POINTER((int)pt->formid));
+      g_signal_connect(opbtn, "clicked",
+                       G_CALLBACK(_module_mask_op_clicked), module);
+    }
+
     // invert toggle
     GtkWidget *inv = dtgtk_togglebutton_new(dtgtk_cairo_paint_plusminus, 0, NULL);
     gtk_widget_set_tooltip_text(inv, _("invert this shape"));
+    // keep the icon's own colours when checked, or the white disc turns dark
+    // and the "+" becomes unreadable
+    dt_gui_add_class(inv, "dt_ignore_fg_state");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(inv),
                                  (pt->state & DT_MASKS_STATE_INVERSE) != 0);
     g_object_set_data(G_OBJECT(inv), "formid", GINT_TO_POINTER((int)pt->formid));
@@ -2760,9 +2817,10 @@ static void _update_module_masks_list(dt_iop_module_t *module)
     g_object_set_data(G_OBJECT(del), "formid", GINT_TO_POINTER((int)pt->formid));
     g_signal_connect(del, "clicked", G_CALLBACK(_module_mask_delete), module);
 
-    gtk_box_pack_start(GTK_BOX(row), inv, FALSE, FALSE, 0);
+    if(opbtn) gtk_box_pack_start(GTK_BOX(row), opbtn, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(row), sel, TRUE, TRUE, 0);
-    gtk_box_pack_end(GTK_BOX(row), del, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(row), inv, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(row), del, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(bd->masks_list), row, FALSE, FALSE, 0);
     gtk_widget_show_all(row);
   }
@@ -2909,6 +2967,66 @@ static gboolean _module_mask_name_pressed(GtkWidget *widget, GdkEventButton *eve
   gtk_dialog_set_default_response(GTK_DIALOG(dlg), GTK_RESPONSE_ACCEPT);
   gtk_widget_show_all(dlg);
   return TRUE;
+}
+
+static void _module_mask_op_apply(dt_iop_module_t *module,
+                                  const dt_mask_id_t id,
+                                  const dt_masks_state_t newop)
+{
+  dt_masks_form_t *grp
+    = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
+  if(!grp || !(grp->type & DT_MASKS_GROUP)) return;
+
+  for(GList *p = grp->points; p; p = g_list_next(p))
+  {
+    dt_masks_point_group_t *pt = p->data;
+    if(pt->formid == id)
+    {
+      pt->state &= ~DT_MASKS_STATE_OP;
+      pt->state |= newop;
+      dt_dev_add_masks_history_item(darktable.develop, module, TRUE);
+      break;
+    }
+  }
+
+  _update_module_masks_list(module);
+  dt_control_queue_redraw_center();
+}
+
+static void _module_mask_op_selected(GtkMenuItem *item, dt_iop_module_t *module)
+{
+  const dt_mask_id_t id
+    = (dt_mask_id_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item), "formid"));
+  const dt_masks_state_t op
+    = (dt_masks_state_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item), "op"));
+  _module_mask_op_apply(module, id, op);
+}
+
+static void _module_mask_op_clicked(GtkButton *button, dt_iop_module_t *module)
+{
+  const dt_mask_id_t id
+    = (dt_mask_id_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "formid"));
+
+  static const struct { dt_masks_state_t op; const char *label; } ops[] = {
+    { DT_MASKS_STATE_UNION,        N_("union") },
+    { DT_MASKS_STATE_INTERSECTION, N_("intersection") },
+    { DT_MASKS_STATE_DIFFERENCE,   N_("difference") },
+    { DT_MASKS_STATE_SUM,          N_("sum") },
+    { DT_MASKS_STATE_EXCLUSION,    N_("exclusion") },
+  };
+
+  GtkWidget *menu = gtk_menu_new();
+  for(guint i = 0; i < G_N_ELEMENTS(ops); i++)
+  {
+    GtkWidget *mi = gtk_menu_item_new_with_label(_(ops[i].label));
+    g_object_set_data(G_OBJECT(mi), "formid", GINT_TO_POINTER((int)id));
+    g_object_set_data(G_OBJECT(mi), "op", GINT_TO_POINTER((int)ops[i].op));
+    g_signal_connect(mi, "activate",
+                     G_CALLBACK(_module_mask_op_selected), module);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), mi);
+  }
+  gtk_widget_show_all(menu);
+  gtk_menu_popup_at_pointer(GTK_MENU(menu), gtk_get_current_event());
 }
 
 void dt_iop_gui_update_masks(dt_iop_module_t *module)
