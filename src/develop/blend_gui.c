@@ -2723,7 +2723,7 @@ static DTGTKCairoPaintIconFunc _module_mask_op_paint(const dt_masks_state_t op)
 // renders them offscreen for the same reason.
 static GdkPixbuf *_module_mask_op_pixbuf(const DTGTKCairoPaintIconFunc paint)
 {
-  const int size = DT_PIXEL_APPLY_DPI(14);
+  const int size = DT_PIXEL_APPLY_DPI(18);
   cairo_surface_t *cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, size, size);
   cairo_t *cr = cairo_create(cs);
   // the glyph inherits the current source colour, so set it to the theme's
@@ -2780,6 +2780,7 @@ static void _update_module_masks_list(dt_iop_module_t *module)
       GdkPixbuf *pb = _module_mask_op_pixbuf(_module_mask_op_paint(op));
       opbtn = gtk_button_new();
       gtk_button_set_relief(GTK_BUTTON(opbtn), GTK_RELIEF_NONE);
+      gtk_widget_set_size_request(opbtn, DT_PIXEL_APPLY_DPI(24), -1);
       if(pb)
       {
         gtk_container_add(GTK_CONTAINER(opbtn), gtk_image_new_from_pixbuf(pb));
