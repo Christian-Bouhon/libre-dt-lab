@@ -1662,6 +1662,8 @@ static gboolean _blendop_masks_add_shape(GtkWidget *widget,
   return TRUE;
 }
 
+static void _module_masks_sync_selection(dt_iop_module_t *module);
+
 static gboolean _blendop_masks_show_and_edit(GtkWidget *widget,
                                              GdkEventButton *event,
                                              dt_iop_module_t *self)
@@ -1725,6 +1727,10 @@ static gboolean _blendop_masks_show_and_edit(GtkWidget *widget,
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_shapes[n]), FALSE);
 
     DT_LEAVE_GUI_UPDATE();
+
+    // showing every shape (or hiding all) leaves no isolated shape targeted
+    darktable.develop->mask_form_selected_id = 0;
+    _module_masks_sync_selection(self);
 
     return TRUE;
   }
@@ -2826,15 +2832,17 @@ static void _update_module_masks_list(dt_iop_module_t *module)
     g_object_set_data(G_OBJECT(inv), "formid", GINT_TO_POINTER((int)pt->formid));
     g_signal_connect(inv, "toggled", G_CALLBACK(_module_mask_invert_toggled), module);
 
-    // name (click selects the shape on the canvas)
+    // name: click isolates this shape (only it is drawn), checked = accent
     GtkWidget *sel
-      = gtk_button_new_with_label(form->name[0] ? form->name : _("shape"));
+      = gtk_toggle_button_new_with_label(form->name[0] ? form->name : _("shape"));
     gtk_button_set_relief(GTK_BUTTON(sel), GTK_RELIEF_NONE);
-    gtk_widget_set_tooltip_text(sel, _("select this shape on the canvas"));
+    gtk_widget_set_tooltip_text(sel, _("show and edit only this shape"));
     GtkWidget *lbl = gtk_bin_get_child(GTK_BIN(sel));
     if(GTK_IS_LABEL(lbl))
       gtk_label_set_ellipsize(GTK_LABEL(lbl), PANGO_ELLIPSIZE_END);
     gtk_widget_set_hexpand(sel, TRUE);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(sel),
+                                 pt->formid == darktable.develop->mask_form_selected_id);
     g_object_set_data(G_OBJECT(sel), "formid", GINT_TO_POINTER((int)pt->formid));
     g_signal_connect(sel, "clicked", G_CALLBACK(_module_mask_select), module);
     g_signal_connect(sel, "button-press-event",
@@ -2844,6 +2852,9 @@ static void _update_module_masks_list(dt_iop_module_t *module)
     gtk_widget_set_tooltip_text(del, _("delete this shape"));
     g_object_set_data(G_OBJECT(del), "formid", GINT_TO_POINTER((int)pt->formid));
     g_signal_connect(del, "clicked", G_CALLBACK(_module_mask_delete), module);
+
+    // remember the select toggle so selection can be synced without rebuilding
+    g_object_set_data(G_OBJECT(row), "select_btn", sel);
 
     // reorder this shape in the group. The combine order matters for the
     // non-commutative operators (difference, and exclusion with several shapes).
@@ -2876,6 +2887,77 @@ static void _update_module_masks_list(dt_iop_module_t *module)
   bd->masks_list_updating = FALSE;
 }
 
+// Reflect the isolated shape in the list: its row toggle is checked (accent).
+// dev->mask_form_selected_id is the single source of truth.
+static void _module_masks_sync_selection(dt_iop_module_t *module)
+{
+  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  if(!bd || !bd->masks_list) return;
+
+  const dt_mask_id_t sel = darktable.develop->mask_form_selected_id;
+
+  bd->masks_list_updating = TRUE;
+  GList *rows = gtk_container_get_children(GTK_CONTAINER(bd->masks_list));
+  for(GList *r = rows; r; r = g_list_next(r))
+  {
+    GtkWidget *btn = g_object_get_data(G_OBJECT(r->data), "select_btn");
+    if(!btn) continue;
+    const dt_mask_id_t rid
+      = (dt_mask_id_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(r->data), "formid"));
+    const gboolean active = (sel != 0 && rid == sel);
+    if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(btn)) != active)
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(btn), active);
+  }
+  g_list_free(rows);
+  bd->masks_list_updating = FALSE;
+}
+
+// Show only one shape on the canvas, or none when id == 0. This mirrors the
+// mask manager's _tree_selection_change(): form_visible is set directly, and
+// dt_masks_change_form_gui() / dt_dev_masks_selection_change() are deliberately
+// avoided, because they rebroadcast through the manager's selection proxy which
+// would rebuild form_visible from the manager's own (often empty) selection.
+static void _module_mask_isolate(dt_iop_module_t *module, const dt_mask_id_t id)
+{
+  dt_develop_t *dev = darktable.develop;
+  if(!dev->form_gui) return;
+
+  dt_masks_clear_form_gui(dev);
+
+  if(id)
+  {
+    dt_masks_form_t *grp = dt_masks_create(DT_MASKS_GROUP);
+    dt_masks_point_group_t *fpt = malloc(sizeof(dt_masks_point_group_t));
+    fpt->formid = id;
+    fpt->parentid = module->blend_params->mask_id;
+    fpt->state = DT_MASKS_STATE_USE;
+    fpt->opacity = 1.0f;
+    grp->points = g_list_append(grp->points, fpt);
+
+    dt_masks_form_t *grp2 = dt_masks_create(DT_MASKS_GROUP);
+    grp2->formid = NO_MASKID;
+    dt_masks_group_ungroup(grp2, grp);
+    dev->form_visible = grp2;
+    dev->form_gui->edit_mode = DT_MASKS_EDIT_FULL;
+  }
+  else
+  {
+    dev->form_visible = NULL;
+    dev->form_gui->edit_mode = DT_MASKS_EDIT_OFF;
+  }
+
+  dev->mask_form_selected_id = id;
+
+  // the "show and edit mask elements" toggle (arrow + dotted path) stays off
+  // while a single shape is isolated, as in the manager
+  dt_iop_gui_blend_data_t *bd = module->blend_data;
+  bd->masks_shown = DT_MASKS_EDIT_OFF;
+  if(bd->masks_edit)
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit), FALSE);
+
+  dt_control_queue_redraw_center();
+}
+
 static void _module_mask_select(GtkButton *button, dt_iop_module_t *module)
 {
   const dt_mask_id_t id
@@ -2888,34 +2970,13 @@ static void _module_mask_select(GtkButton *button, dt_iop_module_t *module)
     = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
   if(!grp || !(grp->type & DT_MASKS_GROUP) || !grp->points) return;
 
-  // clicking a row must actually do something: focus the module and enter full
-  // mask editing so the shape handles become live on the canvas. Selection
-  // otherwise used to go through the global mask manager proxy, which silently
-  // did nothing when its (lazy) tree had not been built yet.
   dt_iop_request_focus(module);
 
-  // toggling: a second click on the already-edited shape leaves mask editing.
-  // Clicking another shape keeps editing on and just retargets.
-  const gboolean same_shape_active
-    = (bd->masks_shown == DT_MASKS_EDIT_FULL)
-      && (darktable.develop->mask_form_selected_id == id);
-
-  DT_ENTER_GUI_UPDATE();
-  bd->masks_shown = same_shape_active ? DT_MASKS_EDIT_OFF : DT_MASKS_EDIT_FULL;
-  if(bd->masks_edit)
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(bd->masks_edit),
-                                 bd->masks_shown != DT_MASKS_EDIT_OFF);
-  dt_masks_set_edit_mode(module, bd->masks_shown);
-  DT_LEAVE_GUI_UPDATE();
-
-  if(!same_shape_active)
-  {
-    dt_dev_masks_selection_change(darktable.develop, module, id);
-    // remember which shape is targeted (used by the path resize/rotation tools)
-    darktable.develop->mask_form_selected_id = id;
-  }
-
-  dt_control_queue_redraw_center();
+  // a click isolates this shape, a second click shows nothing, and clicking
+  // another shape switches the isolation to it
+  const dt_mask_id_t sel = darktable.develop->mask_form_selected_id;
+  _module_mask_isolate(module, (sel == id) ? 0 : id);
+  _module_masks_sync_selection(module);
 }
 
 static void _module_mask_delete(GtkButton *button, dt_iop_module_t *module)
