@@ -2701,6 +2701,8 @@ static gboolean _module_mask_name_pressed(GtkWidget *widget, GdkEventButton *eve
                                           dt_iop_module_t *module);
 static void _module_mask_op_clicked(GtkButton *button, dt_iop_module_t *module);
 static void _module_mask_op_selected(GtkMenuItem *item, dt_iop_module_t *module);
+static void _module_mask_move(GtkButton *button, dt_iop_module_t *module);
+static void _update_module_masks_list(dt_iop_module_t *module);
 
 // cairo glyph for a classic per-shape combine operator
 static DTGTKCairoPaintIconFunc _module_mask_op_paint(const dt_masks_state_t op)
@@ -2730,6 +2732,14 @@ static GdkPixbuf *_module_mask_op_pixbuf(const DTGTKCairoPaintIconFunc paint)
   GdkPixbuf *pb = gdk_pixbuf_get_from_surface(cs, 0, 0, size, size);
   cairo_surface_destroy(cs);
   return pb;
+}
+
+// rebuild the shape list from an idle: reordering from a row button destroys
+// and recreates that button, which must not happen inside its own signal
+static gboolean _module_masks_rebuild_idle(gpointer data)
+{
+  _update_module_masks_list((dt_iop_module_t *)data);
+  return G_SOURCE_REMOVE;
 }
 
 // rebuild the scoped shape list of this module's mask. This is the personal
@@ -2817,8 +2827,28 @@ static void _update_module_masks_list(dt_iop_module_t *module)
     g_object_set_data(G_OBJECT(del), "formid", GINT_TO_POINTER((int)pt->formid));
     g_signal_connect(del, "clicked", G_CALLBACK(_module_mask_delete), module);
 
+    // reorder this shape in the group. The combine order matters for the
+    // non-commutative operators (difference, and exclusion with several shapes).
+    GtkWidget *mv_up = dtgtk_button_new(dtgtk_cairo_paint_solid_arrow,
+                                        CPF_DIRECTION_UP, NULL);
+    gtk_widget_set_tooltip_text(mv_up, _("move this shape up"));
+    gtk_widget_set_sensitive(mv_up, p != grp->points);
+    g_object_set_data(G_OBJECT(mv_up), "formid", GINT_TO_POINTER((int)pt->formid));
+    g_object_set_data(G_OBJECT(mv_up), "move_dir", GINT_TO_POINTER(-1));
+    g_signal_connect(mv_up, "clicked", G_CALLBACK(_module_mask_move), module);
+
+    GtkWidget *mv_dn = dtgtk_button_new(dtgtk_cairo_paint_solid_arrow,
+                                        CPF_DIRECTION_DOWN, NULL);
+    gtk_widget_set_tooltip_text(mv_dn, _("move this shape down"));
+    gtk_widget_set_sensitive(mv_dn, g_list_next(p) != NULL);
+    g_object_set_data(G_OBJECT(mv_dn), "formid", GINT_TO_POINTER((int)pt->formid));
+    g_object_set_data(G_OBJECT(mv_dn), "move_dir", GINT_TO_POINTER(1));
+    g_signal_connect(mv_dn, "clicked", G_CALLBACK(_module_mask_move), module);
+
     if(opbtn) gtk_box_pack_start(GTK_BOX(row), opbtn, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(row), sel, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(row), mv_up, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(row), mv_dn, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(row), inv, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(row), del, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(bd->masks_list), row, FALSE, FALSE, 0);
@@ -2885,6 +2915,26 @@ static void _module_mask_delete(GtkButton *button, dt_iop_module_t *module)
   dt_dev_add_masks_history_item(darktable.develop, module, TRUE);
 
   _update_module_masks_list(module);
+  dt_control_queue_redraw_center();
+}
+
+// move a shape up/down in the group. dt_masks_form_move() takes up = TRUE to
+// move later in the list, hence move_dir < 0 (up) maps to FALSE.
+static void _module_mask_move(GtkButton *button, dt_iop_module_t *module)
+{
+  const dt_mask_id_t id
+    = (dt_mask_id_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "formid"));
+  const int dir = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "move_dir"));
+
+  dt_masks_form_t *grp
+    = dt_masks_get_from_id(darktable.develop, module->blend_params->mask_id);
+  if(!grp || !(grp->type & DT_MASKS_GROUP)) return;
+
+  dt_masks_form_move(grp, id, dir > 0);
+  dt_dev_add_masks_history_item(darktable.develop, module, TRUE);
+  // rebuild from an idle: doing it here would destroy the clicked button while
+  // its own signal is still being dispatched
+  g_idle_add(_module_masks_rebuild_idle, module);
   dt_control_queue_redraw_center();
 }
 
