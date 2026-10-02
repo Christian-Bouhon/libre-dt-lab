@@ -2702,7 +2702,6 @@ static gboolean _module_mask_name_pressed(GtkWidget *widget, GdkEventButton *eve
 static void _module_mask_op_clicked(GtkButton *button, dt_iop_module_t *module);
 static void _module_mask_op_selected(GtkMenuItem *item, dt_iop_module_t *module);
 static void _module_mask_move(GtkButton *button, dt_iop_module_t *module);
-static void _update_module_masks_list(dt_iop_module_t *module);
 
 // cairo glyph for a classic per-shape combine operator
 static DTGTKCairoPaintIconFunc _module_mask_op_paint(const dt_masks_state_t op)
@@ -2732,14 +2731,6 @@ static GdkPixbuf *_module_mask_op_pixbuf(const DTGTKCairoPaintIconFunc paint)
   GdkPixbuf *pb = gdk_pixbuf_get_from_surface(cs, 0, 0, size, size);
   cairo_surface_destroy(cs);
   return pb;
-}
-
-// rebuild the shape list from an idle: reordering from a row button destroys
-// and recreates that button, which must not happen inside its own signal
-static gboolean _module_masks_rebuild_idle(gpointer data)
-{
-  _update_module_masks_list((dt_iop_module_t *)data);
-  return G_SOURCE_REMOVE;
 }
 
 // rebuild the scoped shape list of this module's mask. This is the personal
@@ -2932,9 +2923,7 @@ static void _module_mask_move(GtkButton *button, dt_iop_module_t *module)
 
   dt_masks_form_move(grp, id, dir > 0);
   dt_dev_add_masks_history_item(darktable.develop, module, TRUE);
-  // rebuild from an idle: doing it here would destroy the clicked button while
-  // its own signal is still being dispatched
-  g_idle_add(_module_masks_rebuild_idle, module);
+  _update_module_masks_list(module);
   dt_control_queue_redraw_center();
 }
 
