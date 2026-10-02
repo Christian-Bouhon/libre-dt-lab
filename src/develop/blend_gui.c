@@ -2726,6 +2726,9 @@ static GdkPixbuf *_module_mask_op_pixbuf(const DTGTKCairoPaintIconFunc paint)
   const int size = DT_PIXEL_APPLY_DPI(14);
   cairo_surface_t *cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, size, size);
   cairo_t *cr = cairo_create(cs);
+  // the glyph inherits the current source colour, so set it to the theme's
+  // button foreground (as the mask manager does) or it comes out black
+  dt_gui_gtk_set_source_rgba(cr, DT_GUI_COLOR_BUTTON_FG, 1.0);
   paint(cr, 0, 0, size, size, 0, NULL);
   cairo_destroy(cr);
   GdkPixbuf *pb = gdk_pixbuf_get_from_surface(cs, 0, 0, size, size);
