@@ -2902,8 +2902,9 @@ static void _module_masks_sync_selection(dt_iop_module_t *module)
   {
     GtkWidget *btn = g_object_get_data(G_OBJECT(r->data), "select_btn");
     if(!btn) continue;
+    // the formid lives on the select toggle, not on the row itself
     const dt_mask_id_t rid
-      = (dt_mask_id_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(r->data), "formid"));
+      = (dt_mask_id_t)GPOINTER_TO_INT(g_object_get_data(G_OBJECT(btn), "formid"));
     const gboolean active = (sel != 0 && rid == sel);
     if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(btn)) != active)
       gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(btn), active);
