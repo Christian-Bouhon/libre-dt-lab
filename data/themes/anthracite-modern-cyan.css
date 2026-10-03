@@ -186,13 +186,18 @@
   background-color: @mt_bg_4;
 }
 
-/* Bigger, bolder module titles and section titles for readability */
+/* Module titles : light by default, a bit heavier when the module is active */
 #iop-panel-label,
 #lib-panel-label
 {
   font-size: 1.15em;
-  font-weight: 600;
+  font-weight: 400;
   color: @mt_fg;
+}
+
+#iop-expander.dt_module_active #iop-panel-label
+{
+  font-weight: 500;
 }
 
 .dt_section_label:not(#blending-box),
