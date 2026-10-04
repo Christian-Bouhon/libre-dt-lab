@@ -139,12 +139,12 @@ void dt_request_console_notice(void)
 
 static void _show_console_notice(void)
 {
-  const char *notice = _("this console window is required by darktable on this "
+  const char *notice = _("this console window is required by Libre DT-Lab on this "
                          "version of Windows.\n"
-                         "on Windows 11 24H2 and later, darktable normally runs "
+                         "on Windows 11 24H2 and later, Libre DT-Lab normally runs "
                          "without this window.\n"
-                         "do not close it or press ctrl+c while darktable is running.\n"
-                         "it will close automatically when darktable exits.\n");
+                         "do not close it or press ctrl+c while Libre DT-Lab is running.\n"
+                         "it will close automatically when Libre DT-Lab exits.\n");
   gchar **notice_lines = g_strsplit(notice, "\n", -1);
   gchar *console_notice = g_strjoinv("\r\n", notice_lines);
   g_strfreev(notice_lines);
