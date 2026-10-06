@@ -61,6 +61,7 @@ __kernel void contrast_apply(read_only image2d_t in,
                              global const float *lum_broad,
                              global const float *lum_fine,
                              global const float *lum_micro,
+                             global const float *lum_base,
                              const int width,
                              const int height,
                              const float gain_local,
@@ -115,11 +116,16 @@ __kernel void contrast_apply(read_only image2d_t in,
   const float global_term = (gain_global - 1.0f) * effective_csf_weight * log_lum * w_global;
 
   // Shadows/highlights: same construction as global_term, split at middle
-  // gray (log_lum == 0) into two independent slopes. Must stay in lockstep
-  // with the CPU path in contrast.c process() -- same formula, same operand
-  // order.
-  const float slope_sh = (log_lum < 0.0f) ? slope_shadows : slope_highlights;
-  const float sh_term = (slope_sh - 1.0f) * effective_csf_weight * log_lum * w_global;
+  // gray into two independent slopes, but evaluated on the dedicated
+  // low-frequency base luminance (not on the pixel) so the local contrast is
+  // preserved. Must stay in lockstep with the CPU path in contrast.c --
+  // same formula, same operand order.
+  const float lb = fmax(lum_base[k], CONTRAST_MIN_FLOAT);
+  const float log_lum_base = log2(lb / 0.1845f);
+  const float csf_weight_base = exp(-(log_lum_base * log_lum_base) / 12.5f);
+  const float effective_csf_weight_base = (1.0f - csf_adaptation) + csf_adaptation * csf_weight_base;
+  const float slope_sh = (log_lum_base < 0.0f) ? slope_shadows : slope_highlights;
+  const float sh_term = (slope_sh - 1.0f) * effective_csf_weight_base * log_lum_base * w_global;
 
   // Colorimetric contrast factor (red vs blue)
   const float4 px = read_imagef(in, sampleri, pos);
