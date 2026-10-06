@@ -244,12 +244,12 @@ typedef struct dt_iop_contrast_gui_data_t
 
 const char *name()
 {
-  return _("contrast & texture");
+  return _("tone & texture");
 }
 
 const char *aliases()
 {
-  return _("local contrast|clarity|detail enhancement");
+  return _("tone|tonality|local contrast|clarity|detail enhancement|highlights|shadows");
 }
 
 const char **description(dt_iop_module_t *self)

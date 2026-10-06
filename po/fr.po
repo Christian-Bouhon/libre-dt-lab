@@ -24558,13 +24558,15 @@ msgstr ""
 " • Spline monotone – donne une meilleure précision sur les fonctions\n"
 "mathématiques analytiques (log, gamma, exp)"
 
-#: ../src/iop/contrast.c:236
-msgid "contrast & texture"
-msgstr "contraste & texture"
+#: ../src/iop/contrast.c:245
+msgid "tone & texture"
+msgstr "Tonalité & Texture"
 
-#: ../src/iop/contrast.c:241
-msgid "local contrast|clarity|detail enhancement"
-msgstr "contraste local | netteté | amélioration des détails"
+#: ../src/iop/contrast.c:250
+msgid "tone|tonality|local contrast|clarity|detail enhancement|highlights|shadows"
+msgstr ""
+"tonalité | contraste local | netteté | amélioration des détails | hautes "
+"lumières | ombres"
 
 #: ../src/iop/contrast.c:247
 msgid "enhance local contrast by boosting contrast while preserving edges"

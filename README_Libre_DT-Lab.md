@@ -10,13 +10,14 @@ This fork serves as a development lab for exploring new approaches to the photog
 
 ## What's different from darktable
 
-### New module, Contrast & Texture
-A multi-scale contrast processing module for scene-referred linear RGB space, fully compatible with Rec.2020 wide-gamut workflows.
+### New module, Tone & Texture
+A multi-scale tonal and contrast processing module for scene-referred linear RGB space, fully compatible with Rec.2020 wide-gamut workflows.
 
 **Architecture:**
 - Five interdependent frequency scales using Edge-aware Image Guided Filtering (EIGF)
 - **Global contrast** via a Contrast Sensitivity Function (CSF) centered on middle gray (0.1845)
 - **Pyramidal local contrast**, micro to extended, driven by a spatial blending parameter
+- **Tone controls** for shadows and highlights, evaluated on a low-frequency base so local contrast is preserved
 - **Chromatic contrast**, colorimetric (red/blue channel difference) and colorful (warm/cool separation)
 - Automatic resolution adaptation, normalized to 36 MP sensor as reference
 
@@ -169,6 +170,6 @@ GNU General Public License v3.0, see [LICENSE](LICENSE) for details.
 - [darktable project](https://www.darktable.org/) and all its contributors
 - [WileCoyote, original local contrast proof-of-concept](https://discuss.pixls.us/t/experiments-with-a-scene-referred-local-contrast-module-proof-of-concept/55402)
 - [XYZ sigmoid curve (GIMP 3 plug-in), inspiration for the 3DCF X/Z chroma contrast](https://discuss.pixls.us/t/python-plug-in-for-gimp3-xyz-sigmoid-curve/60096)
-- Christian Bouhon, Libre DT-Lab fork, Contrast & Texture module, basecurve enhancements
+- Christian Bouhon, Libre DT-Lab fork, Tone & Texture module, basecurve enhancements
 
 *Greetings from Luberon, Provence* 🌿

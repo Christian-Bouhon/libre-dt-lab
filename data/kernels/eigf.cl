@@ -21,7 +21,7 @@
     mirroring the CPU reference in src/common/eigf.h.
 
     Only the "no mask" path (quantization == 0) is implemented here, because
-    that is the path used by the modules driving it (e.g. contrast & texture,
+    that is the path used by the modules driving it (e.g. tone & texture,
     which always calls fast_eigf_surface_blur with quantization = 0).
 
     The host (fast_eigf_surface_blur_cl in src/common/eigf.h) orchestrates one

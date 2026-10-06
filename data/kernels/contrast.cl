@@ -17,7 +17,7 @@
     along with darktable.  If not, see <http://www.gnu.org/licenses/>.
 
     ---------------------------------------------------------------------------
-    OpenCL kernels for the "contrast & texture" module. The heavy lifting (the
+    OpenCL kernels for the "tone & texture" module. The heavy lifting (the
     edge-aware multi-scale blur) is done by the shared EIGF kernels in eigf.cl
     orchestrated host-side; here we only compute the guide luminance and apply
     the final multi-scale contrast maths. Both kernels mirror their CPU
