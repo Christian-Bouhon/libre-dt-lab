@@ -4,10 +4,12 @@
 #
 # Usage:
 #   make-layout.sh <install-prefix> <layout-dir> <icon-png> <manifest> \
-#                  <msix-version> <arch> <identity-name> <publisher>
+#                  <msix-version> <arch> <identity-name> <publisher> \
+#                  <file-associations>
 #
 # <msix-version> must be a 4-part dotted version (e.g. 1.0.0.0).
 # <arch> is x64 or arm64.
+# <file-associations> is a text file with one extension per line (e.g. .nef).
 #
 set -euo pipefail
 
@@ -19,6 +21,7 @@ MSIX_VERSION="$5"
 ARCH="$6"
 IDENTITY="$7"
 PUBLISHER="$8"
+FILE_ASSOC="${9:-}"
 
 if [ ! -f "$ICON" ]; then
   echo "icon not found: $ICON" >&2
@@ -49,6 +52,30 @@ sed -e "s|__IDENTITY_NAME__|${IDENTITY}|g" \
     -e "s|__PUBLISHER__|${PUBLISHER}|g" \
     -e "s|__VERSION__|${MSIX_VERSION}|g" \
     -e "s|__ARCH__|${ARCH}|g" \
-    "$MANIFEST" > "$LAYOUT/AppxManifest.xml"
+    "$MANIFEST" > "$LAYOUT/AppxManifest.xml.tmp"
+
+# Build the file type association block from the extensions list.
+frag="$(mktemp)"
+{
+  echo '        <uap:Extension Category="windows.fileTypeAssociation">'
+  echo '          <uap3:FileTypeAssociation Name="libredtlabimagefiles">'
+  echo '            <uap:SupportedFileTypes>'
+  if [ -n "$FILE_ASSOC" ] && [ -f "$FILE_ASSOC" ]; then
+    while IFS= read -r ext; do
+      case "$ext" in
+        ''|\#*) continue ;;
+      esac
+      echo "              <uap:FileType>${ext}</uap:FileType>"
+    done < "$FILE_ASSOC"
+  fi
+  echo '            </uap:SupportedFileTypes>'
+  echo '          </uap3:FileTypeAssociation>'
+  echo '        </uap:Extension>'
+} > "$frag"
+
+# Inject the block where the __FILE_ASSOCIATIONS__ token is.
+sed -e "/__FILE_ASSOCIATIONS__/{" -e "r $frag" -e "d" -e "}" \
+    "$LAYOUT/AppxManifest.xml.tmp" > "$LAYOUT/AppxManifest.xml"
+rm -f "$LAYOUT/AppxManifest.xml.tmp" "$frag"
 
 echo "MSIX layout ready: $LAYOUT"

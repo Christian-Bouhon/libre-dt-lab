@@ -362,7 +362,8 @@ jobs:
             "${INSTALL_PREFIX}" "${BUILD_DIR}/msix-layout" \
             "${SRC_DIR}/data/pixmaps/256x256/libre-dt-lab.png" \
             "${SRC_DIR}/packaging/windows/msix/AppxManifest.xml" \
-            "${msix_version}" "x64" "${MSIX_IDENTITY_NAME}" "${MSIX_PUBLISHER}"
+            "${msix_version}" "x64" "${MSIX_IDENTITY_NAME}" "${MSIX_PUBLISHER}" \
+            "${SRC_DIR}/packaging/windows/msix/file-associations.txt"
       - name: Pack MSIX
         if: matrix.msystem == 'UCRT64'
         shell: pwsh

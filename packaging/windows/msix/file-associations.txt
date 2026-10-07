@@ -1,0 +1,30 @@
+# File extensions associated with Libre DT-Lab in the MSIX package.
+# One extension per line (leading dot required). Lines starting with # are ignored.
+.dng
+.cr2
+.cr3
+.crw
+.nef
+.nrw
+.arw
+.sr2
+.srf
+.raf
+.orf
+.rw2
+.pef
+.mrw
+.kdc
+.dcr
+.jpg
+.jpeg
+.png
+.tif
+.tiff
+.webp
+.avif
+.heif
+.heic
+.jxl
+.exr
+.qoi

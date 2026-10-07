@@ -12,6 +12,7 @@ packaged as a **full-trust MSIX** (Desktop Bridge): the complete install tree
 | `AppxManifest.xml` | MSIX manifest template (tokens replaced at build time) |
 | `make-layout.sh` | Builds the layout dir, generates the tile assets and the manifest |
 | `pack-msix.ps1` | Packs the layout into a `.msix` with the Windows SDK `MakeAppx` |
+| `file-associations.txt` | Extensions registered as file type associations (raw + images) |
 
 ## How CI builds it
 
@@ -38,7 +39,8 @@ packaging/windows/msix/make-layout.sh \
   /opt/libre-dt-lab ./msix-layout \
   data/pixmaps/256x256/libre-dt-lab.png \
   packaging/windows/msix/AppxManifest.xml \
-  1.0.0.0 x64 LibreDTLab "CN=Libre DT-Lab"
+  1.0.0.0 x64 LibreDTLab "CN=Libre DT-Lab" \
+  packaging/windows/msix/file-associations.txt
 
 # from PowerShell
 packaging/windows/msix/pack-msix.ps1 -LayoutDir .\msix-layout -OutputFile .\libre-dt-lab.msix
@@ -56,9 +58,11 @@ Developer Mode (`Add-AppxPackage -Path .\libre-dt-lab.msix`).
    - *Package/Identity/Name* → repo variable `MSIX_IDENTITY_NAME`
    - *Package/Identity/Publisher* → repo variable `MSIX_PUBLISHER`
    - *Package/Properties/PublisherDisplayName* (already `Libre DT-Lab`)
-3. **Store listing**: description, category, at least one screenshot,
-   store logos, support/website, **privacy policy URL** (required if the app
-   accesses personal information — host one, e.g. GitHub Pages).
+3. **Store listing**: description, category, at least one screenshot
+   (see `../store/screenshots/`), store logos, support/website, and the
+   **privacy policy URL**:
+   `https://christian-bouhon.github.io/libre-dt-lab/privacy-policy.html`
+   (the policy is in `docs/privacy-policy.md`, hosted via GitHub Pages).
 4. **Age rating** questionnaire (IARC).
 5. **Package**: upload the generated `.msix`. The Store re-signs it with a
    Microsoft certificate, so no code-signing certificate is needed.
