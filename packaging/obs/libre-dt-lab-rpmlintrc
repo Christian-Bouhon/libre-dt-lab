@@ -1,0 +1,5 @@
+# rpmlint filters for libre-dt-lab
+addFilter("spurious-executable-perm .*\.desktop$")
+addFilter("script-without-shebang .*\.desktop$")
+addFilter("wrong-script-end-of-line-encoding")
+addFilter("env-script-interpreter")

@@ -1,0 +1,7 @@
+-------------------------------------------------------------------
+Wed Oct 07 2026 Christian Bouhon <christian.bouhon@outlook.be>
+- Initial Libre DT-Lab package (fork of darktable)
+  * independent fork released as libre-1.0.0
+  * native .lab.xmp sidecar format, separate config/cache directories
+  * packages deb/rpm via the Open Build Service
+
