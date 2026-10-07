@@ -1,0 +1,30 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export DEB_CFLAGS_MAINT_APPEND  = -fno-strict-aliasing
+
+%:
+	dh $@ --buildsystem=cmake+ninja
+
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DBINARY_PACKAGE_BUILD=1 \
+		-DCMAKE_INSTALL_DATAROOTDIR=share \
+		-DDONT_USE_INTERNAL_LUA=ON \
+		-DDONT_USE_INTERNAL_LIBRAW=ON \
+		-DUSE_OPENCL=ON \
+		-DUSE_OPENMP=ON \
+		-DUSE_GMIC=ON \
+		-DUSE_AVIF=ON \
+		-DUSE_JXL=ON \
+		-DUSE_HEIF=ON \
+		-DUSE_MAP=ON \
+		-DBUILD_NOISE_TOOLS=ON \
+		-DBUILD_CURVE_TOOLS=ON
+
+override_dh_auto_install:
+	dh_auto_install --destdir=debian/libre-dt-lab
+
+override_dh_auto_test:
+	# unit tests are not run during the package build

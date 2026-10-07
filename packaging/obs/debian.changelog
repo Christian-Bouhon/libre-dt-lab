@@ -1,0 +1,7 @@
+libre-dt-lab (1.0.0-1) unstable; urgency=medium
+
+  * Initial Libre DT-Lab package (fork of darktable).
+  * Independent fork released as libre-1.0.0.
+  * Native .lab.xmp sidecar format and separate config/cache directories.
+
+ -- Christian Bouhon <christian.bouhon@outlook.be>  Wed, 07 Oct 2026 12:00:00 +0200
