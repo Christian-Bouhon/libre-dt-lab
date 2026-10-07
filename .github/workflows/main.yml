@@ -235,6 +235,8 @@ jobs:
       CMAKE_BUILD_TYPE: ${{ matrix.btype }}
       TARGET: ${{ matrix.target }}
       GENERATOR: ${{ matrix.generator }}
+      MSIX_IDENTITY_NAME: ${{ vars.MSIX_IDENTITY_NAME || 'LibreDTLab' }}
+      MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER || 'CN=Libre DT-Lab' }}
     steps:
       - uses: msys2/setup-msys2@v2
         with:
@@ -351,11 +353,29 @@ jobs:
           cd ${SRC_DIR}
           echo "VERSION=$(git describe --tags --match 'libre-*' | sed 's/^libre-//;s/-/+/;s/-/~/;s/rc/~rc/')" >> $GITHUB_ENV
           ([[ ${MSYSTEM_CARCH} == x86_64 ]] && echo "SYSTEM=win64" || echo "SYSTEM=woa64") >> $GITHUB_ENV
+      - name: Build MSIX layout
+        if: matrix.msystem == 'UCRT64'
+        run: |
+          # 4-part Store version derived from the git version (1.0.0+3~g... -> 1.0.0.0)
+          msix_version=$(echo "$VERSION" | sed -E 's/^([0-9]+)\.([0-9]+)\.([0-9]+).*/\1.\2.\3.0/')
+          bash "${SRC_DIR}"/packaging/windows/msix/make-layout.sh \
+            "${INSTALL_PREFIX}" "${BUILD_DIR}/msix-layout" \
+            "${SRC_DIR}/data/pixmaps/256x256/libre-dt-lab.png" \
+            "${SRC_DIR}/packaging/windows/msix/AppxManifest.xml" \
+            "${msix_version}" "x64" "${MSIX_IDENTITY_NAME}" "${MSIX_PUBLISHER}"
+      - name: Pack MSIX
+        if: matrix.msystem == 'UCRT64'
+        shell: pwsh
+        run: |
+          & "${env:SRC_DIR}\packaging\windows\msix\pack-msix.ps1" `
+            -LayoutDir "${env:BUILD_DIR}\msix-layout" `
+            -OutputFile "${env:BUILD_DIR}\libre-dt-lab-${env:VERSION}-win64.msix"
       - name: Package upload
         uses: actions/upload-artifact@v4
         with:
           path: |
             ${{ env.BUILD_DIR }}/libre-dt-lab-*.exe
+            ${{ env.BUILD_DIR }}/libre-dt-lab-*.msix
             ${{ env.BUILD_DIR }}/libre-dt-lab-*portable*.zip
           name: artifact-windows-${{ runner.arch }}
           retention-days: 2

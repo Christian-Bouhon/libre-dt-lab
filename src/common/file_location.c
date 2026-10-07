@@ -35,6 +35,52 @@
 #include "file_location.h"
 #include "whereami.h"
 
+#ifdef _WIN32
+// On Windows the libgphoto2 driver directories are not known to the system.
+// The Inno/NSIS installers set CAMLIBS/IOLIBS machine-wide, but a MSIX
+// package cannot; derive them from the executable location when they are not
+// already defined (this also makes the portable ZIP work out of the box).
+static void _win_set_gphoto2_env(const char *application_directory)
+{
+  if(!application_directory) return;
+
+  gchar *libdir = g_build_filename(application_directory, "..", "lib", NULL);
+  const gchar *vars[2] = { "CAMLIBS", "IOLIBS" };
+  const gchar *subdirs[2] = { "libgphoto2", "libgphoto2_port" };
+
+  for(int i = 0; i < 2; i++)
+  {
+    if(g_getenv(vars[i])) continue;
+
+    gchar *base = g_build_filename(libdir, subdirs[i], NULL);
+    GDir *dir = g_dir_open(base, 0, NULL);
+    if(!dir)
+    {
+      g_free(base);
+      continue;
+    }
+
+    const gchar *entry;
+    while((entry = g_dir_read_name(dir)))
+    {
+      gchar *full = g_build_filename(base, entry, NULL);
+      if(g_file_test(full, G_FILE_TEST_IS_DIR))
+      {
+        g_setenv(vars[i], full, TRUE);
+        dt_print(DT_DEBUG_DEV, "%s: %s", vars[i], full);
+        g_free(full);
+        break;
+      }
+      g_free(full);
+    }
+    g_dir_close(dir);
+    g_free(base);
+  }
+
+  g_free(libdir);
+}
+#endif
+
 uint8_t dt_loc_init(const char *datadir,
                     const char *moduledir,
                     const char *localedir,
@@ -57,6 +103,10 @@ uint8_t dt_loc_init(const char *datadir,
     application_directory[dirname_length] = '\0';
   }
   dt_print(DT_DEBUG_DEV, "application_directory: %s", application_directory);
+
+#ifdef _WIN32
+  _win_set_gphoto2_env(application_directory);
+#endif
 
   // set up absolute pathes based on their relative value
   dt_loc_init_datadir(application_directory, datadir);

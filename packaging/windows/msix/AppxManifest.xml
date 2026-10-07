@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MSIX application manifest for Libre DT-Lab (full-trust Win32 desktop app).
+
+  The tokens __IDENTITY_NAME__, __PUBLISHER__, __VERSION__ and __ARCH__ are
+  replaced at build time by packaging/windows/msix/make-layout.sh.
+
+  IMPORTANT: for a Microsoft Store submission, __IDENTITY_NAME__, __PUBLISHER__
+  and the display name must match the values shown in Partner Center
+  (Product -> Product identity) after reserving the app name.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="__IDENTITY_NAME__"
+    Publisher="__PUBLISHER__"
+    Version="__VERSION__"
+    ProcessorArchitecture="__ARCH__" />
+
+  <Properties>
+    <DisplayName>Libre DT-Lab</DisplayName>
+    <PublisherDisplayName>Libre DT-Lab</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <Description>Libre DT-Lab, an experimental fork of darktable, a virtual lighttable and darkroom for photographers.</Description>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="LibreDTLab" Executable="bin\libre-dt-lab.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="Libre DT-Lab"
+        Description="Virtual lighttable and darkroom for photographers"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" Square71x71Logo="Assets\Square71x71Logo.png" />
+        <uap:SplashScreen Image="Assets\SplashScreen.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>
