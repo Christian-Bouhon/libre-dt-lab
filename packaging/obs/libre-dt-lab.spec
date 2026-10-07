@@ -113,6 +113,10 @@ BuildRequires:  ninja
 BuildRequires:  fdupes
 BuildRequires:  intltool
 BuildRequires:  libxslt
+BuildRequires:  perl
+%if 0%{?fedora}
+BuildRequires:  perl-FindBin
+%endif
 %if %{with translated_manpages}
 BuildRequires:  po4a
 %endif

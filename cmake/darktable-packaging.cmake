@@ -7,9 +7,34 @@ if(PROJECT_VERSION MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)")
   set(CPACK_PACKAGE_VERSION_MINOR "${CMAKE_MATCH_2}")
   set(CPACK_PACKAGE_VERSION_PATCH "${CMAKE_MATCH_3}")
 endif()
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "The digital darkroom")
-set(CPACK_PACKAGE_CONTACT "https://www.darktable.org/")
-set(CPACK_PACKAGE_VENDOR "the darktable project")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A virtual Lighttable and Darkroom")
+set(CPACK_PACKAGE_DESCRIPTION "Libre DT-Lab is an experimental fork of darktable, a virtual lighttable and darkroom for photographers. It manages digital negatives in a database and can show them through a zoomable lighttable, and enables developing raw images and enhancing them.")
+set(CPACK_PACKAGE_CONTACT "Christian Bouhon <christian.bouhon@outlook.be>")
+set(CPACK_PACKAGE_VENDOR "Libre DT-Lab")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/Christian-Bouhon/libre-dt-lab")
+
+# Debian package metadata. CPACK_DEBIAN_PACKAGE_SHLIBDEPS lets CPack compute
+# the library dependencies from the built binaries; only the packages that
+# are not covered by that (data and dlopen'ed OpenCL) are listed manually.
+set(CPACK_DEBIAN_PACKAGE_NAME "libre-dt-lab")
+set(CPACK_DEBIAN_PACKAGE_SECTION "graphics")
+set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+set(CPACK_DEBIAN_PACKAGE_RELEASE 1)
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "iso-codes, ocl-icd-libopencl1 | libopencl1")
+set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "graphicsmagick, dcraw, libimage-exiftool-perl, ghostscript, gnuplot")
+
+# RPM package metadata. CPACK_RPM_PACKAGE_AUTOREQ computes the library
+# dependencies from the built binaries.
+set(CPACK_RPM_PACKAGE_LICENSE "GPL-3.0-or-later")
+set(CPACK_RPM_PACKAGE_GROUP "Applications/Graphics")
+set(CPACK_RPM_PACKAGE_SUMMARY "A virtual Lighttable and Darkroom")
+set(CPACK_RPM_PACKAGE_DESCRIPTION "Libre DT-Lab is an experimental fork of darktable, a virtual lighttable and darkroom for photographers.")
+set(CPACK_RPM_PACKAGE_AUTOREQ ON)
+set(CPACK_RPM_PACKAGE_REQUIRES "iso-codes")
+set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
+set(CPACK_RPM_PACKAGE_RELEASE 1)
 
 set(CPACK_SOURCE_IGNORE_FILES
     "/.gitignore"
