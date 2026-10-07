@@ -1,11 +1,11 @@
 
 =head1 NAME
 
-darktable - a digital photography workflow application
+libre-dt-lab - a digital photography workflow application
 
 =head1 SYNOPSIS
 
-    darktable [options] [IMG_1234.{RAW,...}|image_folder/]
+    libre-dt-lab [options] [IMG_1234.{RAW,...}|image_folder/]
 
 Options:
 
@@ -29,7 +29,7 @@ Options:
 
 =head1 DESCRIPTION
 
-B<darktable> is a digital photography workflow application for B<Linux>, B<Mac OS X> and several other B<Unices>.
+B<libre-dt-lab> is a digital photography workflow application for B<Linux>, B<Mac OS X> and several other B<Unices>.
 
 The application is designed to ease editing and consistent processing of large
 photo sessions and provides an easy to use digital lighttable and a set
@@ -37,7 +37,7 @@ of sophisticated post-processing tools.
 
 Most processing is done in 32-bit floating point per channel mode in device independent
 B<CIE L*a*b*> color space.
-B<darktable> is also fully color managed, which gives you full control over the look of the photos.
+B<libre-dt-lab> is also fully color managed, which gives you full control over the look of the photos.
 
 The application relies on a modern plugin architecture thus making it easy for
 3rd party developers to extend the existing capabilities of the application.
@@ -52,34 +52,34 @@ Most workflow specific things can also be scripted in B<Lua>.
 =item B<IMG_1234.RAW or image_folder/>
 
 You may optionally supply the filename of an image or the name of a folder containing image files.
-If a filename is given darktable starts in darkroom view with that file opened.
-If a folder is given darktable starts in lighttable view with the content of that folder as the current collection.
-If there is already an instance of darktable running (using the same library) the image or folder will be opened
+If a filename is given libre-dt-lab starts in darkroom view with that file opened.
+If a folder is given libre-dt-lab starts in lighttable view with the content of that folder as the current collection.
+If there is already an instance of libre-dt-lab running (using the same library) the image or folder will be opened
 there, using B<D-Bus> to communicate between the two processes.
 
 =item B<< --cachedir <cache directory> >>
 
-darktable keeps a cache of image thumbnails for fast image preview and of precompiled OpenCL binaries for fast startup.
-By default the cache is located in C<$HOME/.cache/darktable/>.
+libre-dt-lab keeps a cache of image thumbnails for fast image preview and of precompiled OpenCL binaries for fast startup.
+By default the cache is located in C<$HOME/.cache/libre-dt-lab/>.
 There may exist multiple thumbnail caches in parallel - one for each library file.
 
 =item B<< --conf <key>=<value> >>
 
-darktable supports a rich set of configuration parameters which the
-user defines in C<darktablerc> - darktable's configuration file in the
+libre-dt-lab supports a rich set of configuration parameters which the
+user defines in C<darktablerc> - libre-dt-lab's configuration file in the
 user config directory.
 You may temporarily overwrite individual settings on the command line with this option - however, these
 settings will not be stored in C<darktablerc>.
 
 =item B<< --configdir <config directory> >>
 
-This option defines the directory where darktable stores the user specific configuration.
-The default place is C<$HOME/.config/darktable/>.
+This option defines the directory where libre-dt-lab stores the user specific configuration.
+The default place is C<$HOME/.config/libre-dt-lab/>.
 
 =item B<< -d <debug option> >>
 
 This option enables debug output to the terminal.
-There are several subsystems of darktable and debugging of each of them can be activated separately.
+There are several subsystems of libre-dt-lab and debugging of each of them can be activated separately.
 You can use this option multiple times if you want debugging output of more than one subsystem.
 
 A few of those debug options are:
@@ -89,7 +89,7 @@ A few of those debug options are:
 =item B<control>
 
 Enable job queue debugging.
-If you redirect darktable's output to B<control.log> and call B<./tools/create_control_svg.sh control.log>,
+If you redirect libre-dt-lab's output to B<control.log> and call B<./tools/create_control_svg.sh control.log>,
 you will get a nice B<control.svg> with a visualization of the threads' work.
 
 =item B<cache>
@@ -110,14 +110,14 @@ Enable all debugging output. In general this is not very useful.
 
 =item B<< --datadir <data directory> >>
 
-This option defines the directory where darktable finds its runtime data.
+This option defines the directory where libre-dt-lab finds its runtime data.
 The default place depends on your installation.
-Typical places are C</opt/darktable/share/darktable/> and C</usr/share/darktable/>.
+Typical places are C</opt/libre-dt-lab/share/libre-dt-lab/> and C</usr/share/libre-dt-lab/>.
 
 =item B<--disable-opencl>
 
-Prevent darktable from initializing the OpenCL subsystem.
-Use this option in case darktable crashes at startup due to a defective OpenCL implementation.
+Prevent libre-dt-lab from initializing the OpenCL subsystem.
+Use this option in case libre-dt-lab crashes at startup due to a defective OpenCL implementation.
 
 =item B<-h>, B<--help>
 
@@ -125,18 +125,18 @@ Show the available command line options and exit.
 
 =item B<< --library <library file> >>
 
-darktable keeps image information in an sqlite database for fast access.
-The default location of that database file is C<$HOME/.config/darktable/library.db>.
+libre-dt-lab keeps image information in an sqlite database for fast access.
+The default location of that database file is C<$HOME/.config/libre-dt-lab/library.db>.
 You may give an alternative location, e.g. if you want to do some experiments without compromising your original library.db.
-If the database file does not exist, darktable creates it for you.
+If the database file does not exist, libre-dt-lab creates it for you.
 You may also give C<:memory:> as a library file in which case the database is kept in system memory - all
-changes are discarded when darktable terminates.
+changes are discarded when libre-dt-lab terminates.
 
 =item B<< --localedir <locale directory> >>
 
-The place where darktable finds its language specific text strings.
+The place where libre-dt-lab finds its language specific text strings.
 The default place depends on your installation.
-Typical places are C</opt/darktable/share/locale/> and C</usr/share/locale/>.
+Typical places are C</opt/libre-dt-lab/share/locale/> and C</usr/share/locale/>.
 
 =item B<< --luacmd <lua command> >>
 
@@ -147,31 +147,31 @@ If lua is not compiled in, this option will be accepted but won't do anything.
 
 =item B<< --moduledir <module directory> >>
 
-darktable has a modular structure and organizes its modules as shared libraries for loading at runtime.
-With this option you tell darktable where to look for its shared libraries.
+libre-dt-lab has a modular structure and organizes its modules as shared libraries for loading at runtime.
+With this option you tell libre-dt-lab where to look for its shared libraries.
 The default place depends on your installation; typical places are
-C</opt/darktable/lib/darktable/> and C</usr/lib/darktable/>.
+C</opt/libre-dt-lab/lib/libre-dt-lab/> and C</usr/lib/libre-dt-lab/>.
 
 =item B<< --noiseprofiles <noiseprofiles json file> >>
 
-darktable's profiled denoise module uses camera specific profile data that gets loaded from an external JSON file.
+libre-dt-lab's profiled denoise module uses camera specific profile data that gets loaded from an external JSON file.
 With this option the file to be loaded can be changed to allow testing alternative profiles.
 The default profile file is C<noiseprofiles.json> and is typically found in
-C</opt/darktable/share/darktable/> or C</usr/share/darktable/>.
+C</opt/libre-dt-lab/share/libre-dt-lab/> or C</usr/share/libre-dt-lab/>.
 
 =item B<< -t <num openmp threads> >>
 
-darktable uses OpenMP to parallelize many computation steps and make use of all the available CPU cores.
+libre-dt-lab uses OpenMP to parallelize many computation steps and make use of all the available CPU cores.
 With this option you can specify the number of threads to use. Valid values are between C<1> and C<100>.
 
 =item B<< --tmpdir <tmp directory> >>
 
-The place where darktable stores its temporary files.
-If this option is not supplied darktable uses the system default.
+The place where libre-dt-lab stores its temporary files.
+If this option is not supplied libre-dt-lab uses the system default.
 
 =item B<--version>
 
-Show the darktable version along with some important build options and exit.
+Show the libre-dt-lab version along with some important build options and exit.
 
 =back
 
@@ -505,27 +505,28 @@ Start/stop playback
 
 =head1 SEE ALSO
 
-L<darktable-cli(1)|darktable-cli(1)>
+L<libre-dt-lab-cli(1)|libre-dt-lab-cli(1)>
 
 =head1 OTHER INFO
 
-Please visit B<darktable>'s website for news, blog and bug tracker: L<https://www.darktable.org/>
+Please visit the project page for news and the source repository: L<https://github.com/Christian-Bouhon/libre-dt-lab/>
 
-L<https://www.darktable.org/usermanual/> The complete darktable usermanual.
+L<https://www.darktable.org/usermanual/> The complete darktable usermanual, Libre DT-Lab is based on darktable.
 
 B<darktablerc.html> An overview over all default config settings.
 The default place depends on your installation.
-Typical places are C</opt/darktable/share/doc/darktable/> and C</usr/share/doc/darktable/>.
+Typical places are C</opt/libre-dt-lab/share/doc/libre-dt-lab/> and C</usr/share/doc/libre-dt-lab/>.
 
 =head1 REPORTING BUGS
 
 Please use the bug tracker on
-L<https://github.com/darktable-org/darktable/issues> to report
+L<https://github.com/Christian-Bouhon/libre-dt-lab/issues> to report
 bugs, feature requests and so on.
 
 =head1 AUTHORS
 
 The principal developer of darktable is Johannes Hanika.
+Libre DT-Lab is an experimental fork of darktable.
 The (hopefully) complete list of contributors to the project is:
 
 DREGGNAUTHORS -- don't translate this line!
@@ -544,9 +545,6 @@ The project was started by Johannes Hanika in early 2009 to fill the gap
 
 B<Copyright (C)> 2009-2017 by Authors.
 
-B<darktable> is free software; you can redistribute it and/or modify it
+B<libre-dt-lab> is free software; you can redistribute it and/or modify it
 under the terms of the GPL v3 or (at your option) any later version.
 
-=for comment
-$Date: 2017-01-20$
-$Release: 2.3$

@@ -14,11 +14,11 @@ endforeach(module)
 foreach(module ${MODULES})
     target_link_libraries(${module} lib_darktable)
     if (WIN32)
-        _detach_debuginfo (${module} ${CMAKE_INSTALL_LIBDIR}/darktable/plugins/imageio/storage)
+        _detach_debuginfo (${module} ${CMAKE_INSTALL_LIBDIR}/libre-dt-lab/plugins/imageio/storage)
     else()
         set_target_properties(${module}
                               PROPERTIES
                               INSTALL_RPATH ${RPATH_ORIGIN}/../../..)
     endif(WIN32)
-    install(TARGETS ${module} DESTINATION ${CMAKE_INSTALL_LIBDIR}/darktable/plugins/imageio/storage COMPONENT DTApplication)
+    install(TARGETS ${module} DESTINATION ${CMAKE_INSTALL_LIBDIR}/libre-dt-lab/plugins/imageio/storage COMPONENT DTApplication)
 endforeach(module)

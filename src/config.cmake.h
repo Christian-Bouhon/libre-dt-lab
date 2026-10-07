@@ -7,8 +7,8 @@
 // it butchers @@ and ${} :(
 
 #define PACKAGE_NAME "@CMAKE_PROJECT_NAME@"
-#define PACKAGE_BUGREPORT "https://github.com/darktable-org/darktable/issues/new/choose"
-#define PACKAGE_DOCS "https://www.darktable.org/resources/"
+#define PACKAGE_BUGREPORT "https://github.com/Christian-Bouhon/libre-dt-lab/issues/new/choose"
+#define PACKAGE_DOCS "https://github.com/Christian-Bouhon/libre-dt-lab#readme"
 
 // these will be defined in build/bin/version_gen.c
 extern const char darktable_package_version[];

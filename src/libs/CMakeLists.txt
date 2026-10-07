@@ -132,11 +132,11 @@ endforeach(module)
 #       in a better matching structure then just in lighttable directory.
 foreach(module ${MODULES})
   if(WIN32)
-    _detach_debuginfo (${module} ${CMAKE_INSTALL_LIBDIR}/darktable/plugins/lighttable)
+    _detach_debuginfo (${module} ${CMAKE_INSTALL_LIBDIR}/libre-dt-lab/plugins/lighttable)
   else()
     set_target_properties(${module}
                           PROPERTIES
                           INSTALL_RPATH ${RPATH_ORIGIN}/../..)
   endif()
-  install(TARGETS ${module} DESTINATION ${CMAKE_INSTALL_LIBDIR}/darktable/plugins/lighttable COMPONENT DTApplication)
+  install(TARGETS ${module} DESTINATION ${CMAKE_INSTALL_LIBDIR}/libre-dt-lab/plugins/lighttable COMPONENT DTApplication)
 endforeach(module)

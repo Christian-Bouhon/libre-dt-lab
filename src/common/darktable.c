@@ -252,14 +252,14 @@ static int usage(const char *argv0)
          "    shared libraries for loading at runtime.\n"
          "    This option tells darktable where to look for its shared libraries.\n"
          "    The default location depends on your installation.\n"
-         "    Typical locations are /opt/darktable/lib64/darktable/\n"
-         "    and /usr/lib64/darktable/\n"
+         "    Typical locations are /opt/libre-dt-lab/lib64/libre-dt-lab/\n"
+         "    and /usr/lib64/libre-dt-lab/\n"
          "\n"
          "--noiseprofiles FILE\n"
          "    Provide a json file that contains camera-specific noise profiles.\n"
          "    The default location depends on your installation.\n"
-         "    Typical locations are /opt/darktable/share/darktable/noiseprofile.json\n"
-         "    and /usr/share/darktable/noiseprofile.json\n"
+         "    Typical locations are /opt/libre-dt-lab/share/libre-dt-lab/noiseprofile.json\n"
+         "    and /usr/share/libre-dt-lab/noiseprofile.json\n"
          "\n"
          "-t, --threads NUM\n"
          "    Limit number of openmp threads to use in openmp parallel sections\n"
@@ -360,16 +360,16 @@ static int usage(const char *argv0)
 // clang-format on
 gboolean dt_is_dev_version()
 {
-  // a dev version as an odd number after the first dot
-  char *p = (char *)darktable_package_string;
-  while(*p && (*p != '.')) p++;
-  if(p && (*p != '\0'))
-  {
-    p++;
-    const int val = *p - '0';
-    return val % 2 == 0 ? FALSE : TRUE;
-  }
-  return FALSE;
+  // A version built on top of a release tag (commits since the tag like
+  // "1.0.0+42~gabcdef", or a dirty tree) is a development version; a
+  // version sitting exactly on a tag (plain "X.Y.Z") is a release.
+  const char *p = darktable_package_version;
+  while(*p && *p != '.') p++;        // skip major
+  if(*p == '.') p++;
+  while(*p && *p != '.') p++;        // skip minor
+  if(*p == '.') p++;
+  while(*p >= '0' && *p <= '9') p++; // skip patch
+  return (*p != '\0');
 }
 
 char *dt_version_major_minor()
@@ -860,7 +860,7 @@ static char *_get_version_string(void)
 #endif
 
 char *version = g_strdup_printf(
-               "darktable %s [%s]\n"
+               "libre-dt-lab %s [%s]\n"
                "Copyright (C) 2012-%s Johannes Hanika and other contributors.\n\n"
                "Compile options:\n"
                "  Bit depth              -> %zu bit\n"
@@ -1571,7 +1571,7 @@ int dt_init(int argc,
 
   // desktop entry name required for mapping application icon to
   // window for KDE/Plasma on Wayland under GTK 3
-  g_set_prgname("org.darktable.darktable");
+  g_set_prgname("org.libredtlab.libredtlab");
 
   setlocale(LC_ALL, "");
   char localedir[PATH_MAX] = { 0 };
@@ -1774,10 +1774,10 @@ int dt_init(int argc,
         gchar *filename = dt_util_normalize_path(argv[i]);
         if(filename == NULL) continue;
         if(!connection) connection = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, NULL);
-        // ... and send it to the running instance of darktable
+        // ... and send it to the running instance of Libre DT-Lab
         image_loaded_elsewhere =
-          g_dbus_connection_call_sync(connection, "org.darktable.service", "/darktable",
-                                      "org.darktable.service.Remote", "Open",
+          g_dbus_connection_call_sync(connection, "org.libredtlab.service", "/org/libredtlab",
+                                      "org.libredtlab.service.Remote", "Open",
                                       g_variant_new("(s)", filename), NULL,
                                       G_DBUS_CALL_FLAGS_NONE, -1, NULL, NULL) != NULL;
         g_free(filename);
@@ -1814,7 +1814,7 @@ int dt_init(int argc,
   }
 
   // import default styles from shared directory
-  gchar *styledir = g_build_filename(sharedir, "darktable/styles", NULL);
+  gchar *styledir = g_build_filename(sharedir, "libre-dt-lab/styles", NULL);
   if(styledir)
   {
     dt_splash_screen_set_progress(_("importing default styles"));

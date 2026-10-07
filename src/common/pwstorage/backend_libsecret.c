@@ -44,7 +44,7 @@ static gchar *attributes_to_secret(GHashTable *attributes);
 static const SecretSchema *secret_darktable_get_schema(void)
 {
   static const SecretSchema darktable_schema = {
-    "org.darktable.Password",
+    "org.libredtlab.Password",
     SECRET_SCHEMA_NONE,
     {
       { "slot", SECRET_SCHEMA_ATTRIBUTE_STRING }, { "magic", SECRET_SCHEMA_ATTRIBUTE_STRING }, { "NULL", 0 },

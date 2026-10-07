@@ -27,14 +27,14 @@ shopt -s expand_aliases
 
 . "$(dirname "$0")/common.sh"
 
-if pgrep -x "darktable" > /dev/null ; then
-    echo "error: darktable is running, please exit first"
+if pgrep -x "libre-dt-lab" > /dev/null ; then
+    echo "error: Libre DT-Lab is running, please exit first"
     exit 1
 fi
 
 # default values
-configdir="$HOME/.config/darktable"
-cache_base="${HOME}/.cache/darktable"
+configdir="$HOME/.config/libre-dt-lab"
+cache_base="${HOME}/.cache/libre-dt-lab"
 library="$configdir/library.db"
 dryrun=1
 LIBDB=""

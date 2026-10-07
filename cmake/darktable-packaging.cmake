@@ -1,5 +1,12 @@
 set(CPACK_PACKAGE_NAME "${CMAKE_PROJECT_NAME}")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+# CPack derives the MAJOR/MINOR/PATCH components from project(), which we
+# no longer set to the real version, so parse them from PROJECT_VERSION.
+if(PROJECT_VERSION MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)")
+  set(CPACK_PACKAGE_VERSION_MAJOR "${CMAKE_MATCH_1}")
+  set(CPACK_PACKAGE_VERSION_MINOR "${CMAKE_MATCH_2}")
+  set(CPACK_PACKAGE_VERSION_PATCH "${CMAKE_MATCH_3}")
+endif()
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "The digital darkroom")
 set(CPACK_PACKAGE_CONTACT "https://www.darktable.org/")
 set(CPACK_PACKAGE_VENDOR "the darktable project")

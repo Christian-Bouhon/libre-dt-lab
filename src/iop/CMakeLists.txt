@@ -40,14 +40,14 @@ macro (add_iop _lib _src)
   target_link_libraries(${_lib} lib_darktable)
 
   if (WIN32)
-    _detach_debuginfo (${_lib} ${CMAKE_INSTALL_LIBDIR}/darktable/plugins)
+    _detach_debuginfo (${_lib} ${CMAKE_INSTALL_LIBDIR}/libre-dt-lab/plugins)
   else()
       set_target_properties(${_lib}
                             PROPERTIES
                             INSTALL_RPATH ${RPATH_ORIGIN}/..)
   endif(WIN32)
 
-  install(TARGETS ${_lib} DESTINATION ${CMAKE_INSTALL_LIBDIR}/darktable/plugins COMPONENT DTApplication)
+  install(TARGETS ${_lib} DESTINATION ${CMAKE_INSTALL_LIBDIR}/libre-dt-lab/plugins COMPONENT DTApplication)
 
   list(APPEND _iop_list ${_lib})
 

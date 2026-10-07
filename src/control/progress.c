@@ -67,7 +67,7 @@ static void _global_progress_start(dt_control_t *control, dt_progress_t *progres
 
 #ifdef HAVE_UNITY
 
-  progress->darktable_launcher = unity_launcher_entry_get_for_desktop_id("org.darktable.darktable.desktop");
+  progress->darktable_launcher = unity_launcher_entry_get_for_desktop_id("org.libredtlab.libredtlab.desktop");
   unity_launcher_entry_set_progress(progress->darktable_launcher, 0.0);
   unity_launcher_entry_set_progress_visible(progress->darktable_launcher, TRUE);
 
@@ -84,11 +84,11 @@ static void _global_progress_start(dt_control_t *control, dt_progress_t *progres
     g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
     g_variant_builder_add(&builder, "{sv}", "progress", g_variant_new_double(control->progress_system.global_progress));
     g_variant_builder_add(&builder, "{sv}", "progress-visible", g_variant_new_boolean(TRUE));
-    GVariant *params = g_variant_new("(sa{sv})", "application://org.darktable.darktable.desktop", &builder);
+    GVariant *params = g_variant_new("(sa{sv})", "application://org.libredtlab.libredtlab.desktop", &builder);
 
     g_dbus_connection_emit_signal(darktable.dbus->dbus_connection,
                                   "com.canonical.Unity",
-                                  "/darktable",
+                                  "/org/libredtlab",
                                   "com.canonical.Unity.LauncherEntry",
                                   "Update",
                                   params,
@@ -147,11 +147,11 @@ static void _global_progress_set(dt_control_t *control, dt_progress_t *progress,
     GVariantBuilder builder;
     g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
     g_variant_builder_add(&builder, "{sv}", "progress", g_variant_new_double(control->progress_system.global_progress));
-    GVariant *params = g_variant_new("(sa{sv})", "application://org.darktable.darktable.desktop", &builder);
+    GVariant *params = g_variant_new("(sa{sv})", "application://org.libredtlab.libredtlab.desktop", &builder);
 
     g_dbus_connection_emit_signal(darktable.dbus->dbus_connection,
                                   "com.canonical.Unity",
-                                  "/darktable",
+                                  "/org/libredtlab",
                                   "com.canonical.Unity.LauncherEntry",
                                   "Update",
                                   params,
@@ -209,11 +209,11 @@ static void _global_progress_end(dt_control_t *control, dt_progress_t *progress)
     if(control->progress_system.n_progress_bar == 0)
       g_variant_builder_add(&builder, "{sv}", "progress-visible", g_variant_new_boolean(FALSE));
     g_variant_builder_add(&builder, "{sv}", "progress", g_variant_new_double(control->progress_system.global_progress));
-    GVariant *params = g_variant_new("(sa{sv})", "application://org.darktable.darktable.desktop", &builder);
+    GVariant *params = g_variant_new("(sa{sv})", "application://org.libredtlab.libredtlab.desktop", &builder);
 
     g_dbus_connection_emit_signal(darktable.dbus->dbus_connection,
                                   "com.canonical.Unity",
-                                  "/darktable",
+                                  "/org/libredtlab",
                                   "com.canonical.Unity.LauncherEntry",
                                   "Update",
                                   params,
@@ -257,7 +257,7 @@ void dt_control_progress_init(void)
 
 #ifdef HAVE_UNITY
 
-  UnityLauncherEntry *darktable_launcher = unity_launcher_entry_get_for_desktop_id("org.darktable.darktable.desktop");
+  UnityLauncherEntry *darktable_launcher = unity_launcher_entry_get_for_desktop_id("org.libredtlab.libredtlab.desktop");
   unity_launcher_entry_set_progress_visible(darktable_launcher, FALSE);
 
 #else
@@ -269,11 +269,11 @@ void dt_control_progress_init(void)
     GVariantBuilder builder;
     g_variant_builder_init(&builder, G_VARIANT_TYPE("a{sv}"));
     g_variant_builder_add(&builder, "{sv}", "progress-visible", g_variant_new_boolean(FALSE));
-    GVariant *params = g_variant_new("(sa{sv})", "application://org.darktable.darktable.desktop", &builder);
+    GVariant *params = g_variant_new("(sa{sv})", "application://org.libredtlab.libredtlab.desktop", &builder);
 
     g_dbus_connection_emit_signal(darktable.dbus->dbus_connection,
                                   "com.canonical.Unity",
-                                  "/darktable",
+                                  "/org/libredtlab",
                                   "com.canonical.Unity.LauncherEntry",
                                   "Update",
                                   params,

@@ -349,7 +349,7 @@ jobs:
       - name: Get version info
         run: |
           cd ${SRC_DIR}
-          echo "VERSION=$(git describe --tags --match release-* | sed 's/^release-//;s/-/+/;s/-/~/;s/rc/~rc/')" >> $GITHUB_ENV
+          echo "VERSION=$(git describe --tags --match 'libre-*' | sed 's/^libre-//;s/-/+/;s/-/~/;s/rc/~rc/')" >> $GITHUB_ENV
           ([[ ${MSYSTEM_CARCH} == x86_64 ]] && echo "SYSTEM=win64" || echo "SYSTEM=woa64") >> $GITHUB_ENV
       - name: Package upload
         uses: actions/upload-artifact@v4

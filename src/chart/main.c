@@ -1734,7 +1734,7 @@ static void gui_command_line(GApplication *app, GApplicationCommandLine* cmdline
 static int main_gui(dt_lut_t *self, int argc, char *argv[])
 {
   GtkApplication* app
-    = gtk_application_new("org.darktable.Chart",
+    = gtk_application_new("org.libredtlab.Chart",
                           G_APPLICATION_HANDLES_COMMAND_LINE | G_APPLICATION_NON_UNIQUE);
 
   g_signal_connect(app, "command-line", G_CALLBACK(gui_command_line), self);

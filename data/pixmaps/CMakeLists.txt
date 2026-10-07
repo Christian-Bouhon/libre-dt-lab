@@ -6,21 +6,28 @@ set(THEME hicolor)
 foreach(pixmap_size ${FIXED_SIZES})
 	# install apps icons
 	FILE(GLOB PIXMAP_FILES ${CMAKE_CURRENT_SOURCE_DIR}/${pixmap_size}/*.png ${CMAKE_CURRENT_SOURCE_DIR}/${pixmap_size}/*.svg)
-	install(FILES ${PIXMAP_FILES} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/${THEME}/${pixmap_size}/apps COMPONENT DTApplication)
-	# Need to copy to have themes, icons, etc all in one path like after installing
-	FILE(MAKE_DIRECTORY ${DARKTABLE_DATADIR}/icons/${THEME}/${pixmap_size})
-	FILE(COPY ${PIXMAP_FILES} DESTINATION ${DARKTABLE_DATADIR}/icons/${THEME}/${pixmap_size}/apps)
+	# Do not install the legacy darktable icons under hicolor/.../apps: Libre DT-Lab
+	# uses the libre-dt-lab icon and those files would clash with the official
+	# darktable package. The darktable.svg in the pixmaps data dir is kept (used
+	# by the splash screen and the watermark default preset).
+	list(FILTER PIXMAP_FILES EXCLUDE REGEX "/darktable[^/]*\\.(png|svg)$")
+	if(PIXMAP_FILES)
+		install(FILES ${PIXMAP_FILES} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/${THEME}/${pixmap_size}/apps COMPONENT DTApplication)
+		# Need to copy to have themes, icons, etc all in one path like after installing
+		FILE(MAKE_DIRECTORY ${DARKTABLE_DATADIR}/icons/${THEME}/${pixmap_size})
+		FILE(COPY ${PIXMAP_FILES} DESTINATION ${DARKTABLE_DATADIR}/icons/${THEME}/${pixmap_size}/apps)
+	endif()
 endforeach(pixmap_size)
 
 #
 # Install plugin pixmaps
 #
 FILE(GLOB DARKROOM_PLUGIN_PIXMAPS "plugins/darkroom/*.png" "plugins/darkroom/*.svg")
-install(FILES ${DARKROOM_PLUGIN_PIXMAPS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable/pixmaps/plugins/darkroom COMPONENT DTApplication)
+install(FILES ${DARKROOM_PLUGIN_PIXMAPS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab/pixmaps/plugins/darkroom COMPONENT DTApplication)
 # Need to copy to have themes, icons, etc all in one path like after installing
 file(COPY ${DARKROOM_PLUGIN_PIXMAPS} DESTINATION ${DARKTABLE_DATADIR}/pixmaps/plugins/darkroom)
 
 FILE(GLOB OTHER_PIXMAPS "*.jpg" "*.png" "*.svg")
-install(FILES ${OTHER_PIXMAPS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable/pixmaps COMPONENT DTApplication)
+install(FILES ${OTHER_PIXMAPS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab/pixmaps COMPONENT DTApplication)
 # Need to copy to have themes, icons, etc all in one path like after installing
 file(COPY ${OTHER_PIXMAPS} DESTINATION ${DARKTABLE_DATADIR}/pixmaps)

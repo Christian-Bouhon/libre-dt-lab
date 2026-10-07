@@ -2827,7 +2827,7 @@ static void _import_extended_clicked(GtkButton *button, gpointer user_data)
     {
       const char *underscore = strchr(langcode,'_');
       const int lang_len = underscore ? underscore - langcode : strlen(langcode);
-      gchar *localized_file = g_strdup_printf("darktable/shortcutsrc.%.*s", lang_len, langcode);
+      gchar *localized_file = g_strdup_printf("libre-dt-lab/shortcutsrc.%.*s", lang_len, langcode);
       gchar *shortcuts_file = g_build_filename(sharedir, localized_file, NULL);
       if(g_file_test(shortcuts_file, G_FILE_TEST_EXISTS))
       {
@@ -2839,7 +2839,7 @@ static void _import_extended_clicked(GtkButton *button, gpointer user_data)
     }
     if(!loaded)
     {
-      gchar *shortcuts_file = g_build_filename(sharedir, "darktable/shortcutsrc", NULL);
+      gchar *shortcuts_file = g_build_filename(sharedir, "libre-dt-lab/shortcutsrc", NULL);
       dt_print(DT_DEBUG_PARAMS, "load default shortcuts from %s", shortcuts_file);
       dt_shortcuts_load(shortcuts_file, FALSE);
       g_free(shortcuts_file);

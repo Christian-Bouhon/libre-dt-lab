@@ -28,7 +28,7 @@
 
 /* Introspection data for the service we are exporting */
 static const gchar introspection_xml[] = "<node>"
-                                         "  <interface name='org.darktable.service.Remote'>"
+                                         "  <interface name='org.libredtlab.service.Remote'>"
                                          "    <method name='Quit' />"
                                          "    <method name='Open'>"
                                          "      <arg type='s' name='FileName' direction='in'/>"
@@ -66,7 +66,7 @@ static void dbus_lua_call_finished(lua_State* L,int result,void* data)
   else
   {
     const char *msg = luaL_checkstring(L, -1);
-    g_dbus_method_invocation_return_dbus_error(invocation, "org.darktable.Error.LuaError", msg);
+    g_dbus_method_invocation_return_dbus_error(invocation, "org.libredtlab.Error.LuaError", msg);
     dt_lua_check_print_error(L,result);
   }
 }
@@ -163,7 +163,7 @@ static void _on_bus_acquired(GDBusConnection *connection,
   dt_dbus_t *dbus = (dt_dbus_t *)user_data;
 
   dbus->registration_id
-      = g_dbus_connection_register_object(connection, "/darktable", dbus->introspection_data->interfaces[0],
+      = g_dbus_connection_register_object(connection, "/org/libredtlab", dbus->introspection_data->interfaces[0],
                                           &interface_vtable, dbus, /* user_data */
                                           NULL,                    /* user_data_free_func */
                                           NULL);                   /* GError** */
@@ -194,7 +194,7 @@ struct dt_dbus_t *dt_dbus_init()
   if(dbus->introspection_data == NULL) return dbus;
 
   dbus->owner_id = g_bus_own_name(G_BUS_TYPE_SESSION,
-                                  "org.darktable.service", // FIXME
+                                  "org.libredtlab.service",
                                   G_BUS_NAME_OWNER_FLAGS_NONE, _on_bus_acquired, _on_name_acquired,
                                   _on_name_lost, dbus, NULL);
 

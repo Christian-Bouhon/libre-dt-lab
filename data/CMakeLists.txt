@@ -7,29 +7,29 @@ endif(USE_OPENCL)
 
 FILE(GLOB THEME_FILES "themes/*.css")
 FILE(COPY ${THEME_FILES} DESTINATION "${DARKTABLE_DATADIR}/themes")
-install(FILES ${THEME_FILES} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable/themes COMPONENT DTApplication)
+install(FILES ${THEME_FILES} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab/themes COMPONENT DTApplication)
 
 #
 # web gallery export support files:
 #
 FILE(GLOB WEB_FILES "style/*")
-install(FILES ${WEB_FILES} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable/style COMPONENT DTApplication)
+install(FILES ${WEB_FILES} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab/style COMPONENT DTApplication)
 
-install(DIRECTORY "pswp" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable COMPONENT DTApplication)
+install(DIRECTORY "pswp" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab COMPONENT DTApplication)
 
 #
 # latex book template support files:
 #
 FILE(GLOB WEB_FILES "latex/*")
-install(FILES ${WEB_FILES} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable/latex COMPONENT DTApplication)
+install(FILES ${WEB_FILES} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab/latex COMPONENT DTApplication)
 
 if(USE_LUA)
 #
 # lua system scripts
 #
 FILE(COPY lua luarc DESTINATION "${DARKTABLE_DATADIR}")
-install(DIRECTORY "lua" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable COMPONENT DTApplication)
-install(FILES luarc DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable COMPONENT DTApplication)
+install(DIRECTORY "lua" DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab COMPONENT DTApplication)
+install(FILES luarc DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab COMPONENT DTApplication)
 endif(USE_LUA)
 
 #
@@ -69,26 +69,26 @@ if(NOT WIN32)
   if("fits" IN_LIST DT_SUPPORTED_EXTENSIONS)
     list(APPEND DESKTOP_MIME_TYPES image/fits)
   endif()
-  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/org.libre-dt-lab.libre-dt-lab.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop.in)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/org.libredtlab.libredtlab.desktop.in ${CMAKE_CURRENT_BINARY_DIR}/org.libredtlab.libredtlab.desktop.in)
   file(GLOB PO_FILES "${CMAKE_CURRENT_SOURCE_DIR}/../po/*.po")
   add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop
-    COMMAND sh -c "${intltool_merge_BIN} --desktop-style \"${CMAKE_CURRENT_SOURCE_DIR}/../po\" \"${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop.in\" \"${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop\""
-    MAIN_DEPENDENCY ${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop.in
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/org.libredtlab.libredtlab.desktop
+    COMMAND sh -c "${intltool_merge_BIN} --desktop-style \"${CMAKE_CURRENT_SOURCE_DIR}/../po\" \"${CMAKE_CURRENT_BINARY_DIR}/org.libredtlab.libredtlab.desktop.in\" \"${CMAKE_CURRENT_BINARY_DIR}/org.libredtlab.libredtlab.desktop\""
+    MAIN_DEPENDENCY ${CMAKE_CURRENT_BINARY_DIR}/org.libredtlab.libredtlab.desktop.in
     DEPENDS ${PO_FILES}
     )
-  add_custom_target(libre-dt-lab.desktop_file ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop)
+  add_custom_target(libre-dt-lab.desktop_file ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/org.libredtlab.libredtlab.desktop)
   if(${VALIDATE_DESKTOP_FILE})
     add_custom_target(
       validate_libre-dt-lab_desktop ALL
-      COMMAND ${desktop_file_validate_BIN} --warn-kde ${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop
-      DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop
+      COMMAND ${desktop_file_validate_BIN} --warn-kde ${CMAKE_CURRENT_BINARY_DIR}/org.libredtlab.libredtlab.desktop
+      DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/org.libredtlab.libredtlab.desktop
       WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/
-      COMMENT "Checking validity of org.libre-dt-lab.libre-dt-lab.desktop"
+      COMMENT "Checking validity of org.libredtlab.libredtlab.desktop"
       )
     add_dependencies(libre-dt-lab.desktop_file validate_libre-dt-lab_desktop)
   endif()
-  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/org.libre-dt-lab.libre-dt-lab.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications COMPONENT DTApplication)
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/org.libredtlab.libredtlab.desktop DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications COMPONENT DTApplication)
 
   if(${VALIDATE_APPDATA_FILE})
     add_custom_command(
@@ -120,20 +120,20 @@ endif(NOT WIN32)
 #
 FILE(GLOB WATERMARKS "watermarks/*.svg")
 FILE(COPY ${WATERMARKS} DESTINATION "${DARKTABLE_DATADIR}/watermarks")
-install(FILES ${WATERMARKS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable/watermarks COMPONENT DTApplication)
+install(FILES ${WATERMARKS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab/watermarks COMPONENT DTApplication)
 
 #
 # Install gdb command file for backtrace generation
 #
 FILE(COPY gdb_commands DESTINATION "${DARKTABLE_DATADIR}")
-install(FILES gdb_commands DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable COMPONENT DTApplication)
+install(FILES gdb_commands DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab COMPONENT DTApplication)
 
 #
 # Install shortcutsrc with extra key+mouse combinations, and any localized versions of it
 #
 FILE(GLOB LOCALIZED_SHORTCUTS "shortcutsrc.*")
 FILE(COPY shortcutsrc ${LOCALIZED_SHORTCUTS} DESTINATION "${DARKTABLE_DATADIR}")
-install(FILES shortcutsrc ${LOCALIZED_SHORTCUTS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable COMPONENT DTApplication)
+install(FILES shortcutsrc ${LOCALIZED_SHORTCUTS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab COMPONENT DTApplication)
 
 #
 # Install noiseprofiles
@@ -148,7 +148,7 @@ if(${VALIDATE_JSON})
   )
 endif()
 FILE(COPY noiseprofiles.json DESTINATION "${DARKTABLE_DATADIR}")
-install(FILES noiseprofiles.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable COMPONENT DTApplication)
+install(FILES noiseprofiles.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab COMPONENT DTApplication)
 
 #
 # Install wb presets
@@ -163,16 +163,16 @@ if(${VALIDATE_JSON})
   )
 endif()
 FILE(COPY wb_presets.json DESTINATION "${DARKTABLE_DATADIR}")
-install(FILES wb_presets.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable COMPONENT DTApplication)
+install(FILES wb_presets.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab COMPONENT DTApplication)
 
 if(USE_AI)
   #
   # Install AI models registry
   #
   FILE(COPY ai_models.json DESTINATION "${DARKTABLE_DATADIR}")
-  install(FILES ai_models.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable COMPONENT DTApplication)
+  install(FILES ai_models.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab COMPONENT DTApplication)
   FILE(COPY ort_gpu.json DESTINATION "${DARKTABLE_DATADIR}")
-  install(FILES ort_gpu.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable COMPONENT DTApplication)
+  install(FILES ort_gpu.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab COMPONENT DTApplication)
 endif(USE_AI)
 
 #
@@ -253,12 +253,22 @@ endif(USE_XMLLINT)
 
 # first of all install darktablerc file into share as template
 # postinst script should copy this into users homedirectory
-# $HOME/.config/darktable/darktable.rc
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/darktablerc DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable COMPONENT DTApplication)
+# $HOME/.config/libre-dt-lab/darktablerc
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/darktablerc DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab COMPONENT DTApplication)
 
 #
-# Install bash completion file. users/packagers can symlink that to /etc/bash_completion.d/
+# Install bash completion into the standard bash-completion directory.
+# The same script is installed once per binary so completion works out of the box.
 #
 if ((NOT WIN32) OR BUILD_MSYS2_INSTALL)
-  install(FILES darktable.bash DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable COMPONENT DTApplication)
+  set(BASH_COMPLETION_DIR "${CMAKE_INSTALL_DATAROOTDIR}/bash-completion/completions")
+  install(FILES libre-dt-lab.bash DESTINATION ${BASH_COMPLETION_DIR} RENAME libre-dt-lab COMPONENT DTApplication)
+  foreach(_dt_bin
+          libre-dt-lab-chart
+          libre-dt-lab-cli
+          libre-dt-lab-cltest
+          libre-dt-lab-cmstest
+          libre-dt-lab-generate-cache)
+    install(FILES libre-dt-lab.bash DESTINATION ${BASH_COMPLETION_DIR} RENAME ${_dt_bin} COMPONENT DTApplication)
+  endforeach()
 endif()

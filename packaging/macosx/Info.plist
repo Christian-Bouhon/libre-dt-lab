@@ -9,7 +9,7 @@
 	<key>CFBundleIconFile</key>
 	<string>Icons.icns</string>
 	<key>CFBundleIdentifier</key>
-	<string>org.libre-dt-lab</string>
+	<string>org.libredtlab.libredtlab</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>

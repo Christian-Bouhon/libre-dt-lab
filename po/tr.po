@@ -2374,73 +2374,73 @@ msgstr "ham hıza katkıda bulunanlar"
 msgid "integration contributors"
 msgstr "bütünleşmeye katkıda bulunanlar"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:130
-#: ../build/lib/darktable/plugins/introspection_ashift.c:279
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:130
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:279
 msgid "lens shift (vertical)"
 msgstr "mercek kaydırma (dikey)"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:136
-#: ../build/lib/darktable/plugins/introspection_ashift.c:283
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:136
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:283
 msgid "lens shift (horizontal)"
 msgstr "mercek kaydırma (yatay)"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:142
-#: ../build/lib/darktable/plugins/introspection_ashift.c:287
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:142
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:287
 msgid "shear"
 msgstr "kırpma"
 
 #. focal length
-#: ../build/lib/darktable/plugins/introspection_ashift.c:148
-#: ../build/lib/darktable/plugins/introspection_ashift.c:291
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:148
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:291
 #: ../src/common/collection.c:627 ../src/gui/preferences.c:842
 #: ../src/gui/presets.c:732 ../src/libs/camera.c:550
 #: ../src/libs/metadata_view.c:145
 msgid "focal length"
 msgstr "odak uzaklığı"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:154
-#: ../build/lib/darktable/plugins/introspection_ashift.c:295
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:154
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:295
 #: ../src/libs/metadata_view.c:147
 msgid "crop factor"
 msgstr "kırpma etkeni"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:160
-#: ../build/lib/darktable/plugins/introspection_ashift.c:299
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:160
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:299
 msgid "lens dependence"
 msgstr "mercek bağımlılığı"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:166
-#: ../build/lib/darktable/plugins/introspection_ashift.c:303
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:166
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:303
 msgid "aspect adjust"
 msgstr "en boy ayarı"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:172
-#: ../build/lib/darktable/plugins/introspection_ashift.c:307
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:172
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:307
 #: ../src/iop/lens.cc:4582
 msgid "lens model"
 msgstr "mercek modeli"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:178
-#: ../build/lib/darktable/plugins/introspection_ashift.c:311
-#: ../build/lib/darktable/plugins/introspection_clipping.c:244
-#: ../build/lib/darktable/plugins/introspection_clipping.c:371
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:178
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:311
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:244
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:371
 msgid "automatic cropping"
 msgstr "otomatik kırpma"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:361
-#: ../build/lib/darktable/plugins/introspection_highlights.c:311
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:361
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:311
 msgid "generic"
 msgstr "genel"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:362
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:362
 msgid "specific"
 msgstr "özel"
 
 #. DEVELOP_MASK_DISABLED
-#: ../build/lib/darktable/plugins/introspection_ashift.c:366
-#: ../build/lib/darktable/plugins/introspection_colorin.c:303
-#: ../build/lib/darktable/plugins/introspection_highlights.c:310
-#: ../build/lib/darktable/plugins/introspection_vignette.c:264
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:366
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorin.c:303
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:310
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:264
 #: ../src/develop/blend_gui.c:153 ../src/develop/blend_gui.c:182
 #: ../src/develop/blend_gui.c:3466 ../src/gui/accelerators.c:148
 #: ../src/gui/accelerators.c:158 ../src/gui/accelerators.c:245
@@ -2449,50 +2449,50 @@ msgstr "özel"
 msgid "off"
 msgstr "kapalı"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:367
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:367
 msgid "largest area"
 msgstr "en büyük alan"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:368
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:368
 msgid "original format"
 msgstr "orijinal görüntü formatı"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:134
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:231
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:134
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:231
 msgid "fusion"
 msgstr "füzyon"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:140
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:235
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:140
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:235
 msgid "exposure shift"
 msgstr "maruz kalma kayması"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:146
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:239
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:146
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:239
 #: ../src/libs/metadata_view.c:144
 msgid "exposure bias"
 msgstr "maruz kalma yanlılığı"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:152
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:243
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:122
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:215
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:140
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:227
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:57
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:122
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:153
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:244
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:152
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:243
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:122
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:215
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:140
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:227
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:57
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:122
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:153
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:244
 msgid "preserve colors"
 msgstr "renkleri koru"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:262
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:249
-#: ../build/lib/darktable/plugins/introspection_colorreconstruction.c:153
-#: ../build/lib/darktable/plugins/introspection_lens.cc:533
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:251
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:153
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:270
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:262
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:249
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorreconstruction.c:153
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:533
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:251
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:153
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:270
 #: ../src/gui/guides.c:712 ../src/iop/basecurve.c:2215
 #: ../src/iop/channelmixerrgb.c:4738 ../src/iop/clipping.c:1950
 #: ../src/iop/clipping.c:2143 ../src/iop/clipping.c:2158
@@ -2503,341 +2503,341 @@ msgstr "renkleri koru"
 msgid "none"
 msgstr "yok"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:263
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:250
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:226
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:244
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:262
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:280
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:461
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:473
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:485
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:497
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:252
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:154
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:271
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:263
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:250
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:226
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:244
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:262
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:280
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:461
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:473
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:485
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:497
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:252
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:154
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:271
 #: ../src/develop/blend_gui.c:2416 ../src/develop/blend_gui.c:2450
 msgid "luminance"
 msgstr "parlaklık"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:264
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:251
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:550
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:253
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:155
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:272
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:264
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:251
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:550
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:253
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:155
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:272
 msgid "max RGB"
 msgstr "azm RGB"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:265
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:252
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:254
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:156
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:273
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:265
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:252
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:254
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:156
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:273
 msgid "average RGB"
 msgstr "ortalama RGB"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:266
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:253
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:255
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:157
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:274
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:266
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:253
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:255
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:157
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:274
 msgid "sum RGB"
 msgstr "toplam RGB"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:267
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:254
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:256
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:158
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:275
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:267
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:254
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:256
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:158
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:275
 msgid "norm RGB"
 msgstr "norm RGB"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:268
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:255
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:257
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:159
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:276
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:268
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:255
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:257
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:159
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:276
 msgid "basic power"
 msgstr "temel güç"
 
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:92
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:195
-#: ../build/lib/darktable/plugins/introspection_exposure.c:67
-#: ../build/lib/darktable/plugins/introspection_exposure.c:138
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:92
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:195
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:67
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:138
 msgid "black level correction"
 msgstr "siyah seviye düzeltme"
 
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:104
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:203
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:104
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:203
 msgid "highlight compression"
 msgstr "vurgu sıkıştırma"
 
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:128
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:219
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:128
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:219
 msgid "middle gray"
 msgstr "orta gri"
 
-#: ../build/lib/darktable/plugins/introspection_bilat.c:78
-#: ../build/lib/darktable/plugins/introspection_bilat.c:137
+#: ../build/lib/libre-dt-lab/plugins/introspection_bilat.c:78
+#: ../build/lib/libre-dt-lab/plugins/introspection_bilat.c:137
 msgid "midtone range"
 msgstr "orta ton aralığı"
 
-#: ../build/lib/darktable/plugins/introspection_bilat.c:151
+#: ../build/lib/libre-dt-lab/plugins/introspection_bilat.c:151
 msgid "bilateral grid"
 msgstr "ikili ızgara"
 
-#: ../build/lib/darktable/plugins/introspection_bilat.c:152
+#: ../build/lib/libre-dt-lab/plugins/introspection_bilat.c:152
 msgid "local laplacian filter"
 msgstr "yerel laplasiyen filtresi"
 
-#: ../build/lib/darktable/plugins/introspection_blurs.c:83
-#: ../build/lib/darktable/plugins/introspection_blurs.c:174
-#: ../build/lib/darktable/plugins/introspection_retouch.c:255
-#: ../build/lib/darktable/plugins/introspection_retouch.c:406
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:83
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:174
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:255
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:406
 msgid "blur type"
 msgstr "bulanıklık türü"
 
-#: ../build/lib/darktable/plugins/introspection_blurs.c:89
-#: ../build/lib/darktable/plugins/introspection_blurs.c:178
-#: ../build/lib/darktable/plugins/introspection_retouch.c:261
-#: ../build/lib/darktable/plugins/introspection_retouch.c:410
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:89
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:178
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:261
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:410
 msgid "blur radius"
 msgstr "bulanıklık yarıçapı"
 
-#: ../build/lib/darktable/plugins/introspection_blurs.c:95
-#: ../build/lib/darktable/plugins/introspection_blurs.c:182
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:95
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:182
 msgid "diaphragm blades"
 msgstr "diyafram kanatları"
 
-#: ../build/lib/darktable/plugins/introspection_blurs.c:101
-#: ../build/lib/darktable/plugins/introspection_blurs.c:186
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:101
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:186
 msgid "concavity"
 msgstr "içbükeylik"
 
-#: ../build/lib/darktable/plugins/introspection_blurs.c:107
-#: ../build/lib/darktable/plugins/introspection_blurs.c:190
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:107
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:190
 msgid "linearity"
 msgstr "doğrusallık"
 
-#: ../build/lib/darktable/plugins/introspection_blurs.c:113
-#: ../build/lib/darktable/plugins/introspection_blurs.c:194
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:75
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:144
-#: ../build/lib/darktable/plugins/introspection_overlay.c:143
-#: ../build/lib/darktable/plugins/introspection_overlay.c:260
-#: ../build/lib/darktable/plugins/introspection_watermark.c:136
-#: ../build/lib/darktable/plugins/introspection_watermark.c:265
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:113
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:194
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:75
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:144
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:143
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:260
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:136
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:265
 #: ../src/iop/ashift.c:6038 ../src/libs/masks.c:109
 msgid "rotation"
 msgstr "yön"
 
-#: ../build/lib/darktable/plugins/introspection_blurs.c:119
-#: ../build/lib/darktable/plugins/introspection_blurs.c:198
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:119
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:198
 msgid "direction"
 msgstr "yön"
 
-#: ../build/lib/darktable/plugins/introspection_blurs.c:125
-#: ../build/lib/darktable/plugins/introspection_blurs.c:202
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:125
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:202
 #: ../src/libs/masks.c:110
 msgid "curvature"
 msgstr "eğrilik"
 
-#: ../build/lib/darktable/plugins/introspection_blurs.c:131
-#: ../build/lib/darktable/plugins/introspection_blurs.c:206
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:81
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:148
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:131
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:206
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:81
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:148
 #: ../src/iop/colorbalancergb.c:2039
 msgid "offset"
 msgstr "ofset"
 
-#: ../build/lib/darktable/plugins/introspection_blurs.c:220
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:220
 #: ../src/common/collection.c:625 ../src/gui/preferences.c:826
 #: ../src/gui/presets.c:674 ../src/libs/metadata_view.c:141
 msgid "lens"
 msgstr "mercek"
 
-#: ../build/lib/darktable/plugins/introspection_blurs.c:221
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:221
 msgid "motion"
 msgstr "hareket"
 
-#: ../build/lib/darktable/plugins/introspection_blurs.c:222
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:567
-#: ../build/lib/darktable/plugins/introspection_lowpass.c:189
-#: ../build/lib/darktable/plugins/introspection_retouch.c:452
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:267
+#: ../build/lib/libre-dt-lab/plugins/introspection_blurs.c:222
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:567
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowpass.c:189
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:452
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:267
 msgid "gaussian"
 msgstr "gaussian"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:122
-#: ../build/lib/darktable/plugins/introspection_borders.c:269
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:122
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:269
 #: ../src/common/collection.c:635 ../src/libs/filtering.c:59
 msgid "aspect ratio"
 msgstr "en boy oranı"
 
 #. // portrait / landscape
-#: ../build/lib/darktable/plugins/introspection_borders.c:140
-#: ../build/lib/darktable/plugins/introspection_borders.c:281
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:140
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:281
 #: ../src/iop/flip.c:75 ../src/libs/print_settings.c:2517
 msgid "orientation"
 msgstr "yönlendirme"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:146
-#: ../build/lib/darktable/plugins/introspection_borders.c:285
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:146
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:285
 msgid "border size"
 msgstr "kenarlık boyutu"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:152
-#: ../build/lib/darktable/plugins/introspection_borders.c:289
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:152
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:289
 msgid "horizontal offset"
 msgstr "yatay ofset"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:170
-#: ../build/lib/darktable/plugins/introspection_borders.c:301
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:170
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:301
 msgid "vertical offset"
 msgstr "dikey ofset"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:188
-#: ../build/lib/darktable/plugins/introspection_borders.c:313
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:188
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:313
 msgid "frame line size"
 msgstr "çerçeve çizgi boyutu"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:194
-#: ../build/lib/darktable/plugins/introspection_borders.c:317
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:194
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:317
 msgid "frame line offset"
 msgstr "çerçeve çizgisi ofseti"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:218
-#: ../build/lib/darktable/plugins/introspection_borders.c:333
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:218
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:333
 msgid "basis"
 msgstr "temel"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:347
-#: ../build/lib/darktable/plugins/introspection_borders.c:353
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:347
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:353
 #: ../src/gui/preferences.c:847 ../src/imageio/format/jpeg.c:604
 #: ../src/iop/ashift.c:6217 ../src/iop/basicadj.c:662 ../src/iop/flip.c:467
 #: ../src/iop/flip.c:469 ../src/iop/levels.c:657 ../src/iop/rgblevels.c:1105
 msgid "auto"
 msgstr "otomatik"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:348
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:348
 #: ../src/imageio/format/pdf.c:604 ../src/libs/filtering.c:315
 #: ../src/libs/filters/ratio.c:120 ../src/libs/print_settings.c:2519
 msgid "portrait"
 msgstr "dikey"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:349
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:349
 #: ../src/imageio/format/pdf.c:604 ../src/libs/filtering.c:311
 #: ../src/libs/filters/ratio.c:122 ../src/libs/print_settings.c:2519
 msgid "landscape"
 msgstr "yatay"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:354
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:354
 #: ../src/iop/relight.c:275 ../src/libs/export.c:1223
 #: ../src/libs/metadata_view.c:151 ../src/libs/print_settings.c:2537
 msgid "width"
 msgstr "genişlik"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:355
-#: ../build/lib/darktable/plugins/introspection_overlay.c:313
-#: ../build/lib/darktable/plugins/introspection_watermark.c:326
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:355
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:313
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:326
 #: ../src/libs/export.c:1229 ../src/libs/metadata_view.c:152
 #: ../src/libs/print_settings.c:2541
 msgid "height"
 msgstr "yükseklik"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:356
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:356
 msgid "shorter"
 msgstr "daha kısa"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:357
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:357
 msgid "longer"
 msgstr "daha uzun"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrect.c:42
-#: ../build/lib/darktable/plugins/introspection_cacorrect.c:91
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrect.c:42
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrect.c:91
 msgid "avoid colorshift"
 msgstr "renk kaymasından kaçının"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrect.c:48
-#: ../build/lib/darktable/plugins/introspection_cacorrect.c:95
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:117
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:244
-#: ../build/lib/darktable/plugins/introspection_highlights.c:155
-#: ../build/lib/darktable/plugins/introspection_highlights.c:252
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrect.c:48
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrect.c:95
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:117
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:244
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:155
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:252
 msgid "iterations"
 msgstr "yinelemeler"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrect.c:109
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:205
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrect.c:109
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:205
 msgid "once"
 msgstr "bir kere"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrect.c:110
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:206
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrect.c:110
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:206
 msgid "twice"
 msgstr "iki defa"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrect.c:111
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:207
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrect.c:111
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:207
 msgid "three times"
 msgstr "üç kere"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrect.c:112
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:208
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrect.c:112
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:208
 msgid "four times"
 msgstr "dört kere"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrect.c:113
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:209
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrect.c:113
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:209
 msgid "five times"
 msgstr "beş kere"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrectrgb.c:61
-#: ../build/lib/darktable/plugins/introspection_cacorrectrgb.c:128
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrectrgb.c:61
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrectrgb.c:128
 msgid "guide"
 msgstr "kılavuz"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrectrgb.c:67
-#: ../build/lib/darktable/plugins/introspection_cacorrectrgb.c:132
-#: ../build/lib/darktable/plugins/introspection_lens.cc:340
-#: ../build/lib/darktable/plugins/introspection_lens.cc:501
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrectrgb.c:67
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrectrgb.c:132
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:340
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:501
 #: ../src/iop/atrous.c:1636 ../src/iop/bilateral.cc:352 ../src/iop/clahe.c:337
 #: ../src/iop/dither.c:762 ../src/iop/lowpass.c:598 ../src/iop/shadhi.c:711
 #: ../src/iop/sharpen.c:435
 msgid "radius"
 msgstr "yarıçap"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrectrgb.c:73
-#: ../build/lib/darktable/plugins/introspection_cacorrectrgb.c:136
-#: ../build/lib/darktable/plugins/introspection_highlights.c:137
-#: ../build/lib/darktable/plugins/introspection_highlights.c:240
-#: ../build/lib/darktable/plugins/introspection_lens.cc:334
-#: ../build/lib/darktable/plugins/introspection_lens.cc:497
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrectrgb.c:73
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrectrgb.c:136
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:137
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:240
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:334
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:497
 #: ../src/iop/bloom.c:372 ../src/iop/denoiseprofile.c:3822
 #: ../src/iop/grain.c:544 ../src/iop/hazeremoval.c:203
 #: ../src/iop/hotpixels.c:467 ../src/iop/nlmeans.c:463 ../src/iop/velvia.c:288
 msgid "strength"
 msgstr "sertlik"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrectrgb.c:79
-#: ../build/lib/darktable/plugins/introspection_cacorrectrgb.c:140
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrectrgb.c:79
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrectrgb.c:140
 msgid "correction mode"
 msgstr "düzeltme modu"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrectrgb.c:85
-#: ../build/lib/darktable/plugins/introspection_cacorrectrgb.c:144
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrectrgb.c:85
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrectrgb.c:144
 msgid "very large chromatic aberration"
 msgstr "çok büyük renk sapması"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrectrgb.c:158
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:254
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:302
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:350
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:463
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:495
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:527
-#: ../build/lib/darktable/plugins/introspection_enlargecanvas.c:159
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrectrgb.c:158
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:254
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:302
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:350
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:463
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:495
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:527
+#: ../build/lib/libre-dt-lab/plugins/introspection_enlargecanvas.c:159
 #: ../src/common/collection.c:1374 ../src/common/color_vocabulary.c:232
 #: ../src/common/colorlabels.c:333 ../src/develop/blend_gui.c:2383
 #: ../src/develop/blend_gui.c:2431 ../src/develop/lightroom.c:887
@@ -2850,14 +2850,14 @@ msgstr "çok büyük renk sapması"
 msgid "red"
 msgstr "kırmızı"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrectrgb.c:159
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:272
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:320
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:368
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:475
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:507
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:539
-#: ../build/lib/darktable/plugins/introspection_enlargecanvas.c:158
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrectrgb.c:159
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:272
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:320
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:368
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:475
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:507
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:539
+#: ../build/lib/libre-dt-lab/plugins/introspection_enlargecanvas.c:158
 #: ../src/common/collection.c:1378 ../src/common/color_vocabulary.c:277
 #: ../src/common/colorlabels.c:335 ../src/develop/blend_gui.c:2389
 #: ../src/develop/blend_gui.c:2437 ../src/develop/lightroom.c:891
@@ -2871,14 +2871,14 @@ msgstr "kırmızı"
 msgid "green"
 msgstr "yeşil"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrectrgb.c:160
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:284
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:332
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:380
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:483
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:515
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:547
-#: ../build/lib/darktable/plugins/introspection_enlargecanvas.c:160
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrectrgb.c:160
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:284
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:332
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:380
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:483
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:515
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:547
+#: ../build/lib/libre-dt-lab/plugins/introspection_enlargecanvas.c:160
 #: ../src/common/collection.c:1380 ../src/common/color_vocabulary.c:324
 #: ../src/common/colorlabels.c:336 ../src/develop/blend_gui.c:2395
 #: ../src/develop/blend_gui.c:2443 ../src/develop/lightroom.c:893
@@ -2891,309 +2891,309 @@ msgstr "yeşil"
 msgid "blue"
 msgstr "mavi"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrectrgb.c:164
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrectrgb.c:164
 msgid "standard"
 msgstr "standart"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrectrgb.c:165
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrectrgb.c:165
 msgid "darken only"
 msgstr "sadece karartma"
 
-#: ../build/lib/darktable/plugins/introspection_cacorrectrgb.c:166
+#: ../build/lib/libre-dt-lab/plugins/introspection_cacorrectrgb.c:166
 msgid "brighten only"
 msgstr "sadece aydınlatma"
 
-#: ../build/lib/darktable/plugins/introspection_censorize.c:51
-#: ../build/lib/darktable/plugins/introspection_censorize.c:112
+#: ../build/lib/libre-dt-lab/plugins/introspection_censorize.c:51
+#: ../build/lib/libre-dt-lab/plugins/introspection_censorize.c:112
 msgid "input blur radius"
 msgstr "giriş bulanıklığı yarıçapı"
 
-#: ../build/lib/darktable/plugins/introspection_censorize.c:57
-#: ../build/lib/darktable/plugins/introspection_censorize.c:116
+#: ../build/lib/libre-dt-lab/plugins/introspection_censorize.c:57
+#: ../build/lib/libre-dt-lab/plugins/introspection_censorize.c:116
 msgid "pixellation radius"
 msgstr "pikselleşme yarıçapı"
 
-#: ../build/lib/darktable/plugins/introspection_censorize.c:63
-#: ../build/lib/darktable/plugins/introspection_censorize.c:120
+#: ../build/lib/libre-dt-lab/plugins/introspection_censorize.c:63
+#: ../build/lib/libre-dt-lab/plugins/introspection_censorize.c:120
 msgid "output blur radius"
 msgstr "çıktı bulanıklığı yarıçapı"
 
-#: ../build/lib/darktable/plugins/introspection_censorize.c:69
-#: ../build/lib/darktable/plugins/introspection_censorize.c:124
-#: ../build/lib/darktable/plugins/introspection_highlights.c:149
-#: ../build/lib/darktable/plugins/introspection_highlights.c:248
+#: ../build/lib/libre-dt-lab/plugins/introspection_censorize.c:69
+#: ../build/lib/libre-dt-lab/plugins/introspection_censorize.c:124
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:149
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:248
 msgid "noise level"
 msgstr "gürültü seviyesi"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:252
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:258
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:264
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:270
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:276
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:282
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:433
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:437
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:441
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:445
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:449
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:453
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:252
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:258
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:264
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:270
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:276
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:282
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:433
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:437
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:441
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:445
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:449
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:453
 msgid "normalize channels"
 msgstr "kanalları normalleştir"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:294
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:461
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:294
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:461
 msgid "F source"
 msgstr "F kaynağı"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:300
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:465
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:300
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:465
 msgid "LED source"
 msgstr "LED kaynağı"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:330
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:485
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:330
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:485
 msgid "gamut compression"
 msgstr "gamut sıkıştırma"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:336
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:489
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:336
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:489
 msgid "clip negative RGB from gamut"
 msgstr "gamut dan negatif RGB'yi kırp"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:342
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:493
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:342
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:493
 msgid "saturation algorithm"
 msgstr "doygunluk algoritması"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:507
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:507
 msgid "same as pipeline (D50)"
 msgstr "boru hattı ile aynı (D50)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:508
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:508
 msgid "A (incandescent)"
 msgstr "A (akkor)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:509
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:509
 msgid "D (daylight)"
 msgstr "D (gün ışığı)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:510
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:510
 msgid "E (equi-energy)"
 msgstr "E (eş enerji)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:511
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:511
 msgid "F (fluorescent)"
 msgstr "F (floresan)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:512
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:512
 msgid "LED (LED light)"
 msgstr "LED (LED ışığı)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:513
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:513
 msgid "Planckian (black body)"
 msgstr "Planckian (siyah cisim)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:514
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:514
 #: ../src/common/iop_order.c:59
 msgid "custom"
 msgstr "özel"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:515
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:515
 msgid "(AI) detect from image surfaces..."
 msgstr "(AI) görüntü yüzeylerinden algılar..."
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:516
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:516
 msgid "(AI) detect from image edges..."
 msgstr "(AI) görüntü kenarlarından algıla..."
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:517
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:517
 msgid "as shot in camera"
 msgstr "kamerada çekildiği gibi"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:522
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:522
 msgid "F1 (Daylight 6430 K) – medium CRI"
 msgstr "F1 (Gün Işığı 6430 K) – orta CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:523
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:523
 msgid "F2 (Cool White 4230 K) – medium CRI"
 msgstr "F2 (Soğuk Beyaz 4230 K) – orta CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:524
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:524
 msgid "F3 (White 3450 K) – medium CRI"
 msgstr "F3 (Beyaz 3450 K) – orta CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:525
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:525
 msgid "F4 (Warm White 2940 K) – medium CRI"
 msgstr "F4 (Sıcak Beyaz 2940 K) – orta CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:526
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:526
 msgid "F5 (Daylight 6350 K) – medium CRI"
 msgstr "F5 (Gün Işığı 6350 K) – orta CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:527
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:527
 msgid "F6 (Lite White 4150 K) – medium CRI"
 msgstr "F6 (Hafif Beyaz 4150 K) – orta CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:528
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:528
 msgid "F7 (D65 simulator 6500 K) – high CRI"
 msgstr "F7 (D65 simülatörü 6500 K) – yüksek CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:529
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:529
 msgid "F8 (D50 simulator 5000 K) – high CRI"
 msgstr "F8 (D50 simülatör 5000 K) – yüksek CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:530
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:530
 msgid "F9 (Cool White Deluxe 4150 K) – high CRI"
 msgstr "F9 (Soğuk Beyaz Deluxe 4150 K) – yüksek CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:531
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:531
 msgid "F10 (Tuned RGB 5000 K) – low CRI"
 msgstr "F10 (Ayarlanmış RGB 5000 K) – düşük CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:532
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:532
 msgid "F11 (Tuned RGB 4000 K) – low CRI"
 msgstr "F11 (Ayarlanmış RGB 4000 K) – düşük CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:533
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:533
 msgid "F12 (Tuned RGB 3000 K) – low CRI"
 msgstr "F12 (Ayarlanmış RGB 3000 K) – düşük CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:538
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:538
 msgid "B1 (Blue 2733 K)"
 msgstr "B1 (Mavi 2733 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:539
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:539
 msgid "B2 (Blue 2998 K)"
 msgstr "B2 (Mavi 2998 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:540
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:540
 msgid "B3 (Blue 4103 K)"
 msgstr "B3 (Mavi 4103 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:541
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:541
 msgid "B4 (Blue 5109 K)"
 msgstr "B4 (Mavi 5109 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:542
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:542
 msgid "B5 (Blue 6598 K)"
 msgstr "B5 (Mavi 6598 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:543
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:543
 msgid "BH1 (Blue-Red hybrid 2851 K)"
 msgstr "BH1 (Mavi-Kırmızı hibrit 2851 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:544
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:544
 msgid "RGB1 (RGB 2840 K)"
 msgstr "RGB1 (RGB 2840 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:545
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:545
 msgid "V1 (Violet 2724 K)"
 msgstr "V1 (Menekşe 2724 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:546
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:546
 msgid "V2 (Violet 4070 K)"
 msgstr "V2 (Menekşe 4070 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:551
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:551
 msgid "linear Bradford (ICC v4)"
 msgstr "doğrusal Bradford (ICC v4)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:552
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:552
 msgid "CAT16 (CIECAM16)"
 msgstr "CAT16 (CIECAM16)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:553
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:553
 msgid "non-linear Bradford"
 msgstr "doğrusal olmayan Bradford"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:554
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:554
 msgid "XYZ"
 msgstr "XYZ"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:555
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:555
 msgid "none (bypass)"
 msgstr "hiçbiri (baypas)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:560
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:560
 msgid "version 1 (2020)"
 msgstr "sürüm 1 (2020)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:561
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:561
 msgid "version 2 (2021)"
 msgstr "sürüm 2 (2021)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:562
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:562
 msgid "version 3 (Apr 2021)"
 msgstr "sürüm 3 (Nisan 2021)"
 
-#: ../build/lib/darktable/plugins/introspection_clipping.c:142
-#: ../build/lib/darktable/plugins/introspection_clipping.c:303
-#: ../build/lib/darktable/plugins/introspection_crop.c:61
-#: ../build/lib/darktable/plugins/introspection_crop.c:134
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:142
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:303
+#: ../build/lib/libre-dt-lab/plugins/introspection_crop.c:61
+#: ../build/lib/libre-dt-lab/plugins/introspection_crop.c:134
 #: ../src/gui/gtk.c:1234 ../src/iop/atrous.c:1632
 msgid "left"
 msgstr "sol"
 
-#: ../build/lib/darktable/plugins/introspection_clipping.c:148
-#: ../build/lib/darktable/plugins/introspection_clipping.c:307
-#: ../build/lib/darktable/plugins/introspection_crop.c:67
-#: ../build/lib/darktable/plugins/introspection_crop.c:138
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:148
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:307
+#: ../build/lib/libre-dt-lab/plugins/introspection_crop.c:67
+#: ../build/lib/libre-dt-lab/plugins/introspection_crop.c:138
 #: ../src/gui/accelerators.c:131 ../src/gui/gtk.c:1240
 msgid "top"
 msgstr "üst"
 
-#: ../build/lib/darktable/plugins/introspection_clipping.c:154
-#: ../build/lib/darktable/plugins/introspection_clipping.c:311
-#: ../build/lib/darktable/plugins/introspection_crop.c:73
-#: ../build/lib/darktable/plugins/introspection_crop.c:142
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:154
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:311
+#: ../build/lib/libre-dt-lab/plugins/introspection_crop.c:73
+#: ../build/lib/libre-dt-lab/plugins/introspection_crop.c:142
 #: ../src/gui/gtk.c:1237 ../src/iop/atrous.c:1631
 msgid "right"
 msgstr "sağ"
 
-#: ../build/lib/darktable/plugins/introspection_clipping.c:160
-#: ../build/lib/darktable/plugins/introspection_clipping.c:315
-#: ../build/lib/darktable/plugins/introspection_crop.c:79
-#: ../build/lib/darktable/plugins/introspection_crop.c:146
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:160
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:315
+#: ../build/lib/libre-dt-lab/plugins/introspection_crop.c:79
+#: ../build/lib/libre-dt-lab/plugins/introspection_crop.c:146
 #: ../src/gui/accelerators.c:132 ../src/gui/gtk.c:1243
 msgid "bottom"
 msgstr "alt"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:114
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:203
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:114
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:203
 msgid "input saturation"
 msgstr "giriş doygunluğu"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:126
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:211
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:126
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:211
 msgid "contrast fulcrum"
 msgstr "kontrast dayanak noktası"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:132
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:215
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:132
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:215
 msgid "output saturation"
 msgstr "çıktı doygunluğu"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:229
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:229
 msgid "lift, gamma, gain (ProPhoto RGB)"
 msgstr "kaldırma, gama, kazanç (ProPhoto RGB)"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:230
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:230
 msgid "slope, offset, power (ProPhoto RGB)"
 msgstr "eğim, ofset, güç (ProPhoto RGB)"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:231
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:231
 msgid "lift, gamma, gain (sRGB)"
 msgstr "kaldırma, gama, kazanç (sRGB)"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:232
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:250
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:268
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:286
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:465
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:477
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:489
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:501
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:256
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:232
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:250
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:268
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:286
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:465
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:477
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:489
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:501
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:256
 #: ../src/develop/blend_gui.c:2409 ../src/develop/blend_gui.c:2457
 #: ../src/iop/atrous.c:1801 ../src/iop/channelmixerrgb.c:4528
 #: ../src/iop/channelmixerrgb.c:4644 ../src/iop/colorbalancergb.c:1966
@@ -3201,22 +3201,22 @@ msgstr "kaldırma, gama, kazanç (sRGB)"
 msgid "chroma"
 msgstr "renklendirici"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:238
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:256
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:274
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:292
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:469
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:481
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:493
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:505
-#: ../build/lib/darktable/plugins/introspection_colorreconstruction.c:155
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:257
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:87
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:152
-#: ../build/lib/darktable/plugins/introspection_splittoning.c:61
-#: ../build/lib/darktable/plugins/introspection_splittoning.c:73
-#: ../build/lib/darktable/plugins/introspection_splittoning.c:134
-#: ../build/lib/darktable/plugins/introspection_splittoning.c:142
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:238
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:256
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:274
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:292
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:469
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:481
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:493
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:505
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorreconstruction.c:155
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:257
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:87
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:152
+#: ../build/lib/libre-dt-lab/plugins/introspection_splittoning.c:61
+#: ../build/lib/libre-dt-lab/plugins/introspection_splittoning.c:73
+#: ../build/lib/libre-dt-lab/plugins/introspection_splittoning.c:134
+#: ../build/lib/libre-dt-lab/plugins/introspection_splittoning.c:142
 #: ../src/develop/blend_gui.c:2368 ../src/develop/blend_gui.c:2402
 #: ../src/develop/blend_gui.c:2464 ../src/iop/channelmixer.c:634
 #: ../src/iop/channelmixerrgb.c:4521 ../src/iop/channelmixerrgb.c:4636
@@ -3226,101 +3226,101 @@ msgstr "renklendirici"
 msgid "hue"
 msgstr "ton"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:298
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:509
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:298
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:509
 msgid "shadows fall-off"
 msgstr "gölgeler düşürme"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:304
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:513
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:304
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:513
 msgid "white fulcrum"
 msgstr "beyaz dayanak noktası"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:310
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:517
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:310
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:517
 msgid "highlights fall-off"
 msgstr "düşüşü vurgular"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:316
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:358
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:388
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:521
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:549
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:569
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:156
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:297
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:316
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:358
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:388
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:521
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:549
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:569
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:156
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:297
 #: ../src/iop/bilat.c:479 ../src/iop/colorbalance.c:2057
 #: ../src/iop/negadoctor.c:934 ../src/iop/shadhi.c:707
 #: ../src/iop/splittoning.c:503
 msgid "shadows"
 msgstr "gölgeler"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:322
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:346
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:376
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:525
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:541
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:561
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:180
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:313
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:322
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:346
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:376
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:525
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:541
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:561
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:180
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:313
 #: ../src/iop/bilat.c:473 ../src/iop/colorbalance.c:2059
 #: ../src/iop/monochrome.c:583 ../src/iop/shadhi.c:708
 #: ../src/iop/splittoning.c:510
 msgid "highlights"
 msgstr "vurgular"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:328
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:529
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:328
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:529
 msgid "global chroma"
 msgstr "genel renklendirme"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:334
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:352
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:382
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:533
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:545
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:565
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:168
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:305
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:334
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:352
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:382
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:533
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:545
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:565
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:168
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:305
 #: ../src/iop/colorbalance.c:2058
 msgid "mid-tones"
 msgstr "orta tonlar"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:340
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:537
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:340
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:537
 #: ../src/iop/filmic.c:1601
 msgid "global saturation"
 msgstr "genel doygunluk"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:364
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:553
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:364
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:553
 msgid "hue shift"
 msgstr "ton kayması"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:370
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:557
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:370
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:557
 msgid "global brilliance"
 msgstr "genel parlaklık"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:394
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:573
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:394
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:573
 msgid "mask middle-gray fulcrum"
 msgstr "maske orta-gri dayanak noktası"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:400
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:577
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:400
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:577
 msgid "global vibrance"
 msgstr "genel titreşim"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:406
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:581
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:406
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:581
 msgid "contrast gray fulcrum"
 msgstr "kontrast gri dayanak noktası"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:412
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:585
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:116
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:237
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:412
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:585
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:116
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:237
 #: ../src/gui/guides.c:740 ../src/iop/basicadj.c:637 ../src/iop/bilat.c:468
 #: ../src/iop/colisa.c:298 ../src/iop/colorbalance.c:1905
 #: ../src/iop/colorbalance.c:1911 ../src/iop/filmic.c:1573
@@ -3328,200 +3328,200 @@ msgstr "kontrast gri dayanak noktası"
 msgid "contrast"
 msgstr "kontrast"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:418
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:589
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:418
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:589
 msgid "saturation formula"
 msgstr "doygunluk formülü"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:603
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:603
 msgid "JzAzBz (2021)"
 msgstr "JzAzBz (2021)"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:604
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:604
 msgid "darktable UCS (2022)"
 msgstr "darktable UCS (2022)"
 
-#: ../build/lib/darktable/plugins/introspection_colorcontrast.c:54
-#: ../build/lib/darktable/plugins/introspection_colorcontrast.c:121
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorcontrast.c:54
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorcontrast.c:121
 msgid "green-magenta contrast"
 msgstr "yeşil-eflatun kontrastı"
 
-#: ../build/lib/darktable/plugins/introspection_colorcontrast.c:66
-#: ../build/lib/darktable/plugins/introspection_colorcontrast.c:129
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorcontrast.c:66
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorcontrast.c:129
 msgid "blue-yellow contrast"
 msgstr "mavi-sarı kontrastı"
 
-#: ../build/lib/darktable/plugins/introspection_colorin.c:150
-#: ../build/lib/darktable/plugins/introspection_colorin.c:233
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorin.c:150
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorin.c:233
 msgid "gamut clipping"
 msgstr "gamut kırpma"
 
-#: ../build/lib/darktable/plugins/introspection_colorin.c:304
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:202
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:312
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorin.c:304
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:202
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:312
 #: ../src/common/colorspaces.c:1404 ../src/common/colorspaces.c:1694
 #: ../src/libs/print_settings.c:1356
 msgid "sRGB"
 msgstr "sRGB"
 
-#: ../build/lib/darktable/plugins/introspection_colorin.c:305
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:311
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorin.c:305
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:311
 #: ../src/common/colorspaces.c:1415 ../src/common/colorspaces.c:1696
 #: ../src/libs/print_settings.c:1363
 msgid "Adobe RGB (compatible)"
 msgstr "Adobe RGB (uyumlu)"
 
-#: ../build/lib/darktable/plugins/introspection_colorin.c:306
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:205
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorin.c:306
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:205
 #: ../src/common/colorspaces.c:1422 ../src/common/colorspaces.c:1698
 msgid "linear Rec709 RGB"
 msgstr "doğrusal Rec709 RGB"
 
-#: ../build/lib/darktable/plugins/introspection_colorin.c:307
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:206
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorin.c:307
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:206
 #: ../src/common/colorspaces.c:1436 ../src/common/colorspaces.c:1700
 msgid "linear Rec2020 RGB"
 msgstr "doğrusal Rec2020 RGB"
 
-#: ../build/lib/darktable/plugins/introspection_colorize.c:65
-#: ../build/lib/darktable/plugins/introspection_colorize.c:128
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorize.c:65
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorize.c:128
 msgid "source mix"
 msgstr "kaynak karışımı"
 
-#: ../build/lib/darktable/plugins/introspection_colormapping.c:94
-#: ../build/lib/darktable/plugins/introspection_colormapping.c:249
+#: ../build/lib/libre-dt-lab/plugins/introspection_colormapping.c:94
+#: ../build/lib/libre-dt-lab/plugins/introspection_colormapping.c:249
 msgid "number of clusters"
 msgstr "küme sayısı"
 
-#: ../build/lib/darktable/plugins/introspection_colormapping.c:100
-#: ../build/lib/darktable/plugins/introspection_colormapping.c:253
+#: ../build/lib/libre-dt-lab/plugins/introspection_colormapping.c:100
+#: ../build/lib/libre-dt-lab/plugins/introspection_colormapping.c:253
 msgid "color dominance"
 msgstr "renk hakimiyeti"
 
-#: ../build/lib/darktable/plugins/introspection_colormapping.c:106
-#: ../build/lib/darktable/plugins/introspection_colormapping.c:257
+#: ../build/lib/libre-dt-lab/plugins/introspection_colormapping.c:106
+#: ../build/lib/libre-dt-lab/plugins/introspection_colormapping.c:257
 msgid "histogram equalization"
 msgstr "histogram eşitleme"
 
-#: ../build/lib/darktable/plugins/introspection_colorreconstruction.c:62
-#: ../build/lib/darktable/plugins/introspection_colorreconstruction.c:127
-#: ../build/lib/darktable/plugins/introspection_tonemap.cc:45
-#: ../build/lib/darktable/plugins/introspection_tonemap.cc:92
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorreconstruction.c:62
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorreconstruction.c:127
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonemap.cc:45
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonemap.cc:92
 #: ../src/iop/shadhi.c:722
 msgid "spatial extent"
 msgstr "uzaysal kapsam"
 
-#: ../build/lib/darktable/plugins/introspection_colorreconstruction.c:68
-#: ../build/lib/darktable/plugins/introspection_colorreconstruction.c:131
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorreconstruction.c:68
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorreconstruction.c:131
 msgid "range extent"
 msgstr "menzil kapsamı"
 
-#: ../build/lib/darktable/plugins/introspection_colorreconstruction.c:154
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorreconstruction.c:154
 #: ../src/iop/channelmixerrgb.c:4740
 msgid "saturated colors"
 msgstr "doygun renkler"
 
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:212
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:218
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:224
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:435
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:439
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:443
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:212
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:218
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:224
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:435
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:439
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:443
 #: ../src/iop/toneequal.c:3448
 msgid "curve smoothing"
 msgstr "eğri yumuşatma"
 
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:230
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:447
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:230
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:447
 msgid "white level"
 msgstr "beyaz seviyesi"
 
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:236
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:451
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:236
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:451
 msgid "analysis radius"
 msgstr "analiz yarıçapı"
 
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:242
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:455
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:242
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:455
 msgid "effect radius"
 msgstr "etki yarıçapı"
 
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:248
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:459
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:248
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:459
 msgid "use guided filter"
 msgstr "yönlendirmeli filtre kullan"
 
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:260
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:308
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:356
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:467
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:499
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:531
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:260
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:308
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:356
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:467
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:499
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:531
 #: ../src/iop/colorzones.c:2500
 msgid "orange"
 msgstr "turuncu"
 
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:266
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:314
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:362
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:471
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:503
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:535
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:266
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:314
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:362
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:471
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:503
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:535
 msgid "lime"
 msgstr "misket limonu"
 
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:278
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:326
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:374
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:479
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:511
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:543
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:278
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:326
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:374
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:479
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:511
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:543
 #: ../src/common/color_vocabulary.c:289
 msgid "turquoise"
 msgstr "turkuaz"
 
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:290
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:338
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:386
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:487
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:519
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:551
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:290
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:338
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:386
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:487
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:519
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:551
 #: ../src/common/color_vocabulary.c:343
 msgid "lavender"
 msgstr "lavanta"
 
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:296
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:344
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:392
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:491
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:523
-#: ../build/lib/darktable/plugins/introspection_colorequal.c:555
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:296
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:344
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:392
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:491
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:523
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorequal.c:555
 #: ../src/common/collection.c:1382 ../src/common/color_vocabulary.c:339
 #: ../src/common/colorlabels.c:337 ../src/iop/colorzones.c:2505
 #: ../src/libs/collect.c:1928 ../src/libs/filters/colors.c:264
 msgid "purple"
 msgstr "mor"
 
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:78
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:193
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:78
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:193
 msgid "select by"
 msgstr "tarafından seç"
 
 #. mix slider
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:138
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:233
-#: ../build/lib/darktable/plugins/introspection_soften.c:66
-#: ../build/lib/darktable/plugins/introspection_soften.c:121
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:138
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:233
+#: ../build/lib/libre-dt-lab/plugins/introspection_soften.c:66
+#: ../build/lib/libre-dt-lab/plugins/introspection_soften.c:121
 #: ../src/iop/atrous.c:1835
 msgid "mix"
 msgstr "karıştır"
 
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:144
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:237
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:144
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:237
 msgid "process mode"
 msgstr "süreç modu"
 
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:255
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:255
 #: ../src/develop/blend_gui.c:2347 ../src/iop/channelmixer.c:636
 #: ../src/iop/channelmixerrgb.c:4627 ../src/iop/colorchecker.c:1451
 #: ../src/iop/colorize.c:362 ../src/iop/colorzones.c:2644
@@ -3529,612 +3529,612 @@ msgstr "süreç modu"
 msgid "lightness"
 msgstr "hafiflik"
 
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:267
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:267
 #: ../src/iop/atrous.c:1410 ../src/iop/atrous.c:1414
 #: ../src/iop/denoiseprofile.c:3531 ../src/iop/rawdenoise.c:771
 #: ../src/iop/sigmoid.c:292
 msgid "smooth"
 msgstr "pürüzsüz"
 
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:268
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:268
 msgid "strong"
 msgstr "güçlü"
 
-#: ../build/lib/darktable/plugins/introspection_defringe.c:47
-#: ../build/lib/darktable/plugins/introspection_defringe.c:102
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:47
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:102
 msgid "edge detection radius"
 msgstr "kenar algılama yarıçapı"
 
-#: ../build/lib/darktable/plugins/introspection_defringe.c:53
-#: ../build/lib/darktable/plugins/introspection_defringe.c:106
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:230
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:435
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:53
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:106
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:230
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:435
 #: ../src/iop/atrous.c:1695 ../src/iop/bloom.c:368
 #: ../src/iop/colorreconstruction.c:1245 ../src/iop/hotpixels.c:463
 #: ../src/iop/sharpen.c:444
 msgid "threshold"
 msgstr "eşik"
 
-#: ../build/lib/darktable/plugins/introspection_defringe.c:59
-#: ../build/lib/darktable/plugins/introspection_defringe.c:110
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:59
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:110
 msgid "operation mode"
 msgstr "işlem modu"
 
-#: ../build/lib/darktable/plugins/introspection_defringe.c:124
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:124
 msgid "global average (fast)"
 msgstr "genel ortalama (hızlı)"
 
-#: ../build/lib/darktable/plugins/introspection_defringe.c:125
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:125
 msgid "local average (slow)"
 msgstr "yerel ortalama (yavaş)"
 
-#: ../build/lib/darktable/plugins/introspection_defringe.c:126
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:126
 msgid "static threshold (fast)"
 msgstr "sabit eşik (hızlı)"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:90
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:163
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:90
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:163
 msgid "match greens"
 msgstr "eşleşme yeşillikleri"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:96
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:167
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:141
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:260
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:96
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:167
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:141
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:260
 msgid "edge threshold"
 msgstr "kenar eşiği"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:102
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:171
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:102
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:171
 msgid "color smoothing"
 msgstr "renk yumuşatma"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:108
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:175
-#: ../build/lib/darktable/plugins/introspection_dither.c:73
-#: ../build/lib/darktable/plugins/introspection_dither.c:152
-#: ../build/lib/darktable/plugins/introspection_highlights.c:119
-#: ../build/lib/darktable/plugins/introspection_highlights.c:228
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:108
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:175
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:73
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:152
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:119
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:228
 msgid "method"
 msgstr "yöntem"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:114
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:179
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:114
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:179
 msgid "LMMSE refine"
 msgstr "LMMSE rafine"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:120
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:183
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:120
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:183
 msgid "dual threshold"
 msgstr "çift eşik"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:197
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:204
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:197
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:197
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:204
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:197
 msgid "disabled"
 msgstr "pasif"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:198
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:198
 msgid "local average"
 msgstr "yerel ortalama"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:199
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:199
 msgid "full average"
 msgstr "tam ortalama"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:200
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:200
 msgid "full and local average"
 msgstr "tam ve yerel ortalama"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:213
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:213
 msgid "PPG"
 msgstr "PPG"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:214
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:214
 msgid "AMaZE"
 msgstr "AMaZE"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:215
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:215
 msgid "VNG4"
 msgstr "VNG4"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:216
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:216
 msgid "RCD"
 msgstr "RCD"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:217
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:217
 msgid "LMMSE"
 msgstr "LMMSE"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:218
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:218
 msgid "RCD + VNG4"
 msgstr "RCD + VNG4"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:219
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:219
 msgid "AMaZE + VNG4"
 msgstr "AMaZE + VNG4"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:220
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:227
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:220
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:227
 msgid "passthrough (monochrome)"
 msgstr "geçiş (tek renkli)"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:221
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:228
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:221
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:228
 msgid "photosite color (debug)"
 msgstr "fotosite rengi (hata ayıklama)"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:222
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:222
 msgid "VNG"
 msgstr "VNG"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:223
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:223
 msgid "Markesteijn 1-pass"
 msgstr "Markesteijn 1-geçiş"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:224
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:224
 msgid "Markesteijn 3-pass"
 msgstr "Markesteijn 3-geçiş"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:225
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:225
 msgid "frequency domain chroma"
 msgstr "frekans alanı rengi"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:226
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:226
 msgid "Markesteijn 3-pass + VNG"
 msgstr "Markesteijn 3-geçişli + VNG"
 
 #. history
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:232
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:232
 #: ../src/common/collection.c:1394 ../src/libs/collect.c:1869
 #: ../src/libs/filters/history.c:38
 msgid "basic"
 msgstr "temel"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:233
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:233
 msgid "median"
 msgstr "orta"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:234
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:234
 msgid "3x median"
 msgstr "3x orta"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:235
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:235
 msgid "refine & medians"
 msgstr "iyileştirme ve ortalama"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:236
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:236
 msgid "2x refine + medians"
 msgstr "2x iyileştirme + ortalama"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:125
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:300
-#: ../build/lib/darktable/plugins/introspection_nlmeans.c:48
-#: ../build/lib/darktable/plugins/introspection_nlmeans.c:109
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:125
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:300
+#: ../build/lib/libre-dt-lab/plugins/introspection_nlmeans.c:48
+#: ../build/lib/libre-dt-lab/plugins/introspection_nlmeans.c:109
 msgid "patch size"
 msgstr "yama boyutu"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:131
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:304
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:131
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:304
 msgid "search radius"
 msgstr "yarıçapı araştır"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:143
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:312
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:143
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:312
 msgid "preserve shadows"
 msgstr "gölgeleri koru"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:149
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:316
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:149
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:316
 msgid "bias correction"
 msgstr "önayar düzeltme"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:155
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:320
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:155
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:320
 msgid "scattering"
 msgstr "saçılma"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:161
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:324
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:161
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:324
 msgid "central pixel weight"
 msgstr "merkezi piksel ağırlığı"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:167
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:328
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:167
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:328
 msgid "adjust autoset parameters"
 msgstr "otomatik ayar parametrelerini ayarla"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:239
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:376
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:239
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:376
 msgid "whitebalance-adaptive transform"
 msgstr "beyaz dengesi-uyarlamalı dönüşüm"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:245
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:380
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:245
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:380
 msgid "fix various bugs in algorithm"
 msgstr "algoritmadaki çeşitli hataları düzeltin"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:251
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:384
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:251
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:384
 msgid "upgrade profiled transform"
 msgstr "profilli dönüşümü yükselt"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:257
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:388
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:257
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:388
 #: ../src/libs/colorpicker.c:659
 msgid "color mode"
 msgstr "renk modu"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:402
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:402
 msgid "non-local means"
 msgstr "yerel olmayan araçlar"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:403
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:403
 msgid "non-local means auto"
 msgstr "yerel olmayan otomatik anlamına gelir"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:404
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:404
 msgid "wavelets"
 msgstr "dalgacıklar"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:405
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:405
 msgid "wavelets auto"
 msgstr "dalgacıklar otomatik"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:406
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:406
 msgid "compute variance"
 msgstr "hesaplama varyansı"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:410
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:410
 #: ../src/libs/colorpicker.c:51 ../src/libs/colorpicker.c:292
 msgid "RGB"
 msgstr "RGB"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:411
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:411
 msgid "Y0U0V0"
 msgstr "Y0U0V0"
 
 #. two more sharpness (standard & strong)
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:123
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:248
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:123
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:248
 #: ../src/iop/atrous.c:1685 ../src/iop/diffuse.c:657 ../src/iop/highpass.c:376
 msgid "sharpness"
 msgstr "keskinlik"
 
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:129
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:252
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:129
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:252
 msgid "radius span"
 msgstr "yarıçap aralığı"
 
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:135
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:256
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:135
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:256
 msgid "edge sensitivity"
 msgstr "kenar hassasiyeti"
 
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:147
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:264
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:147
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:264
 msgid "1st order anisotropy"
 msgstr "1. sıra anizotropi"
 
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:153
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:268
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:153
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:268
 msgid "2nd order anisotropy"
 msgstr "2. sıra anizotropi"
 
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:159
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:272
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:159
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:272
 msgid "3rd order anisotropy"
 msgstr "3. sıra anizotropi"
 
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:165
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:276
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:165
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:276
 msgid "4th order anisotropy"
 msgstr "4. sıra anizotropi"
 
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:171
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:280
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:171
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:280
 msgid "luminance masking threshold"
 msgstr "parlaklık maskeleme eşiği"
 
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:177
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:284
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:177
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:284
 msgid "1st order speed"
 msgstr "1. sıra hızı"
 
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:183
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:288
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:183
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:288
 msgid "2nd order speed"
 msgstr "2. sıra hızı"
 
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:189
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:292
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:189
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:292
 msgid "3rd order speed"
 msgstr "3. sıra hızı"
 
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:195
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:296
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:195
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:296
 msgid "4th order speed"
 msgstr "4. sıra hızı"
 
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:201
-#: ../build/lib/darktable/plugins/introspection_diffuse.c:300
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:201
+#: ../build/lib/libre-dt-lab/plugins/introspection_diffuse.c:300
 msgid "central radius"
 msgstr "merkezi yarıçap"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:103
-#: ../build/lib/darktable/plugins/introspection_dither.c:172
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:103
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:172
 msgid "damping"
 msgstr "sönümleme"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:190
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:190
 msgid "random"
 msgstr "rasgele"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:191
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:191
 msgid "Floyd-Steinberg 1-bit B&W"
 msgstr "Floyd-Steinberg 1-bit S&B"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:192
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:192
 msgid "Floyd-Steinberg 1-bit RGB"
 msgstr "Floyd-Steinberg 1-bit RGB"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:193
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:193
 msgid "Floyd-Steinberg 2-bit gray"
 msgstr "Floyd-Steinberg 2-bit gri"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:194
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:194
 msgid "Floyd-Steinberg 2-bit RGB"
 msgstr "Floyd-Steinberg 2-bit RGB"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:195
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:195
 msgid "Floyd-Steinberg 4-bit gray"
 msgstr "Floyd-Steinberg 4-bit gri"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:196
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:196
 msgid "Floyd-Steinberg 4-bit RGB"
 msgstr "Floyd-Steinberg 4-bit RGB"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:197
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:197
 msgid "Floyd-Steinberg 8-bit RGB"
 msgstr "Floyd-Steinberg 8-bit RGB"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:198
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:198
 msgid "Floyd-Steinberg 16-bit RGB"
 msgstr "Floyd-Steinberg 16-bit RGB"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:199
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:199
 msgid "Floyd-Steinberg auto"
 msgstr "Floyd-Steinberg otomatik"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:200
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:200
 msgid "posterize 2 levels per channel"
 msgstr "kanal başına 2 seviye posterleştirme"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:201
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:201
 msgid "posterize 3 levels per channel"
 msgstr "kanal başına 3 seviye posterleştirme"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:202
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:202
 msgid "posterize 4 levels per channel"
 msgstr "kanal başına 4 seviye posterleştirme"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:203
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:203
 msgid "posterize 5 levels per channel"
 msgstr "kanal başına 5 seviye posterleştirme"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:204
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:204
 msgid "posterize 6 levels per channel"
 msgstr "kanal başına 6 seviye posterleştirme"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:205
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:205
 msgid "posterize 7 levels per channel"
 msgstr "kanal başına 7 seviye posterleştirme"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:206
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:206
 msgid "posterize 8 levels per channel"
 msgstr "kanal başına 8 seviye posterleştirme"
 
-#: ../build/lib/darktable/plugins/introspection_enlargecanvas.c:61
-#: ../build/lib/darktable/plugins/introspection_enlargecanvas.c:128
+#: ../build/lib/libre-dt-lab/plugins/introspection_enlargecanvas.c:61
+#: ../build/lib/libre-dt-lab/plugins/introspection_enlargecanvas.c:128
 msgid "percent left"
 msgstr "yüzde sol"
 
-#: ../build/lib/darktable/plugins/introspection_enlargecanvas.c:67
-#: ../build/lib/darktable/plugins/introspection_enlargecanvas.c:132
+#: ../build/lib/libre-dt-lab/plugins/introspection_enlargecanvas.c:67
+#: ../build/lib/libre-dt-lab/plugins/introspection_enlargecanvas.c:132
 msgid "percent right"
 msgstr "yüzde sağ"
 
-#: ../build/lib/darktable/plugins/introspection_enlargecanvas.c:73
-#: ../build/lib/darktable/plugins/introspection_enlargecanvas.c:136
+#: ../build/lib/libre-dt-lab/plugins/introspection_enlargecanvas.c:73
+#: ../build/lib/libre-dt-lab/plugins/introspection_enlargecanvas.c:136
 msgid "percent top"
 msgstr "yüzde üst"
 
-#: ../build/lib/darktable/plugins/introspection_enlargecanvas.c:79
-#: ../build/lib/darktable/plugins/introspection_enlargecanvas.c:140
+#: ../build/lib/libre-dt-lab/plugins/introspection_enlargecanvas.c:79
+#: ../build/lib/libre-dt-lab/plugins/introspection_enlargecanvas.c:140
 msgid "percent bottom"
 msgstr "yüzde alt"
 
-#: ../build/lib/darktable/plugins/introspection_enlargecanvas.c:161
+#: ../build/lib/libre-dt-lab/plugins/introspection_enlargecanvas.c:161
 #: ../src/iop/enlargecanvas.c:468 ../src/iop/levels.c:683
 #: ../src/iop/rgblevels.c:968 ../src/iop/rgblevels.c:1075
 msgid "black"
 msgstr "siyah"
 
-#: ../build/lib/darktable/plugins/introspection_enlargecanvas.c:162
+#: ../build/lib/libre-dt-lab/plugins/introspection_enlargecanvas.c:162
 #: ../src/iop/enlargecanvas.c:469 ../src/iop/levels.c:691
 #: ../src/iop/rgblevels.c:970 ../src/iop/rgblevels.c:1091
 msgid "white"
 msgstr "beyaz"
 
-#: ../build/lib/darktable/plugins/introspection_exposure.c:79
-#: ../build/lib/darktable/plugins/introspection_exposure.c:146
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:79
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:146
 msgid "percentile"
 msgstr "yüzdelik"
 
-#: ../build/lib/darktable/plugins/introspection_exposure.c:85
-#: ../build/lib/darktable/plugins/introspection_exposure.c:150
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:85
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:150
 msgid "target level"
 msgstr "hedef seviye"
 
-#: ../build/lib/darktable/plugins/introspection_exposure.c:91
-#: ../build/lib/darktable/plugins/introspection_exposure.c:154
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:91
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:154
 msgid "compensate exposure bias"
 msgstr "pozlama yanlılığını telafi edin"
 
-#: ../build/lib/darktable/plugins/introspection_exposure.c:168
-#: ../build/lib/darktable/plugins/introspection_levels.c:160
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:168
+#: ../build/lib/libre-dt-lab/plugins/introspection_levels.c:160
 msgid "manual"
 msgstr "klavuz"
 
-#: ../build/lib/darktable/plugins/introspection_exposure.c:169
-#: ../build/lib/darktable/plugins/introspection_levels.c:161
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:169
+#: ../build/lib/libre-dt-lab/plugins/introspection_levels.c:161
 msgid "automatic"
 msgstr "otomatik"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:212
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:423
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:212
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:423
 #: ../src/iop/filmic.c:1514
 msgid "middle gray luminance"
 msgstr "orta gri parlaklık"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:218
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:427
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:97
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:166
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:218
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:427
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:97
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:166
 #: ../src/iop/filmic.c:1539
 msgid "black relative exposure"
 msgstr "siyah bağıl pozlama"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:224
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:431
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:224
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:431
 #: ../src/iop/filmic.c:1526
 msgid "white relative exposure"
 msgstr "beyaz bağıl pozlama"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:236
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:439
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:236
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:439
 msgid "transition"
 msgstr "geçiş"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:242
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:443
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:242
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:443
 msgid "bloom ↔ reconstruct"
 msgstr "tazeleme ↔ yeniden"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:248
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:447
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:248
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:447
 msgid "gray ↔ colorful details"
 msgstr "gri ↔ renkli detaylar"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:254
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:451
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:254
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:451
 msgid "structure ↔ texture"
 msgstr "yapı ↔ doku"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:260
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:455
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:260
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:455
 msgid "dynamic range scaling"
 msgstr "dinamik aralık ölçekleme"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:266
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:459
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:266
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:459
 #: ../src/iop/filmic.c:1671
 msgid "target middle gray"
 msgstr "hedef orta gri"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:272
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:463
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:272
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:463
 #: ../src/iop/filmic.c:1662
 msgid "target black luminance"
 msgstr "hedef siyah parlaklık"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:278
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:467
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:278
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:467
 #: ../src/iop/filmic.c:1680
 msgid "target white luminance"
 msgstr "hedef beyaz parlaklık"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:284
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:471
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:69
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:140
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:284
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:471
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:69
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:140
 #: ../src/libs/masks.c:107
 msgid "hardness"
 msgstr "sertlik"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:302
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:483
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:302
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:483
 #: ../src/iop/filmic.c:1611 ../src/iop/filmicrgb.c:4793
 msgid "extreme luminance saturation"
 msgstr "aşırı parlaklık doygunluğu"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:308
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:487
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:308
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:487
 msgid "shadows ↔ highlights balance"
 msgstr "gölgeler ↔ dengeyi vurgular"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:314
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:491
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:314
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:491
 msgid "add noise in highlights"
 msgstr "vurgulara gürültü ekle"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:320
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:495
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:320
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:495
 msgid "preserve chrominance"
 msgstr "renklendirmeyi koru"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:326
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:499
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:326
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:499
 msgid "color science"
 msgstr "renk bilimi"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:332
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:503
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:332
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:503
 msgid "auto adjust hardness"
 msgstr "otomatik ayar sertliği"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:338
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:507
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:338
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:507
 msgid "use custom middle-gray values"
 msgstr "özel orta gri değerleri kullan"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:344
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:511
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:344
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:511
 msgid "iterations of high-quality reconstruction"
 msgstr "yüksek kaliteli yeniden yapılandırma yinelemeleri"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:350
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:515
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:350
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:515
 msgid "type of noise"
 msgstr "gürültü türü"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:356
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:519
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:356
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:519
 msgid "contrast in shadows"
 msgstr "gölgelerde kontrast"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:362
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:523
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:362
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:523
 msgid "contrast in highlights"
 msgstr "vurgularda kontrast"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:368
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:527
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:368
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:527
 msgid "compensate output ICC profile black point"
 msgstr "çıktıyı telafi et ICC profili siyah nokta"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:374
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:531
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:374
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:531
 msgid "spline handling"
 msgstr "spline işleme"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:380
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:535
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:380
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:535
 msgid "enable highlight reconstruction"
 msgstr "vurgulamayı yeniden yapılandırmayı etkinleştir"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:549
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:371
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:549
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:371
 #: ../src/common/variables.c:792 ../src/develop/imageop_gui.c:209
 #: ../src/imageio/format/avif.c:822 ../src/imageio/format/pdf.c:636
 #: ../src/imageio/format/pdf.c:655 ../src/imageio/format/tiff.c:946
@@ -4143,110 +4143,110 @@ msgstr "vurgulamayı yeniden yapılandırmayı etkinleştir"
 msgid "no"
 msgstr "hayır"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:551
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:551
 msgid "luminance Y"
 msgstr "parlaklık Y"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:552
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:384
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:552
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:384
 msgid "RGB power norm"
 msgstr "RGB güç normu"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:553
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:553
 msgid "RGB euclidean norm (legacy)"
 msgstr "RGB öklid normu (eski)"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:554
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:383
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:554
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:383
 msgid "RGB euclidean norm"
 msgstr "RGB öklid normu"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:558
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:558
 msgid "v3 (2019)"
 msgstr "v3 (2019)"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:559
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:559
 msgid "v4 (2020)"
 msgstr "v4 (2020)"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:560
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:560
 msgid "v5 (2021)"
 msgstr "v5 (2021)"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:561
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:561
 msgid "v6 (2022)"
 msgstr "v6 (2022)"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:562
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:562
 msgid "v7 (2023)"
 msgstr "v7 (2023)"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:566
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:566
 msgid "uniform"
 msgstr "tekdüze"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:568
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:568
 msgid "poissonian"
 msgstr "poissonian"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:572
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:572
 msgid "hard"
 msgstr "sert"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:573
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:573
 msgid "soft"
 msgstr "yumuşak"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:574
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:574
 msgid "safe"
 msgstr "güvenli"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:578
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:578
 msgid "v1 (2019)"
 msgstr "v1 (2019)"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:579
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:579
 msgid "v2 (2020)"
 msgstr "v2 (2020)"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:580
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:580
 msgid "v3 (2021)"
 msgstr "v3 (2021)"
 
-#: ../build/lib/darktable/plugins/introspection_globaltonemap.c:60
-#: ../build/lib/darktable/plugins/introspection_globaltonemap.c:125
+#: ../build/lib/libre-dt-lab/plugins/introspection_globaltonemap.c:60
+#: ../build/lib/libre-dt-lab/plugins/introspection_globaltonemap.c:125
 msgid "bias"
 msgstr "eğilim"
 
-#: ../build/lib/darktable/plugins/introspection_globaltonemap.c:66
-#: ../build/lib/darktable/plugins/introspection_globaltonemap.c:129
+#: ../build/lib/libre-dt-lab/plugins/introspection_globaltonemap.c:66
+#: ../build/lib/libre-dt-lab/plugins/introspection_globaltonemap.c:129
 msgid "target"
 msgstr "hedef"
 
-#: ../build/lib/darktable/plugins/introspection_globaltonemap.c:151
+#: ../build/lib/libre-dt-lab/plugins/introspection_globaltonemap.c:151
 msgid "reinhard"
 msgstr "reinhard"
 
-#: ../build/lib/darktable/plugins/introspection_globaltonemap.c:152
+#: ../build/lib/libre-dt-lab/plugins/introspection_globaltonemap.c:152
 #: ../src/iop/filmic.c:162
 msgid "filmic"
 msgstr "filmsel"
 
-#: ../build/lib/darktable/plugins/introspection_globaltonemap.c:153
+#: ../build/lib/libre-dt-lab/plugins/introspection_globaltonemap.c:153
 msgid "drago"
 msgstr "drago"
 
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:63
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:136
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:63
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:136
 msgid "density"
 msgstr "yoğunluk"
 
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:93
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:156
-#: ../build/lib/darktable/plugins/introspection_splittoning.c:67
-#: ../build/lib/darktable/plugins/introspection_splittoning.c:79
-#: ../build/lib/darktable/plugins/introspection_splittoning.c:138
-#: ../build/lib/darktable/plugins/introspection_splittoning.c:146
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:93
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:156
+#: ../build/lib/libre-dt-lab/plugins/introspection_splittoning.c:67
+#: ../build/lib/libre-dt-lab/plugins/introspection_splittoning.c:79
+#: ../build/lib/libre-dt-lab/plugins/introspection_splittoning.c:138
+#: ../build/lib/libre-dt-lab/plugins/introspection_splittoning.c:146
 #: ../src/develop/blend_gui.c:2363 ../src/iop/basicadj.c:654
 #: ../src/iop/channelmixer.c:635 ../src/iop/colisa.c:300
 #: ../src/iop/colorbalance.c:2017 ../src/iop/colorbalancergb.c:1990
@@ -4258,176 +4258,176 @@ msgstr "yoğunluk"
 msgid "saturation"
 msgstr "doygunluk"
 
-#: ../build/lib/darktable/plugins/introspection_grain.c:58
-#: ../build/lib/darktable/plugins/introspection_grain.c:117
+#: ../build/lib/libre-dt-lab/plugins/introspection_grain.c:58
+#: ../build/lib/libre-dt-lab/plugins/introspection_grain.c:117
 #: ../src/iop/bilat.c:460
 msgid "coarseness"
 msgstr "kabalık"
 
-#: ../build/lib/darktable/plugins/introspection_grain.c:70
-#: ../build/lib/darktable/plugins/introspection_grain.c:125
-#: ../build/lib/darktable/plugins/introspection_velvia.c:44
-#: ../build/lib/darktable/plugins/introspection_velvia.c:91
+#: ../build/lib/libre-dt-lab/plugins/introspection_grain.c:70
+#: ../build/lib/libre-dt-lab/plugins/introspection_grain.c:125
+#: ../build/lib/libre-dt-lab/plugins/introspection_velvia.c:44
+#: ../build/lib/libre-dt-lab/plugins/introspection_velvia.c:91
 msgid "mid-tones bias"
 msgstr "orta tonlar eğilim"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:143
-#: ../build/lib/darktable/plugins/introspection_highlights.c:244
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:143
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:244
 #: ../src/views/darkroom.c:2275
 msgid "clipping threshold"
 msgstr "kırpma eşiği"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:161
-#: ../build/lib/darktable/plugins/introspection_highlights.c:256
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:161
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:256
 msgid "diameter of reconstruction"
 msgstr "yeniden yapılandırma çapı"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:167
-#: ../build/lib/darktable/plugins/introspection_highlights.c:260
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:167
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:260
 msgid "candidating"
 msgstr "aday gösterme"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:173
-#: ../build/lib/darktable/plugins/introspection_highlights.c:264
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:173
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:264
 msgid "combine"
 msgstr "birleştir"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:179
-#: ../build/lib/darktable/plugins/introspection_highlights.c:268
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:179
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:268
 msgid "rebuild"
 msgstr "yeniden inşa et"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:185
-#: ../build/lib/darktable/plugins/introspection_highlights.c:272
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:185
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:272
 msgid "inpaint a flat color"
 msgstr "düz bir renk boyama"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:286
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:286
 msgid "inpaint opposed"
 msgstr "karşıt boyama"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:287
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:287
 msgid "reconstruct in LCh"
 msgstr "LCh'de yeniden yapılandırma"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:288
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:288
 msgid "clip highlights"
 msgstr "klip vurguları"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:289
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:289
 msgid "segmentation based"
 msgstr "bölünme tabanlı"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:290
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:290
 msgid "guided laplacians"
 msgstr "güdümlü laplasiyenler"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:291
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:291
 msgid "reconstruct color"
 msgstr "yeniden renk"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:295
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:295
 msgid "2 px"
 msgstr "2 px"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:296
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:296
 msgid "4 px"
 msgstr "4 px"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:297
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:297
 msgid "8 px"
 msgstr "8 px"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:298
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:298
 msgid "16 px"
 msgstr "16 px"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:299
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:299
 msgid "32 px"
 msgstr "32 px"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:300
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:300
 msgid "64 px"
 msgstr "64 px"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:301
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:301
 msgid "128 px (slow)"
 msgstr "128 px (yavaş)"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:302
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:302
 msgid "256 px (slow)"
 msgstr "256 px (yavaş)"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:303
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:303
 msgid "512 px (very slow)"
 msgstr "512 px (çok yavaş)"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:304
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:304
 msgid "1024 px (very slow)"
 msgstr "1024 px (çok yavaş)"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:305
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:305
 msgid "2048 px (insanely slow)"
 msgstr "2048 px (delicesine yavaş)"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:306
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:306
 msgid "4096 px (insanely slow)"
 msgstr "4096 px (delicesine yavaş)"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:312
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:312
 msgid "flat generic"
 msgstr "düz kapsamlı"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:313
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:313
 msgid "small segments"
 msgstr "küçük bölümler"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:314
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:314
 msgid "large segments"
 msgstr "büyük bölümler"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:315
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:315
 msgid "flat small segments"
 msgstr "düz küçük bölümler"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:316
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:316
 msgid "flat large segments"
 msgstr "düz büyük bölümler"
 
-#: ../build/lib/darktable/plugins/introspection_highpass.c:44
-#: ../build/lib/darktable/plugins/introspection_highpass.c:91
+#: ../build/lib/libre-dt-lab/plugins/introspection_highpass.c:44
+#: ../build/lib/libre-dt-lab/plugins/introspection_highpass.c:91
 msgid "contrast boost"
 msgstr "kontrast artırma"
 
-#: ../build/lib/darktable/plugins/introspection_hotpixels.c:59
-#: ../build/lib/darktable/plugins/introspection_hotpixels.c:116
+#: ../build/lib/libre-dt-lab/plugins/introspection_hotpixels.c:59
+#: ../build/lib/libre-dt-lab/plugins/introspection_hotpixels.c:116
 msgid "mark fixed pixels"
 msgstr "sabit pikselleri işaretle"
 
-#: ../build/lib/darktable/plugins/introspection_hotpixels.c:65
-#: ../build/lib/darktable/plugins/introspection_hotpixels.c:120
+#: ../build/lib/libre-dt-lab/plugins/introspection_hotpixels.c:65
+#: ../build/lib/libre-dt-lab/plugins/introspection_hotpixels.c:120
 msgid "detect by 3 neighbors"
 msgstr "3 komşu tarafından tespit"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:190
-#: ../build/lib/darktable/plugins/introspection_lens.cc:401
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:190
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:401
 msgid "correction method"
 msgstr "düzeltme yöntemi"
 
 #. Page CORRECTIONS
-#: ../build/lib/darktable/plugins/introspection_lens.cc:196
-#: ../build/lib/darktable/plugins/introspection_lens.cc:405
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:196
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:405
 #: ../src/iop/negadoctor.c:919
 msgid "corrections"
 msgstr "düzeltmeler"
 
 #. mode choice
-#: ../build/lib/darktable/plugins/introspection_lens.cc:202
-#: ../build/lib/darktable/plugins/introspection_lens.cc:409
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:128
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:219
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:51
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:118
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:202
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:409
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:128
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:219
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:51
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:118
 #: ../src/develop/blend_gui.c:3583 ../src/iop/bilat.c:438
 #: ../src/iop/colorbalance.c:1867 ../src/iop/denoiseprofile.c:3810
 #: ../src/iop/exposure.c:1175 ../src/iop/levels.c:700
@@ -4438,72 +4438,72 @@ msgstr "düzeltmeler"
 msgid "mode"
 msgstr "mod"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:238
-#: ../build/lib/darktable/plugins/introspection_lens.cc:433
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:238
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:433
 #: ../src/iop/lens.cc:4619
 msgid "target geometry"
 msgstr "hedef geometri"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:268
-#: ../build/lib/darktable/plugins/introspection_lens.cc:453
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:268
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:453
 msgid "TCA overwrite"
 msgstr "TCA üzerine yazma"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:274
-#: ../build/lib/darktable/plugins/introspection_lens.cc:298
-#: ../build/lib/darktable/plugins/introspection_lens.cc:457
-#: ../build/lib/darktable/plugins/introspection_lens.cc:473
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:274
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:298
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:457
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:473
 msgid "TCA red"
 msgstr "TCA kırmızı"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:280
-#: ../build/lib/darktable/plugins/introspection_lens.cc:304
-#: ../build/lib/darktable/plugins/introspection_lens.cc:461
-#: ../build/lib/darktable/plugins/introspection_lens.cc:477
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:280
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:304
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:461
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:477
 msgid "TCA blue"
 msgstr "TCA mavi"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:286
-#: ../build/lib/darktable/plugins/introspection_lens.cc:465
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:286
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:465
 msgid "distortion"
 msgstr "çarpıtma"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:292
-#: ../build/lib/darktable/plugins/introspection_lens.cc:469
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:292
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:469
 #: ../src/iop/vignette.c:114
 msgid "vignetting"
 msgstr "skeç oluşturma"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:310
-#: ../build/lib/darktable/plugins/introspection_lens.cc:481
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:310
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:481
 msgid "scale fine-tune"
 msgstr "ölçek ince ayar"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:322
-#: ../build/lib/darktable/plugins/introspection_lens.cc:489
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:322
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:489
 msgid "image scale"
 msgstr "görüntü ölçeği"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:346
-#: ../build/lib/darktable/plugins/introspection_lens.cc:505
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:346
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:505
 msgid "steepness"
 msgstr "diklik"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:527
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:527
 msgid "embedded metadata"
 msgstr "gömülü üst veri"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:528
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:528
 msgid "Lensfun database"
 msgstr "Lensfun veritabanı"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:529
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:529
 msgid "only manual vignette"
 msgstr "yalnızca elle sahne"
 
 #. get nice text for bounds
 #. Side-border hide/show
-#: ../build/lib/darktable/plugins/introspection_lens.cc:534
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:534
 #: ../src/dtgtk/range.c:1763 ../src/gui/accelerators.c:2592
 #: ../src/gui/accelerators.c:2674 ../src/gui/gtk.c:1282 ../src/gui/gtk.c:3191
 #: ../src/imageio/format/pdf.c:645 ../src/iop/denoiseprofile.c:3713
@@ -4513,77 +4513,77 @@ msgstr "yalnızca elle sahne"
 msgid "all"
 msgstr "tümü"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:535
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:535
 msgid "distortion & TCA"
 msgstr "bozulma & TCA"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:536
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:536
 msgid "distortion & vignetting"
 msgstr "bozulma & skeç oluşturma"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:537
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:537
 msgid "TCA & vignetting"
 msgstr "TCA & skeç oluşturma"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:538
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:538
 msgid "only distortion"
 msgstr "sadece bozulma"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:539
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:539
 msgid "only TCA"
 msgstr "sadece TCA"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:540
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:540
 msgid "only vignetting"
 msgstr "sadece skeç oluşturma"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:544
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:544
 #: ../src/libs/modulegroups.c:2309
 msgid "correct"
 msgstr "uygun"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:545
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:545
 msgid "distort"
 msgstr "çarpıtma"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:550
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:550
 msgid "rectilinear"
 msgstr "doğrusal"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:551
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:551
 msgid "fisheye"
 msgstr "balık gözü"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:552
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:552
 msgid "panoramic"
 msgstr "panoramik"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:553
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:553
 msgid "equirectangular"
 msgstr "eşkenar dörtgen"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:554
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:554
 msgid "orthographic"
 msgstr "imla"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:555
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:555
 msgid "stereographic"
 msgstr "stereografik"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:556
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:556
 msgid "equisolid angle"
 msgstr "eşit açı"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:557
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:557
 msgid "Thoby fisheye"
 msgstr "Thoby balık gözü"
 
-#: ../build/lib/darktable/plugins/introspection_liquify.c:428
+#: ../build/lib/libre-dt-lab/plugins/introspection_liquify.c:428
 msgid "invalidated"
 msgstr "geçersiz"
 
 #. move left/right/up/down
-#: ../build/lib/darktable/plugins/introspection_liquify.c:429
+#: ../build/lib/libre-dt-lab/plugins/introspection_liquify.c:429
 #: ../src/views/darkroom.c:2137 ../src/views/darkroom.c:2552
 #: ../src/views/darkroom.c:2555 ../src/views/lighttable.c:765
 #: ../src/views/lighttable.c:774 ../src/views/lighttable.c:1246
@@ -4592,360 +4592,360 @@ msgstr "geçersiz"
 msgid "move"
 msgstr "taşı"
 
-#: ../build/lib/darktable/plugins/introspection_liquify.c:430
+#: ../build/lib/libre-dt-lab/plugins/introspection_liquify.c:430
 msgid "line"
 msgstr "satır"
 
-#: ../build/lib/darktable/plugins/introspection_liquify.c:431
+#: ../build/lib/libre-dt-lab/plugins/introspection_liquify.c:431
 #: ../src/iop/basecurve.c:2208 ../src/iop/rgbcurve.c:1541
 #: ../src/iop/tonecurve.c:1171
 msgid "curve"
 msgstr "kavis"
 
-#: ../build/lib/darktable/plugins/introspection_lowlight.c:43
-#: ../build/lib/darktable/plugins/introspection_lowlight.c:110
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowlight.c:43
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowlight.c:110
 msgid "blue shift"
 msgstr "maviye kayma"
 
-#: ../build/lib/darktable/plugins/introspection_lowpass.c:96
-#: ../build/lib/darktable/plugins/introspection_lowpass.c:165
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:160
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:247
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowpass.c:96
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowpass.c:165
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:160
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:247
 msgid "soften with"
 msgstr "ile yumuşatma"
 
-#: ../build/lib/darktable/plugins/introspection_lowpass.c:183
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:261
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowpass.c:183
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:261
 msgid "order 0"
 msgstr "sipariş 0"
 
-#: ../build/lib/darktable/plugins/introspection_lowpass.c:184
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:262
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowpass.c:184
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:262
 msgid "order 1"
 msgstr "sipariş 1"
 
-#: ../build/lib/darktable/plugins/introspection_lowpass.c:185
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:263
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowpass.c:185
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:263
 msgid "order 2"
 msgstr "sipariş 2"
 
-#: ../build/lib/darktable/plugins/introspection_lowpass.c:190
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:268
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowpass.c:190
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:268
 msgid "bilateral filter"
 msgstr "ikili filtre"
 
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:77
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:164
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:77
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:164
 msgid "application color space"
 msgstr "uygulama renk alanı"
 
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:203
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:203
 msgid "Adobe RGB"
 msgstr "Adobe RGB"
 
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:204
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:204
 msgid "gamma Rec709 RGB"
 msgstr "gamma Kayıt709 RGB"
 
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:207
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:207
 #: ../src/common/colorspaces.c:1480 ../src/common/colorspaces.c:1734
 msgid "linear ProPhoto RGB"
 msgstr "doğrusal ProPhoto RGB"
 
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:211
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:211
 msgid "tetrahedral"
 msgstr "dört yüzlü"
 
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:212
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:212
 msgid "trilinear"
 msgstr "üç çizgili"
 
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:213
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:213
 msgid "pyramid"
 msgstr "piramit"
 
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:84
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:199
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:84
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:199
 msgid "film stock"
 msgstr "film stoğu"
 
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:132
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:231
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:132
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:231
 msgid "scan exposure bias"
 msgstr "taramaya maruz kalma yanlılığı"
 
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:138
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:235
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:138
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:235
 msgid "paper black (density correction)"
 msgstr "kağıt siyahı (yoğunluk düzeltmesi)"
 
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:144
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:239
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:144
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:239
 #: ../src/iop/negadoctor.c:1011
 msgid "paper grade (gamma)"
 msgstr "kağıt kalitesi (gama)"
 
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:150
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:243
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:150
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:243
 msgid "paper gloss (specular highlights)"
 msgstr "kağıt parlatıcısı (speküler vurgular)"
 
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:156
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:247
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:156
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:247
 msgid "print exposure adjustment"
 msgstr "baskı pozlama ayarı"
 
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:261
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:261
 #: ../src/iop/negadoctor.c:431
 msgid "black and white film"
 msgstr "siyah beyaz film"
 
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:262
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:262
 #: ../src/iop/negadoctor.c:416
 msgid "color film"
 msgstr "renkli film"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:125
-#: ../build/lib/darktable/plugins/introspection_overlay.c:248
-#: ../build/lib/darktable/plugins/introspection_watermark.c:118
-#: ../build/lib/darktable/plugins/introspection_watermark.c:253
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:125
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:248
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:118
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:253
 msgid "x offset"
 msgstr "x offset"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:131
-#: ../build/lib/darktable/plugins/introspection_overlay.c:252
-#: ../build/lib/darktable/plugins/introspection_watermark.c:124
-#: ../build/lib/darktable/plugins/introspection_watermark.c:257
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:131
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:252
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:124
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:257
 msgid "y offset"
 msgstr "y offset"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:149
-#: ../build/lib/darktable/plugins/introspection_overlay.c:264
-#: ../build/lib/darktable/plugins/introspection_watermark.c:142
-#: ../build/lib/darktable/plugins/introspection_watermark.c:269
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:149
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:264
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:142
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:269
 msgid "scale on"
 msgstr "ölçeklendirme"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:155
-#: ../build/lib/darktable/plugins/introspection_overlay.c:268
-#: ../build/lib/darktable/plugins/introspection_watermark.c:148
-#: ../build/lib/darktable/plugins/introspection_watermark.c:273
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:155
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:268
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:148
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:273
 msgid "scale marker to"
 msgstr "ölçek işaretçisi"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:161
-#: ../build/lib/darktable/plugins/introspection_overlay.c:272
-#: ../build/lib/darktable/plugins/introspection_watermark.c:154
-#: ../build/lib/darktable/plugins/introspection_watermark.c:277
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:161
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:272
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:154
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:277
 msgid "scale marker reference"
 msgstr "ölçek işaretleyici referansı"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:167
-#: ../build/lib/darktable/plugins/introspection_overlay.c:276
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:167
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:276
 msgid "overlay image id"
 msgstr "yer paylaşımlı görüntü kimliği"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:173
-#: ../build/lib/darktable/plugins/introspection_overlay.c:179
-#: ../build/lib/darktable/plugins/introspection_overlay.c:280
-#: ../build/lib/darktable/plugins/introspection_overlay.c:284
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:173
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:179
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:280
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:284
 msgid "full overlay's filename"
 msgstr "tam kaplamanın dosya adı"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:185
-#: ../build/lib/darktable/plugins/introspection_overlay.c:191
-#: ../build/lib/darktable/plugins/introspection_overlay.c:288
-#: ../build/lib/darktable/plugins/introspection_overlay.c:292
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:185
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:191
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:288
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:292
 msgid "no image"
 msgstr "görüntü yok"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:197
-#: ../build/lib/darktable/plugins/introspection_overlay.c:296
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:197
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:296
 msgid "NULL pointer"
 msgstr "Boş işaretçisi"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:310
-#: ../build/lib/darktable/plugins/introspection_watermark.c:323
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:310
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:323
 #: ../src/imageio/format/tiff.c:125 ../src/imageio/format/xcf.c:159
 #: ../src/iop/borders.c:957
 msgid "image"
 msgstr "görüntü"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:311
-#: ../build/lib/darktable/plugins/introspection_watermark.c:324
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:311
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:324
 msgid "larger border"
 msgstr "daha büyük kenarlık"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:312
-#: ../build/lib/darktable/plugins/introspection_watermark.c:325
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:312
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:325
 msgid "smaller border"
 msgstr "daha küçük kenarlık"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:314
-#: ../build/lib/darktable/plugins/introspection_watermark.c:327
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:314
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:327
 msgid "advanced options"
 msgstr "gelişmiş seçenekler"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:318
-#: ../build/lib/darktable/plugins/introspection_watermark.c:331
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:318
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:331
 msgid "image width"
 msgstr "görüntü genişliği"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:319
-#: ../build/lib/darktable/plugins/introspection_watermark.c:332
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:319
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:332
 msgid "image height"
 msgstr "görüntü yüksekliği"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:320
-#: ../build/lib/darktable/plugins/introspection_watermark.c:333
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:320
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:333
 msgid "larger image border"
 msgstr "daha büyük görüntü kenarlığı"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:321
-#: ../build/lib/darktable/plugins/introspection_watermark.c:334
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:321
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:334
 msgid "smaller image border"
 msgstr "daha küçük görüntü kenarlığı"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:325
-#: ../build/lib/darktable/plugins/introspection_watermark.c:338
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:325
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:338
 msgid "marker width"
 msgstr "işaretleyici genişliği"
 
-#: ../build/lib/darktable/plugins/introspection_overlay.c:326
-#: ../build/lib/darktable/plugins/introspection_watermark.c:339
+#: ../build/lib/libre-dt-lab/plugins/introspection_overlay.c:326
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:339
 msgid "marker height"
 msgstr "işaretleyici yüksekliği"
 
-#: ../build/lib/darktable/plugins/introspection_primaries.c:75
-#: ../build/lib/darktable/plugins/introspection_primaries.c:160
+#: ../build/lib/libre-dt-lab/plugins/introspection_primaries.c:75
+#: ../build/lib/libre-dt-lab/plugins/introspection_primaries.c:160
 #: ../src/iop/primaries.c:406
 msgid "tint hue"
 msgstr "renk tonu"
 
-#: ../build/lib/darktable/plugins/introspection_primaries.c:81
-#: ../build/lib/darktable/plugins/introspection_primaries.c:164
+#: ../build/lib/libre-dt-lab/plugins/introspection_primaries.c:81
+#: ../build/lib/libre-dt-lab/plugins/introspection_primaries.c:164
 #: ../src/iop/primaries.c:413
 msgid "tint purity"
 msgstr "renk tonu saflığı"
 
-#: ../build/lib/darktable/plugins/introspection_primaries.c:87
-#: ../build/lib/darktable/plugins/introspection_primaries.c:168
+#: ../build/lib/libre-dt-lab/plugins/introspection_primaries.c:87
+#: ../build/lib/libre-dt-lab/plugins/introspection_primaries.c:168
 msgid "red hue"
 msgstr "kırmızı ton"
 
-#: ../build/lib/darktable/plugins/introspection_primaries.c:93
-#: ../build/lib/darktable/plugins/introspection_primaries.c:172
+#: ../build/lib/libre-dt-lab/plugins/introspection_primaries.c:93
+#: ../build/lib/libre-dt-lab/plugins/introspection_primaries.c:172
 msgid "red purity"
 msgstr "kırmızı saflık"
 
-#: ../build/lib/darktable/plugins/introspection_primaries.c:99
-#: ../build/lib/darktable/plugins/introspection_primaries.c:176
+#: ../build/lib/libre-dt-lab/plugins/introspection_primaries.c:99
+#: ../build/lib/libre-dt-lab/plugins/introspection_primaries.c:176
 msgid "green hue"
 msgstr "yeşil ton"
 
-#: ../build/lib/darktable/plugins/introspection_primaries.c:105
-#: ../build/lib/darktable/plugins/introspection_primaries.c:180
+#: ../build/lib/libre-dt-lab/plugins/introspection_primaries.c:105
+#: ../build/lib/libre-dt-lab/plugins/introspection_primaries.c:180
 msgid "green purity"
 msgstr "yeşil saflık"
 
-#: ../build/lib/darktable/plugins/introspection_primaries.c:111
-#: ../build/lib/darktable/plugins/introspection_primaries.c:184
+#: ../build/lib/libre-dt-lab/plugins/introspection_primaries.c:111
+#: ../build/lib/libre-dt-lab/plugins/introspection_primaries.c:184
 msgid "blue hue"
 msgstr "mavi ton"
 
-#: ../build/lib/darktable/plugins/introspection_primaries.c:117
-#: ../build/lib/darktable/plugins/introspection_primaries.c:188
+#: ../build/lib/libre-dt-lab/plugins/introspection_primaries.c:117
+#: ../build/lib/libre-dt-lab/plugins/introspection_primaries.c:188
 msgid "blue purity"
 msgstr "mavi saflık"
 
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:85
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:158
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:85
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:158
 msgid "dynamic range"
 msgstr "dinamik aralık"
 
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:91
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:162
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:91
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:162
 msgid "middle gray luma"
 msgstr "orta gri parlaklık"
 
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:103
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:170
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:103
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:170
 #: ../src/iop/filmic.c:1551
 msgid "safety factor"
 msgstr "güvenlik etkeni"
 
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:184
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:184
 msgid "logarithmic"
 msgstr "logaritmik"
 
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:185
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:185
 #: ../src/iop/profile_gamma.c:639
 msgid "gamma"
 msgstr "gamma"
 
-#: ../build/lib/darktable/plugins/introspection_rawdenoise.c:43
-#: ../build/lib/darktable/plugins/introspection_rawdenoise.c:122
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawdenoise.c:43
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawdenoise.c:122
 msgid "noise threshold"
 msgstr "gürültü eşiği"
 
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:70
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:155
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:70
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:155
 msgid "crop left"
 msgstr "soldan kırp"
 
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:76
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:159
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:76
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:159
 msgid "crop top"
 msgstr "üstten kırp"
 
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:82
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:163
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:82
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:163
 msgid "crop right"
 msgstr "sağdan kırp"
 
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:88
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:167
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:88
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:167
 msgid "crop bottom"
 msgstr "alttan kırp"
 
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:94
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:100
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:171
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:175
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:94
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:100
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:171
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:175
 msgid "black level"
 msgstr "siyah seviye"
 
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:106
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:179
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:106
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:179
 #: ../src/iop/rawprepare.c:955
 msgid "white point"
 msgstr "beyaz nokta"
 
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:112
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:183
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:112
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:183
 msgid "flat field correction"
 msgstr "düz alan düzeltme"
 
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:198
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:198
 msgid "embedded GainMap"
 msgstr "gömülü Kazanç Haritası"
 
 #. exposure
-#: ../build/lib/darktable/plugins/introspection_relight.c:43
-#: ../build/lib/darktable/plugins/introspection_relight.c:98
+#: ../build/lib/libre-dt-lab/plugins/introspection_relight.c:43
+#: ../build/lib/libre-dt-lab/plugins/introspection_relight.c:98
 #: ../src/common/collection.c:633 ../src/gui/preferences.c:834
 #: ../src/gui/presets.c:698 ../src/iop/basicadj.c:628 ../src/iop/exposure.c:122
 #: ../src/iop/exposure.c:1135 ../src/libs/metadata_view.c:143
 msgid "exposure"
 msgstr "pozlama"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:267
-#: ../build/lib/darktable/plugins/introspection_retouch.c:414
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:267
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:414
 msgid "fill mode"
 msgstr "dolgu modu"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:285
-#: ../build/lib/darktable/plugins/introspection_retouch.c:426
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:285
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:426
 #: ../src/iop/basicadj.c:650 ../src/iop/channelmixerrgb.c:4688
 #: ../src/iop/colisa.c:299 ../src/iop/colorequal.c:1977
 #: ../src/iop/colorequal.c:1978 ../src/iop/lowpass.c:601
@@ -4953,356 +4953,356 @@ msgstr "dolgu modu"
 msgid "brightness"
 msgstr "parlaklık"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:291
-#: ../build/lib/darktable/plugins/introspection_retouch.c:430
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:291
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:430
 msgid "max_iter"
 msgstr "azm_yineleme"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:444
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:444
 #: ../src/libs/metadata_view.c:333
 msgid "unused"
 msgstr "kullanılmamış"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:445
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:445
 msgid "clone"
 msgstr "klonla"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:446
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:446
 msgid "heal"
 msgstr "iyileştir"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:447
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:447
 #: ../src/iop/retouch.c:2051
 msgid "blur"
 msgstr "bulanıklıklık"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:448
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:448
 #: ../src/iop/retouch.c:2049
 msgid "fill"
 msgstr "dolgu"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:453
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:453
 msgid "bilateral"
 msgstr "ikili"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:457
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:457
 msgid "erase"
 msgstr "silme"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:458
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:458
 #: ../src/gui/presets.c:61 ../src/iop/enlargecanvas.c:462
 #: ../src/iop/watermark.c:1346 ../src/libs/colorpicker.c:320
 #: ../src/libs/image.c:683 ../src/libs/modulegroups.c:2308
 msgid "color"
 msgstr "renk"
 
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:134
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:223
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:134
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:223
 #: ../src/iop/rgbcurve.c:1589
 msgid "compensate middle gray"
 msgstr "orta griyi telafi et"
 
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:246
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:148
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:266
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:246
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:148
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:266
 msgid "RGB, linked channels"
 msgstr "RGB, bağlantılı kanallar"
 
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:247
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:149
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:247
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:149
 msgid "RGB, independent channels"
 msgstr "RGB, bağımsız kanallar"
 
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:112
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:215
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:112
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:215
 msgid "white point adjustment"
 msgstr "beyaz nokta ayarı"
 
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:136
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:231
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:136
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:231
 msgid "shadows color adjustment"
 msgstr "gölgelerin renk ayarı"
 
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:142
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:235
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:142
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:235
 msgid "highlights color adjustment"
 msgstr "renk ayarını vurgular"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:122
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:241
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:122
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:241
 #: ../src/gui/accelerators.c:101
 msgid "skew"
 msgstr "eğim"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:128
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:245
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:128
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:245
 msgid "target white"
 msgstr "hedef beyaz"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:134
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:249
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:134
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:249
 msgid "target black"
 msgstr "hedef siyah"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:140
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:253
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:140
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:253
 msgid "color processing"
 msgstr "renk işleme"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:146
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:257
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:146
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:257
 msgid "preserve hue"
 msgstr "tonu koru"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:152
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:261
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:152
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:261
 msgid "red attenuation"
 msgstr "kırmızı zayıflama"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:158
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:265
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:158
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:265
 msgid "red rotation"
 msgstr "kırmızıya döndürme"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:164
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:269
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:164
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:269
 msgid "green attenuation"
 msgstr "yeşil zayıflama"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:170
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:273
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:170
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:273
 msgid "green rotation"
 msgstr "yeşile döndürme"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:176
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:277
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:176
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:277
 msgid "blue attenuation"
 msgstr "mavi zayıflama"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:182
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:281
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:182
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:281
 msgid "blue rotation"
 msgstr "maviye döndürme"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:188
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:285
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:188
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:285
 msgid "recover purity"
 msgstr "saflığı geri kazanmak"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:194
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:289
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:194
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:289
 msgid "base primaries"
 msgstr "temel ön seçimler"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:303
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:303
 msgid "per channel"
 msgstr "kanal başına"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:304
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:304
 msgid "RGB ratio"
 msgstr "RGB oranı"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:308
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:308
 #: ../src/common/colorspaces.c:1371 ../src/common/colorspaces.c:1728
 msgid "work profile"
 msgstr "iş profili"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:309
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:309
 msgid "Rec2020"
 msgstr "Rec2020"
 
-#: ../build/lib/darktable/plugins/introspection_sigmoid.c:310
+#: ../build/lib/libre-dt-lab/plugins/introspection_sigmoid.c:310
 #: ../src/common/colorspaces.c:1744
 msgid "Display P3"
 msgstr "Ekran P3"
 
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:135
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:232
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:135
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:232
 msgid "color space"
 msgstr "renk boşluğu"
 
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:263
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:263
 msgid "Lab, linked channels"
 msgstr "Laboratuvar, bağlantılı kanallar"
 
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:264
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:264
 msgid "Lab, independent channels"
 msgstr "Laboratuvar, bağımsız kanallar"
 
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:265
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:265
 msgid "XYZ, linked channels"
 msgstr "XYZ, bağlantılı kanallar"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:144
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:289
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:144
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:289
 msgid "blacks"
 msgstr "siyahlar"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:150
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:293
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:150
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:293
 msgid "deep shadows"
 msgstr "derin gölgeler"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:162
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:301
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:162
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:301
 msgid "light shadows"
 msgstr "hafif gölgeler"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:174
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:309
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:174
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:309
 msgid "dark highlights"
 msgstr "karanlık vurgular"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:186
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:317
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:186
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:317
 msgid "whites"
 msgstr "beyazlar"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:192
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:321
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:192
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:321
 msgid "speculars"
 msgstr "aynalı"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:198
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:325
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:198
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:325
 msgid "smoothing diameter"
 msgstr "yumuşatma çapı"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:210
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:333
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:210
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:333
 msgid "edges refinement/feathering"
 msgstr "kenar iyileştirme/geçiş yumuşatma"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:216
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:337
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:216
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:337
 msgid "mask quantization"
 msgstr "maske niceleme"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:222
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:341
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:222
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:341
 msgid "mask contrast compensation"
 msgstr "maske kontrast telafisi"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:228
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:345
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:228
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:345
 msgid "mask exposure compensation"
 msgstr "maske maruz kalma telafisi"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:240
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:353
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:240
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:353
 msgid "luminance estimator"
 msgstr "parlaklık tahmincisi"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:246
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:357
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:246
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:357
 msgid "filter diffusion"
 msgstr "filtre dağılımı"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:372
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:372
 msgid "averaged guided filter"
 msgstr "ortalama kılavuzlu filtre"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:373
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:373
 msgid "guided filter"
 msgstr "kılavuzlu filtre"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:374
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:374
 msgid "averaged EIGF"
 msgstr "ortalama EIGF"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:375
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:375
 msgid "EIGF"
 msgstr "EIGF"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:379
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:379
 msgid "RGB average"
 msgstr "RGB ortalaması"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:380
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:380
 msgid "HSL lightness"
 msgstr "HSL hafifliği"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:381
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:381
 msgid "HSV value / RGB max"
 msgstr "HSV değeri / RGB azm"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:382
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:382
 msgid "RGB sum"
 msgstr "RGB toplamı"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:385
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:385
 msgid "RGB geometric mean"
 msgstr "RGB geometrik ortalama"
 
-#: ../build/lib/darktable/plugins/introspection_tonemap.cc:39
-#: ../build/lib/darktable/plugins/introspection_tonemap.cc:88
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonemap.cc:39
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonemap.cc:88
 #: ../src/iop/rgbcurve.c:187 ../src/iop/tonecurve.c:560
 msgid "contrast compression"
 msgstr "kontrast sıkıştırma"
 
-#: ../build/lib/darktable/plugins/introspection_vibrance.c:33
-#: ../build/lib/darktable/plugins/introspection_vibrance.c:76
+#: ../build/lib/libre-dt-lab/plugins/introspection_vibrance.c:33
+#: ../build/lib/libre-dt-lab/plugins/introspection_vibrance.c:76
 #: ../src/iop/basicadj.c:657 ../src/iop/vibrance.c:67
 msgid "vibrance"
 msgstr "titreşim"
 
-#: ../build/lib/darktable/plugins/introspection_vignette.c:92
-#: ../build/lib/darktable/plugins/introspection_vignette.c:201
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:92
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:201
 msgid "fall-off start"
 msgstr "düşme başlangıcı"
 
-#: ../build/lib/darktable/plugins/introspection_vignette.c:98
-#: ../build/lib/darktable/plugins/introspection_vignette.c:205
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:98
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:205
 msgid "fall-off radius"
 msgstr "düşme yarıçapı"
 
-#: ../build/lib/darktable/plugins/introspection_vignette.c:116
-#: ../build/lib/darktable/plugins/introspection_vignette.c:217
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:116
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:217
 msgid "horizontal center"
 msgstr "yatay merkez"
 
-#: ../build/lib/darktable/plugins/introspection_vignette.c:122
-#: ../build/lib/darktable/plugins/introspection_vignette.c:221
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:122
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:221
 msgid "vertical center"
 msgstr "dikey merkez"
 
-#: ../build/lib/darktable/plugins/introspection_vignette.c:134
-#: ../build/lib/darktable/plugins/introspection_vignette.c:229
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:134
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:229
 msgid "automatic ratio"
 msgstr "otomatik oran"
 
-#: ../build/lib/darktable/plugins/introspection_vignette.c:140
-#: ../build/lib/darktable/plugins/introspection_vignette.c:233
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:140
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:233
 msgid "width/height ratio"
 msgstr "genişlik/yükseklik oranı"
 
-#: ../build/lib/darktable/plugins/introspection_vignette.c:146
-#: ../build/lib/darktable/plugins/introspection_vignette.c:237
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:146
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:237
 #: ../src/iop/vignette.c:1066
 msgid "shape"
 msgstr "şekil"
 
-#: ../build/lib/darktable/plugins/introspection_vignette.c:265
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:265
 msgid "8-bit output"
 msgstr "8-bit çıkış"
 
-#: ../build/lib/darktable/plugins/introspection_vignette.c:266
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:266
 msgid "16-bit output"
 msgstr "16-bit çıkış"
 
-#: ../build/share/darktable/org.darktable.darktable.desktop.in.h:1
+#: ../build/share/libre-dt-lab/org.darktable.darktable.desktop.in.h:1
 #: ../data/org.darktable.darktable.desktop.in.h:1
 msgid "Virtual Lighttable and Darkroom"
 msgstr "Sanal Işık Masası ve Karanlık Oda"
 
-#: ../build/share/darktable/org.darktable.darktable.desktop.in.h:2
+#: ../build/share/libre-dt-lab/org.darktable.darktable.desktop.in.h:2
 #: ../data/org.darktable.darktable.appdata.xml.in.h:1
 #: ../data/org.darktable.darktable.desktop.in.h:2
 msgid "Organize and develop images from digital cameras"
 msgstr "Dijital kameralardan görüntüleri düzenleyin ve geliştirin"
 
 #. TRANSLATORS: Search terms to find this application. Do NOT translate or localize the semicolons! The list MUST also end with a semicolon!
-#: ../build/share/darktable/org.darktable.darktable.desktop.in.h:4
+#: ../build/share/libre-dt-lab/org.darktable.darktable.desktop.in.h:4
 #: ../data/org.darktable.darktable.desktop.in.h:4
 msgid "graphics;photography;raw;"
 msgstr "grafik;fotoğrafçılık;raw;"

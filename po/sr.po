@@ -1749,69 +1749,69 @@ msgstr ""
 "занемарује exif оцене. уколико није поставњено и exif оцене нису пронађене, "
 "преписује вредност из подешавања „почетна оцена“"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:120
-#: ../build/lib/darktable/plugins/introspection_ashift.c:245
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:120
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:245
 msgid "lens shift (vertical)"
 msgstr "померај сочива (усправно)"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:126
-#: ../build/lib/darktable/plugins/introspection_ashift.c:249
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:126
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:249
 msgid "lens shift (horizontal)"
 msgstr "померај сочива (водоравно)"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:132
-#: ../build/lib/darktable/plugins/introspection_ashift.c:253
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:132
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:253
 msgid "shear"
 msgstr "острижи"
 
 #. focal length
-#: ../build/lib/darktable/plugins/introspection_ashift.c:138
-#: ../build/lib/darktable/plugins/introspection_ashift.c:257
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:138
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:257
 #: ../src/common/collection.c:688 ../src/gui/preferences.c:838
 #: ../src/gui/preferences.c:1983 ../src/gui/presets.c:525
 #: ../src/libs/camera.c:581 ../src/libs/metadata_view.c:148
 msgid "focal length"
 msgstr "жижна дужина"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:144
-#: ../build/lib/darktable/plugins/introspection_ashift.c:261
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:144
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:261
 msgid "crop factor"
 msgstr "фактор исецања"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:150
-#: ../build/lib/darktable/plugins/introspection_ashift.c:265
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:150
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:265
 msgid "lens dependence"
 msgstr "зависност објектива"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:156
-#: ../build/lib/darktable/plugins/introspection_ashift.c:269
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:156
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:269
 msgid "aspect adjust"
 msgstr "подеси размеру"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:162
-#: ../build/lib/darktable/plugins/introspection_ashift.c:273
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:162
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:273
 #: ../src/iop/lens.cc:2291
 msgid "lens model"
 msgstr "модел објектива"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:174
-#: ../build/lib/darktable/plugins/introspection_ashift.c:281
-#: ../build/lib/darktable/plugins/introspection_clipping.c:244
-#: ../build/lib/darktable/plugins/introspection_clipping.c:371
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:174
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:281
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:244
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:371
 msgid "automatic cropping"
 msgstr "сам исеци"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:311
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:311
 msgid "generic"
 msgstr "опште"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:312
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:312
 msgid "specific"
 msgstr "спрецифично"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:316
-#: ../build/lib/darktable/plugins/introspection_colorin.c:301
-#: ../build/lib/darktable/plugins/introspection_vignette.c:263
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:316
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorin.c:301
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:263
 #: ../src/common/history.c:878 ../src/common/history.c:881
 #: ../src/common/history.c:897 ../src/common/styles.c:1117
 #: ../src/common/styles.c:1121 ../src/develop/blend_gui.c:100
@@ -1822,49 +1822,49 @@ msgstr "спрецифично"
 msgid "off"
 msgstr "искључено"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:317
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:317
 msgid "largest area"
 msgstr "највеће подручје"
 
-#: ../build/lib/darktable/plugins/introspection_ashift.c:318
+#: ../build/lib/libre-dt-lab/plugins/introspection_ashift.c:318
 msgid "original format"
 msgstr "оригинални формат"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:134
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:231
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:134
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:231
 msgid "fusion"
 msgstr "спајање"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:140
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:235
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:140
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:235
 msgid "exposure shift"
 msgstr "размакнутост експозиција"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:146
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:239
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:146
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:239
 #: ../src/libs/metadata_view.c:147
 msgid "exposure bias"
 msgstr "експозиција"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:152
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:243
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:122
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:215
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:140
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:227
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:57
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:122
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:153
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:244
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:152
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:243
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:122
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:215
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:140
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:227
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:57
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:122
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:153
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:244
 msgid "preserve colors"
 msgstr "очувај боје"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:262
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:249
-#: ../build/lib/darktable/plugins/introspection_colorreconstruction.c:153
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:251
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:153
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:270
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:262
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:249
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorreconstruction.c:153
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:251
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:153
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:270
 #: ../src/iop/basecurve.c:2099 ../src/iop/channelmixerrgb.c:3638
 #: ../src/iop/clipping.c:1865 ../src/iop/clipping.c:2125
 #: ../src/iop/clipping.c:2141 ../src/iop/clipping.c:2276
@@ -1876,428 +1876,428 @@ msgstr "очувај боје"
 msgid "none"
 msgstr "ништа"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:263
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:250
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:171
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:189
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:207
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:225
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:352
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:364
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:376
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:388
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:252
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:154
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:271
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:263
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:250
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:171
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:189
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:207
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:225
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:352
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:364
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:376
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:388
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:252
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:154
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:271
 #: ../src/develop/blend_gui.c:1837 ../src/develop/blend_gui.c:1856
 msgid "luminance"
 msgstr "светлина"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:264
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:251
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:525
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:253
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:155
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:272
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:264
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:251
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:525
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:253
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:155
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:272
 msgid "max RGB"
 msgstr "највећи RGB"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:265
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:252
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:254
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:156
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:273
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:265
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:252
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:254
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:156
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:273
 msgid "average RGB"
 msgstr "просечни RGB"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:266
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:253
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:255
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:157
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:274
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:266
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:253
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:255
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:157
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:274
 msgid "sum RGB"
 msgstr "збир RGB"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:267
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:254
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:256
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:158
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:275
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:267
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:254
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:256
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:158
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:275
 msgid "norm RGB"
 msgstr "норм RGB"
 
-#: ../build/lib/darktable/plugins/introspection_basecurve.c:268
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:255
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:257
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:159
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:276
+#: ../build/lib/libre-dt-lab/plugins/introspection_basecurve.c:268
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:255
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:257
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:159
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:276
 msgid "basic power"
 msgstr "основни квадрат"
 
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:92
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:195
-#: ../build/lib/darktable/plugins/introspection_exposure.c:67
-#: ../build/lib/darktable/plugins/introspection_exposure.c:138
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:92
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:195
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:67
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:138
 msgid "black level correction"
 msgstr "корекција нивоа црне"
 
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:104
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:203
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:104
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:203
 msgid "highlight compression"
 msgstr "сажимање светлог"
 
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:128
-#: ../build/lib/darktable/plugins/introspection_basicadj.c:219
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:128
+#: ../build/lib/libre-dt-lab/plugins/introspection_basicadj.c:219
 msgid "middle grey"
 msgstr "средишња дива"
 
-#: ../build/lib/darktable/plugins/introspection_bilat.c:78
-#: ../build/lib/darktable/plugins/introspection_bilat.c:137
+#: ../build/lib/libre-dt-lab/plugins/introspection_bilat.c:78
+#: ../build/lib/libre-dt-lab/plugins/introspection_bilat.c:137
 msgid "midtone range"
 msgstr "распон средњих тонова"
 
-#: ../build/lib/darktable/plugins/introspection_bilat.c:151
+#: ../build/lib/libre-dt-lab/plugins/introspection_bilat.c:151
 msgid "bilateral grid"
 msgstr "двобочна мрежа"
 
-#: ../build/lib/darktable/plugins/introspection_bilat.c:152
+#: ../build/lib/libre-dt-lab/plugins/introspection_bilat.c:152
 msgid "local laplacian filter"
 msgstr "лок. лапласов филтер"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:110
-#: ../build/lib/darktable/plugins/introspection_borders.c:251
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:110
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:251
 #: ../src/common/collection.c:692 ../src/libs/tools/filter.c:97
 msgid "aspect ratio"
 msgstr "однос размере"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:128
-#: ../build/lib/darktable/plugins/introspection_borders.c:263
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:128
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:263
 #: ../src/iop/flip.c:74 ../src/libs/print_settings.c:1285
 msgid "orientation"
 msgstr "окретање"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:134
-#: ../build/lib/darktable/plugins/introspection_borders.c:267
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:134
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:267
 msgid "border size"
 msgstr "величина ивице"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:140
-#: ../build/lib/darktable/plugins/introspection_borders.c:271
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:140
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:271
 #: ../src/iop/borders.c:1051
 msgid "horizontal position"
 msgstr "водоравни положај"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:158
-#: ../build/lib/darktable/plugins/introspection_borders.c:283
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:158
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:283
 #: ../src/iop/borders.c:1062
 msgid "vertical position"
 msgstr "усправни положај"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:176
-#: ../build/lib/darktable/plugins/introspection_borders.c:295
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:176
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:295
 msgid "frame line size"
 msgstr "величина линије оквира"
 
-#: ../build/lib/darktable/plugins/introspection_borders.c:182
-#: ../build/lib/darktable/plugins/introspection_borders.c:299
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:182
+#: ../build/lib/libre-dt-lab/plugins/introspection_borders.c:299
 msgid "frame line offset"
 msgstr "померај линије оквира"
 
-#: ../build/lib/darktable/plugins/introspection_censorize.c:51
-#: ../build/lib/darktable/plugins/introspection_censorize.c:112
+#: ../build/lib/libre-dt-lab/plugins/introspection_censorize.c:51
+#: ../build/lib/libre-dt-lab/plugins/introspection_censorize.c:112
 msgid "input blur radius"
 msgstr "полупречних улазног замућења"
 
-#: ../build/lib/darktable/plugins/introspection_censorize.c:57
-#: ../build/lib/darktable/plugins/introspection_censorize.c:116
+#: ../build/lib/libre-dt-lab/plugins/introspection_censorize.c:57
+#: ../build/lib/libre-dt-lab/plugins/introspection_censorize.c:116
 msgid "pixellation radius"
 msgstr "полупречник пикселизације"
 
-#: ../build/lib/darktable/plugins/introspection_censorize.c:63
-#: ../build/lib/darktable/plugins/introspection_censorize.c:120
+#: ../build/lib/libre-dt-lab/plugins/introspection_censorize.c:63
+#: ../build/lib/libre-dt-lab/plugins/introspection_censorize.c:120
 msgid "output blur radius"
 msgstr "полупречних излазног замућења"
 
-#: ../build/lib/darktable/plugins/introspection_censorize.c:69
-#: ../build/lib/darktable/plugins/introspection_censorize.c:124
+#: ../build/lib/libre-dt-lab/plugins/introspection_censorize.c:69
+#: ../build/lib/libre-dt-lab/plugins/introspection_censorize.c:124
 msgid "noise level"
 msgstr "ниво шума"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:251
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:257
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:263
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:269
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:275
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:281
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:432
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:436
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:440
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:444
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:448
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:452
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:251
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:257
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:263
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:269
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:275
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:281
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:432
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:436
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:440
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:444
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:448
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:452
 msgid "normalize channels"
 msgstr "нормализуј канале"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:293
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:460
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:293
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:460
 msgid "F source"
 msgstr "Ф извор"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:299
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:464
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:299
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:464
 msgid "LED source"
 msgstr "ЛЕД извор"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:329
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:484
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:329
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:484
 msgid "gamut compression"
 msgstr "сажимање палете"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:335
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:488
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:335
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:488
 msgid "clip negative RGB from gamut"
 msgstr "одсеца негативне RGB вредности са палете"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:341
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:492
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:341
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:492
 msgid "saturation algorithm"
 msgstr "алгоритам засићености"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:506
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:506
 msgid "same as pipeline (D50)"
 msgstr "као у цевоводу (Д50)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:507
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:507
 msgid "A (incandescent)"
 msgstr "A (сијалица)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:508
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:508
 msgid "D (daylight)"
 msgstr "Д (дневна светлост)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:509
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:509
 msgid "E (equi-energy)"
 msgstr "E (екви-енерџи)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:510
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:510
 msgid "F (fluorescent)"
 msgstr "Ф (флоресцентно)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:511
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:511
 msgid "LED (LED light)"
 msgstr "ЛЕД (лед осветљење)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:512
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:512
 msgid "Planckian (black body)"
 msgstr "Планково (црно тело)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:513
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:513
 #: ../src/common/iop_order.c:58
 msgid "custom"
 msgstr "произвољно"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:514
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:514
 msgid "(AI) detect from image surfaces..."
 msgstr "(ВИ) израчунај са делова слике…"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:515
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:515
 msgid "(AI) detect from image edges..."
 msgstr "(ВИ) израчунај са ивица слике…"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:516
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:516
 #: ../src/iop/channelmixerrgb.c:3267
 msgid "as shot in camera"
 msgstr "као снимак из камере"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:521
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:521
 msgid "F1 (Daylight 6430 K) – medium CRI"
 msgstr "F1 (дневна светлост 6430 K) – средњи CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:522
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:522
 msgid "F2 (Cool White 4230 K) – medium CRI"
 msgstr "F2 (хладно бела 4230 K) – средњи CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:523
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:523
 msgid "F3 (White 3450 K) – medium CRI"
 msgstr "F3 (бела 3450 K) – средњи CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:524
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:524
 msgid "F4 (Warm White 2940 K) – medium CRI"
 msgstr "F4 (топла бела 2940 K) – средњи CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:525
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:525
 msgid "F5 (Daylight 6350 K) – medium CRI"
 msgstr "F5 (дневна светлост 6350 K) – средњи CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:526
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:526
 msgid "F6 (Lite White 4150 K) – medium CRI"
 msgstr "F6 (светло бела 4150 K) – средњи CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:527
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:527
 msgid "F7 (D65 simulator 6500 K) – high CRI"
 msgstr "F7 (Д65 симулатор 6500 K) – висок CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:528
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:528
 msgid "F8 (D50 simulator 5000 K) – high CRI"
 msgstr "F8 (Д50 симулатор 5000 K) – висок CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:529
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:529
 msgid "F9 (Cool White Deluxe 4150 K) – high CRI"
 msgstr "F9 (хладно бела, Deluxe 4150 K) – висок CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:530
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:530
 msgid "F10 (Tuned RGB 5000 K) – low CRI"
 msgstr "F10 (подешен RGB 5000 K) – низак CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:531
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:531
 msgid "F11 (Tuned RGB 4000 K) – low CRI"
 msgstr "F11 (подешен RGB 4000 K) – низак CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:532
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:532
 msgid "F12 (Tuned RGB 3000 K) – low CRI"
 msgstr "F12 (подешен RGB 3000 K) – низак CRI"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:537
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:537
 msgid "B1 (Blue 2733 K)"
 msgstr "B1 (плава 2733 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:538
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:538
 msgid "B2 (Blue 2998 K)"
 msgstr "B2 (плава 2998 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:539
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:539
 msgid "B3 (Blue 4103 K)"
 msgstr "B3 (плава 4103 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:540
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:540
 msgid "B4 (Blue 5109 K)"
 msgstr "B4 (плава 5109 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:541
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:541
 msgid "B5 (Blue 6598 K)"
 msgstr "B5 (плава 6598 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:542
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:542
 msgid "BH1 (Blue-Red hybrid 2851 K)"
 msgstr "BH1 (хибридна бело-црвена 2851 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:543
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:543
 msgid "RGB1 (RGB 2840 K)"
 msgstr "RGB1 (RGB 2840 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:544
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:544
 msgid "V1 (Violet 2724 K)"
 msgstr "V1 (љубичаста 2724 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:545
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:545
 msgid "V2 (Violet 4070 K)"
 msgstr "V2 (љубичаста 4070 K)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:550
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:550
 msgid "linear Bradford (ICC v4)"
 msgstr "линеарни Брадфорд (ICC v4)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:551
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:551
 msgid "CAT16 (CIECAM16)"
 msgstr "CAT16 (CIECAM16)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:552
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:552
 msgid "non-linear Bradford"
 msgstr "нелинеарни Брадфорд"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:553
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:553
 msgid "XYZ "
 msgstr "XYZ "
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:554
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:554
 msgid "none (bypass)"
 msgstr "ништа (заобиђи)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:559
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:559
 msgid "version 1 (2020)"
 msgstr "издање 1 (2020)"
 
-#: ../build/lib/darktable/plugins/introspection_channelmixerrgb.c:560
+#: ../build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c:560
 msgid "version 2 (2021)"
 msgstr "издање 2 (2021)"
 
-#: ../build/lib/darktable/plugins/introspection_clipping.c:142
-#: ../build/lib/darktable/plugins/introspection_clipping.c:303
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:142
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:303
 msgid "left"
 msgstr "лево"
 
-#: ../build/lib/darktable/plugins/introspection_clipping.c:148
-#: ../build/lib/darktable/plugins/introspection_clipping.c:307
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:148
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:307
 msgid "top"
 msgstr "горе"
 
-#: ../build/lib/darktable/plugins/introspection_clipping.c:154
-#: ../build/lib/darktable/plugins/introspection_clipping.c:311
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:154
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:311
 msgid "right"
 msgstr "десно"
 
-#: ../build/lib/darktable/plugins/introspection_clipping.c:160
-#: ../build/lib/darktable/plugins/introspection_clipping.c:315
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:160
+#: ../build/lib/libre-dt-lab/plugins/introspection_clipping.c:315
 msgid "bottom"
 msgstr "доле"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:114
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:203
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:114
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:203
 msgid "input saturation"
 msgstr "улазна засићеност"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:126
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:211
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:126
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:211
 msgid "contrast fulcrum"
 msgstr "ослонац контраста"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:132
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:215
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:132
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:215
 msgid "output saturation"
 msgstr "излазна засићеност"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:229
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:229
 msgid "lift, gamma, gain (ProPhotoRGB)"
 msgstr "раст, гама, добит (ProPhotoRGB)"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:230
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:230
 msgid "slope, offset, power (ProPhotoRGB)"
 msgstr "пад, померај, снага (ProPhotoRGB)"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalance.c:231
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalance.c:231
 msgid "lift, gamma, gain (sRGB)"
 msgstr "раст, гама, добит (sRGB)"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:177
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:195
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:213
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:231
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:356
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:368
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:380
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:392
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:177
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:195
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:213
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:231
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:356
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:368
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:380
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:392
 #: ../src/develop/blend_gui.c:1833 ../src/develop/blend_gui.c:1860
 #: ../src/iop/atrous.c:1515 ../src/iop/channelmixerrgb.c:3557
 #: ../src/iop/equalizer.c:391 ../src/iop/nlmeans.c:536
 msgid "chroma"
 msgstr "хрома"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:183
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:201
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:219
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:237
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:360
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:372
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:384
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:396
-#: ../build/lib/darktable/plugins/introspection_colorreconstruction.c:155
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:257
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:87
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:152
-#: ../build/lib/darktable/plugins/introspection_splittoning.c:61
-#: ../build/lib/darktable/plugins/introspection_splittoning.c:73
-#: ../build/lib/darktable/plugins/introspection_splittoning.c:134
-#: ../build/lib/darktable/plugins/introspection_splittoning.c:142
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:183
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:201
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:219
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:237
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:360
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:372
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:384
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:396
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorreconstruction.c:155
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:257
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:87
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:152
+#: ../build/lib/libre-dt-lab/plugins/introspection_splittoning.c:61
+#: ../build/lib/libre-dt-lab/plugins/introspection_splittoning.c:73
+#: ../build/lib/libre-dt-lab/plugins/introspection_splittoning.c:134
+#: ../build/lib/libre-dt-lab/plugins/introspection_splittoning.c:142
 #: ../src/develop/blend_gui.c:1810 ../src/develop/blend_gui.c:1829
 #: ../src/develop/blend_gui.c:1864 ../src/iop/channelmixer.c:622
 #: ../src/iop/channelmixerrgb.c:3551 ../src/iop/colorbalance.c:2024
@@ -2306,175 +2306,175 @@ msgstr "хрома"
 msgid "hue"
 msgstr "нијанса"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:243
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:255
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:400
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:408
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:243
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:255
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:400
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:408
 msgid "tonal weight"
 msgstr "тежина тонова"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:249
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:404
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:249
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:404
 msgid "fulcrum"
 msgstr "тачка ослонца"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:261
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:303
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:412
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:440
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:156
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:297
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:261
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:303
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:412
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:440
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:156
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:297
 #: ../src/iop/bilat.c:460 ../src/iop/colorbalance.c:2081
 #: ../src/iop/colorbalancergb.c:704 ../src/iop/shadhi.c:691
 #: ../src/iop/splittoning.c:521
 msgid "shadows"
 msgstr "сенке"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:267
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:291
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:416
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:432
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:180
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:313
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:267
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:291
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:416
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:432
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:180
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:313
 #: ../src/iop/bilat.c:454 ../src/iop/colorbalance.c:2083
 #: ../src/iop/colorbalancergb.c:766 ../src/iop/monochrome.c:590
 #: ../src/iop/shadhi.c:692 ../src/iop/splittoning.c:523
 msgid "highlights"
 msgstr "светли делови"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:273
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:420
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:273
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:420
 #: ../src/iop/colorbalancergb.c:681
 msgid "global"
 msgstr "опште"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:279
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:297
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:424
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:436
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:168
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:305
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:279
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:297
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:424
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:436
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:168
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:305
 #: ../src/iop/colorbalancergb.c:735
 msgid "midtones"
 msgstr "средњи тонови"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:285
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:428
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:285
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:428
 msgid "saturation global"
 msgstr "општа засићеност"
 
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:309
-#: ../build/lib/darktable/plugins/introspection_colorbalancergb.c:444
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:309
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorbalancergb.c:444
 msgid "hue shift"
 msgstr "померај нијансе"
 
-#: ../build/lib/darktable/plugins/introspection_colorcontrast.c:54
-#: ../build/lib/darktable/plugins/introspection_colorcontrast.c:121
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorcontrast.c:54
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorcontrast.c:121
 msgid "green-magenta contrast"
 msgstr "контраст зелене-љубичасте"
 
-#: ../build/lib/darktable/plugins/introspection_colorcontrast.c:66
-#: ../build/lib/darktable/plugins/introspection_colorcontrast.c:129
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorcontrast.c:66
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorcontrast.c:129
 msgid "blue-yellow contrast"
 msgstr "контраст плаве-жуте"
 
-#: ../build/lib/darktable/plugins/introspection_colorin.c:149
-#: ../build/lib/darktable/plugins/introspection_colorin.c:232
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorin.c:149
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorin.c:232
 msgid "gamut clipping"
 msgstr "одсецање палете"
 
-#: ../build/lib/darktable/plugins/introspection_colorin.c:302
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:201
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorin.c:302
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:201
 #: ../src/common/colorspaces.c:1628
 msgid "sRGB"
 msgstr "sRGB"
 
-#: ../build/lib/darktable/plugins/introspection_colorin.c:303
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorin.c:303
 #: ../src/common/colorspaces.c:1421 ../src/common/colorspaces.c:1630
 #: ../src/libs/print_settings.c:1042
 msgid "Adobe RGB (compatible)"
 msgstr "Adobe RGB (сагласно)"
 
-#: ../build/lib/darktable/plugins/introspection_colorin.c:304
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorin.c:304
 #: ../src/common/colorspaces.c:1426 ../src/common/colorspaces.c:1632
 msgid "linear Rec709 RGB"
 msgstr "линеарно Rec709 RGB"
 
-#: ../build/lib/darktable/plugins/introspection_colorin.c:305
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorin.c:305
 #: ../src/common/colorspaces.c:1435 ../src/common/colorspaces.c:1634
 msgid "linear Rec2020 RGB"
 msgstr "линеарно Rec2020 RGB"
 
-#: ../build/lib/darktable/plugins/introspection_colorize.c:65
-#: ../build/lib/darktable/plugins/introspection_colorize.c:128
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorize.c:65
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorize.c:128
 msgid "source mix"
 msgstr "мешање извора"
 
-#: ../build/lib/darktable/plugins/introspection_colormapping.c:94
-#: ../build/lib/darktable/plugins/introspection_colormapping.c:249
+#: ../build/lib/libre-dt-lab/plugins/introspection_colormapping.c:94
+#: ../build/lib/libre-dt-lab/plugins/introspection_colormapping.c:249
 msgid "number of clusters"
 msgstr "број скупова"
 
-#: ../build/lib/darktable/plugins/introspection_colormapping.c:100
-#: ../build/lib/darktable/plugins/introspection_colormapping.c:253
+#: ../build/lib/libre-dt-lab/plugins/introspection_colormapping.c:100
+#: ../build/lib/libre-dt-lab/plugins/introspection_colormapping.c:253
 msgid "color dominance"
 msgstr "доминација боје"
 
-#: ../build/lib/darktable/plugins/introspection_colormapping.c:106
-#: ../build/lib/darktable/plugins/introspection_colormapping.c:257
+#: ../build/lib/libre-dt-lab/plugins/introspection_colormapping.c:106
+#: ../build/lib/libre-dt-lab/plugins/introspection_colormapping.c:257
 msgid "histogram equalization"
 msgstr "уједначавање хистограма"
 
-#: ../build/lib/darktable/plugins/introspection_colorreconstruction.c:62
-#: ../build/lib/darktable/plugins/introspection_colorreconstruction.c:127
-#: ../build/lib/darktable/plugins/introspection_tonemap.cc:45
-#: ../build/lib/darktable/plugins/introspection_tonemap.cc:92
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorreconstruction.c:62
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorreconstruction.c:127
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonemap.cc:45
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonemap.cc:92
 #: ../src/iop/shadhi.c:706
 msgid "spatial extent"
 msgstr "величина простора"
 
-#: ../build/lib/darktable/plugins/introspection_colorreconstruction.c:68
-#: ../build/lib/darktable/plugins/introspection_colorreconstruction.c:131
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorreconstruction.c:68
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorreconstruction.c:131
 msgid "range extent"
 msgstr "величина опсега"
 
-#: ../build/lib/darktable/plugins/introspection_colorreconstruction.c:154
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorreconstruction.c:154
 #: ../src/iop/channelmixerrgb.c:3640
 msgid "saturated colors"
 msgstr "засићене боје"
 
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:78
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:193
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:78
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:193
 msgid "select by"
 msgstr "одабери по"
 
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:138
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:233
-#: ../build/lib/darktable/plugins/introspection_soften.c:66
-#: ../build/lib/darktable/plugins/introspection_soften.c:121
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:138
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:233
+#: ../build/lib/libre-dt-lab/plugins/introspection_soften.c:66
+#: ../build/lib/libre-dt-lab/plugins/introspection_soften.c:121
 #: ../src/iop/atrous.c:1539
 msgid "mix"
 msgstr "мешано"
 
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:144
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:237
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:144
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:237
 msgid "process mode"
 msgstr "режим обраде"
 
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:255
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:255
 #: ../src/develop/blend_gui.c:1796 ../src/iop/channelmixer.c:624
 #: ../src/iop/colorchecker.c:1331 ../src/iop/colorize.c:363
 #: ../src/iop/colorzones.c:2362
 msgid "lightness"
 msgstr "светлина"
 
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:256
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:93
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:156
-#: ../build/lib/darktable/plugins/introspection_splittoning.c:67
-#: ../build/lib/darktable/plugins/introspection_splittoning.c:79
-#: ../build/lib/darktable/plugins/introspection_splittoning.c:138
-#: ../build/lib/darktable/plugins/introspection_splittoning.c:146
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:256
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:93
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:156
+#: ../build/lib/libre-dt-lab/plugins/introspection_splittoning.c:67
+#: ../build/lib/libre-dt-lab/plugins/introspection_splittoning.c:79
+#: ../build/lib/libre-dt-lab/plugins/introspection_splittoning.c:138
+#: ../build/lib/libre-dt-lab/plugins/introspection_splittoning.c:146
 #: ../src/develop/blend_gui.c:1806 ../src/iop/basicadj.c:620
 #: ../src/iop/channelmixer.c:623 ../src/iop/colisa.c:317
 #: ../src/iop/colorbalance.c:2041 ../src/iop/colorchecker.c:1349
@@ -2486,413 +2486,413 @@ msgstr "светлина"
 msgid "saturation"
 msgstr "засићеност"
 
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:267
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:267
 #: ../src/iop/atrous.c:1292 ../src/iop/atrous.c:1296
 #: ../src/iop/denoiseprofile.c:3329 ../src/iop/rawdenoise.c:759
 msgid "smooth"
 msgstr "умекшавање"
 
-#: ../build/lib/darktable/plugins/introspection_colorzones.c:268
+#: ../build/lib/libre-dt-lab/plugins/introspection_colorzones.c:268
 msgid "strong"
 msgstr "јако"
 
-#: ../build/lib/darktable/plugins/introspection_defringe.c:47
-#: ../build/lib/darktable/plugins/introspection_defringe.c:102
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:47
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:102
 msgid "edge detection radius"
 msgstr "полупречник ивица"
 
-#: ../build/lib/darktable/plugins/introspection_defringe.c:53
-#: ../build/lib/darktable/plugins/introspection_defringe.c:106
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:215
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:414
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:53
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:106
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:215
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:414
 #: ../src/iop/bloom.c:394 ../src/iop/colorreconstruction.c:1282
 #: ../src/iop/hotpixels.c:376 ../src/iop/sharpen.c:729
 msgid "threshold"
 msgstr "праг"
 
-#: ../build/lib/darktable/plugins/introspection_defringe.c:59
-#: ../build/lib/darktable/plugins/introspection_defringe.c:110
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:59
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:110
 msgid "operation mode"
 msgstr "режим рада"
 
-#: ../build/lib/darktable/plugins/introspection_defringe.c:124
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:124
 msgid "global average (fast)"
 msgstr "општи просек (брзо)"
 
-#: ../build/lib/darktable/plugins/introspection_defringe.c:125
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:125
 msgid "local average (slow)"
 msgstr "локални просек (споро)"
 
-#: ../build/lib/darktable/plugins/introspection_defringe.c:126
+#: ../build/lib/libre-dt-lab/plugins/introspection_defringe.c:126
 msgid "static threshold (fast)"
 msgstr "статични праг (брзо)"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:75
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:142
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:75
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:142
 msgid "match greens"
 msgstr "поклапање зелене"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:81
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:146
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:81
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:146
 msgid "edge threshold"
 msgstr "праг ивице"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:87
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:150
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:87
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:150
 msgid "color smoothing"
 msgstr "уједначавање боја"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:93
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:154
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:93
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:154
 msgid "demosaicing method"
 msgstr "начин склапања мозаика"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:172
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:179
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:172
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:179
 msgid "disabled"
 msgstr "онемогућено"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:173
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:173
 msgid "local average"
 msgstr "локални просек"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:174
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:174
 msgid "full average"
 msgstr "пуни просек"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:175
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:175
 msgid "full and local average"
 msgstr "пуни и локални просек"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:180
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:180
 msgid "once"
 msgstr "једном"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:181
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:181
 msgid "twice"
 msgstr "двапут"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:182
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:182
 msgid "three times"
 msgstr "трипут"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:183
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:183
 msgid "four times"
 msgstr "четири пута"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:184
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:184
 msgid "five times"
 msgstr "пет пута"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:188
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:188
 msgid "PPG (fast)"
 msgstr "PPG (брзо)"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:189
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:189
 msgid "AMaZE (slow)"
 msgstr "AMaZE (споро)"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:190
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:190
 msgid "VNG4"
 msgstr "VNG4"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:191
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:197
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:191
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:197
 msgid "passthrough (monochrome) (experimental)"
 msgstr "пропусти_кроз (једнобојно) (пробно)"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:192
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:199
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:192
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:199
 msgid "photosite color (debug)"
 msgstr "боја фото-тачке (за тражење грешака)"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:193
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:193
 msgid "RCD"
 msgstr "RCD"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:194
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:194
 msgid "VNG"
 msgstr "VNG"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:195
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:195
 msgid "Markesteijn 1-pass"
 msgstr "Маркештајн, 1 пролаз"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:196
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:196
 msgid "Markesteijn 3-pass (slow)"
 msgstr "Маркештајн, 3 пролаза (споро)"
 
-#: ../build/lib/darktable/plugins/introspection_demosaic.c:198
+#: ../build/lib/libre-dt-lab/plugins/introspection_demosaic.c:198
 msgid "frequency domain chroma (slow)"
 msgstr "област учесталости хроме (споро)"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:125
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:300
-#: ../build/lib/darktable/plugins/introspection_nlmeans.c:48
-#: ../build/lib/darktable/plugins/introspection_nlmeans.c:109
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:125
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:300
+#: ../build/lib/libre-dt-lab/plugins/introspection_nlmeans.c:48
+#: ../build/lib/libre-dt-lab/plugins/introspection_nlmeans.c:109
 msgid "patch size"
 msgstr "величина парчића"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:131
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:304
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:131
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:304
 msgid "search radius"
 msgstr "полупречник претраге"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:143
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:312
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:143
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:312
 msgid "preserve shadows"
 msgstr "очување сенки"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:149
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:316
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:149
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:316
 msgid "bias correction"
 msgstr "поправка померања"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:155
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:320
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:155
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:320
 msgid "scattering"
 msgstr "разбацивање"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:161
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:324
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:161
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:324
 msgid "central pixel weight"
 msgstr "тежина централног пиксела"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:167
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:328
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:167
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:328
 msgid "adjust autoset parameters"
 msgstr "сам подеси параметре"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:239
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:376
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:239
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:376
 msgid "whitebalance-adaptive transform"
 msgstr "преображај уз адаптацију баланса беле"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:245
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:380
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:245
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:380
 msgid "fix various bugs in algorithm"
 msgstr "исправља разне грешке алгоритма"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:251
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:384
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:251
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:384
 msgid "upgrade profiled transform"
 msgstr "ажурирај профилисани преображај"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:257
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:388
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:257
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:388
 #: ../src/imageio/format/avif.c:749
 msgid "color mode"
 msgstr "режим боје"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:410
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:410
 #: ../src/libs/colorpicker.c:295 ../src/libs/colorpicker.c:629
 msgid "RGB"
 msgstr "Маркештајн, 1 пролаз"
 
-#: ../build/lib/darktable/plugins/introspection_denoiseprofile.c:411
+#: ../build/lib/libre-dt-lab/plugins/introspection_denoiseprofile.c:411
 msgid "Y0U0V0"
 msgstr "Y0U0V0"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:62
-#: ../build/lib/darktable/plugins/introspection_dither.c:141
-#: ../build/lib/darktable/plugins/introspection_highlights.c:56
-#: ../build/lib/darktable/plugins/introspection_highlights.c:123
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:62
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:141
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:56
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:123
 msgid "method"
 msgstr "метода"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:92
-#: ../build/lib/darktable/plugins/introspection_dither.c:161
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:92
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:161
 msgid "damping"
 msgstr "избацивање"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:179
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:179
 msgid "random"
 msgstr "насумично"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:180
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:180
 msgid "floyd-steinberg 1-bit B&W"
 msgstr "флојд-штајнберд 1-битно црно-бело"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:181
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:181
 msgid "floyd-steinberg 4-bit gray"
 msgstr "флојд-штајнберд 4-битно сиво"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:182
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:182
 msgid "floyd-steinberg 8-bit RGB"
 msgstr "флојд-штајнберд 8-битно RGB"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:183
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:183
 msgid "floyd-steinberg 16-bit RGB"
 msgstr "флојд-штајнберд 16-битно RGB"
 
-#: ../build/lib/darktable/plugins/introspection_dither.c:184
+#: ../build/lib/libre-dt-lab/plugins/introspection_dither.c:184
 msgid "floyd-steinberg auto"
 msgstr "флојд-штајнберд аутоматски"
 
-#: ../build/lib/darktable/plugins/introspection_exposure.c:79
-#: ../build/lib/darktable/plugins/introspection_exposure.c:146
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:79
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:146
 msgid "percentile"
 msgstr "проценат"
 
-#: ../build/lib/darktable/plugins/introspection_exposure.c:85
-#: ../build/lib/darktable/plugins/introspection_exposure.c:150
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:85
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:150
 msgid "target level"
 msgstr "циљни ниво"
 
-#: ../build/lib/darktable/plugins/introspection_exposure.c:91
-#: ../build/lib/darktable/plugins/introspection_exposure.c:154
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:91
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:154
 msgid "compensate exposure bias"
 msgstr "поправка помака експозиције"
 
-#: ../build/lib/darktable/plugins/introspection_exposure.c:168
-#: ../build/lib/darktable/plugins/introspection_levels.c:160
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:168
+#: ../build/lib/libre-dt-lab/plugins/introspection_levels.c:160
 msgid "manual"
 msgstr "ручно"
 
-#: ../build/lib/darktable/plugins/introspection_exposure.c:169
-#: ../build/lib/darktable/plugins/introspection_levels.c:161
+#: ../build/lib/libre-dt-lab/plugins/introspection_exposure.c:169
+#: ../build/lib/libre-dt-lab/plugins/introspection_levels.c:161
 msgid "automatic"
 msgstr "аутоматски"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:197
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:402
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:197
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:402
 #: ../src/iop/filmic.c:1598
 msgid "middle grey luminance"
 msgstr "светлина средишње сиве"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:203
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:406
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:97
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:166
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:203
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:406
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:97
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:166
 #: ../src/iop/filmic.c:1621
 msgid "black relative exposure"
 msgstr "релативна експозиција црне"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:209
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:410
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:209
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:410
 #: ../src/iop/filmic.c:1609
 msgid "white relative exposure"
 msgstr "релативна експозиција беле"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:221
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:418
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:221
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:418
 msgid "transition"
 msgstr "прелаз"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:227
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:422
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:227
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:422
 msgid "bloom/reconstruct"
 msgstr "цветање/реконструкција"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:233
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:426
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:233
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:426
 msgid "grey/colorful details"
 msgstr "детаљи сиве/у боји"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:239
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:430
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:239
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:430
 msgid "structure/texture"
 msgstr "структура/текстура"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:245
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:434
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:245
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:434
 msgid "dynamic range scaling"
 msgstr "промена динамичког опсега"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:251
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:438
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:251
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:438
 #: ../src/iop/filmic.c:1752
 msgid "target middle grey"
 msgstr "циљна средишња сива"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:257
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:442
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:257
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:442
 #: ../src/iop/filmic.c:1743
 msgid "target black luminance"
 msgstr "циљна светлина црне"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:263
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:446
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:263
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:446
 #: ../src/iop/filmic.c:1761
 msgid "target white luminance"
 msgstr "циљна светлина беле"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:269
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:450
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:69
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:140
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:269
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:450
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:69
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:140
 msgid "hardness"
 msgstr "тврдоћа"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:287
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:462
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:287
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:462
 #: ../src/iop/filmic.c:1691 ../src/iop/filmicrgb.c:3905
 msgid "extreme luminance saturation"
 msgstr "огромно засићење светлине"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:293
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:466
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:293
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:466
 #: ../src/iop/filmic.c:1672
 msgid "shadows/highlights balance"
 msgstr "баланс сенки/светлих делова"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:299
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:470
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:299
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:470
 msgid "add noise in highlights"
 msgstr "додај шум у светлим деловима"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:305
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:474
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:305
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:474
 msgid "preserve chrominance"
 msgstr "сачувај боје"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:311
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:478
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:311
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:478
 msgid "color science"
 msgstr "наука о бојама"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:317
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:482
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:317
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:482
 msgid "auto adjust hardness"
 msgstr "сам подеси тврдоћу"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:323
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:486
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:323
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:486
 msgid "use custom middle-grey values"
 msgstr "произвољну вредност средишње сиве"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:329
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:490
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:329
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:490
 msgid "iterations of high-quality reconstruction"
 msgstr "понављања реконструкције високог квалитета"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:335
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:494
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:335
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:494
 msgid "type of noise"
 msgstr "тип шума"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:341
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:498
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:341
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:498
 msgid "contrast in shadows"
 msgstr "контраст у сенкама"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:347
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:502
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:347
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:502
 msgid "contrast in highlights"
 msgstr "контраст у светлом"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:353
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:506
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:353
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:506
 msgid "compensate output ICC profile black point"
 msgstr "компензација црне тачке излазног ICC профила"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:359
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:510
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:359
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:510
 msgid "version of the spline generator"
 msgstr "верзија сплајн генератора"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:524
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:371
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:524
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:371
 #: ../src/common/darktable.c:915 ../src/common/variables.c:478
 #: ../src/develop/imageop_gui.c:302 ../src/imageio/format/pdf.c:667
 #: ../src/imageio/format/pdf.c:692 ../src/libs/export.c:1247
@@ -2901,7 +2901,7 @@ msgstr "верзија сплајн генератора"
 msgid "no"
 msgstr "не"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:526
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:526
 msgid "luminance Y"
 msgstr "Y светлина"
 
@@ -2909,126 +2909,126 @@ msgstr "Y светлина"
 # Додај белешку
 #
 # Путање:
-# ../build/lib/darktable/plugins/introspection_filmicrgb.c:527
-# ../build/lib/darktable/plugins/introspection_toneequal.c:384
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:527
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:384
+# ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:527
+# ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:384
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:527
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:384
 msgid "RGB power norm"
 msgstr "RGB квадратна норма"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:528
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:383
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:528
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:383
 msgid "RGB euclidean norm"
 msgstr "RGB еуклидова норма"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:532
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:532
 msgid "v3 (2019)"
 msgstr "v3 (2019)"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:533
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:533
 msgid "v4 (2020)"
 msgstr "v4 (2020)"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:537
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:537
 msgid "hard"
 msgstr "тврдо"
 
-#: ../build/lib/darktable/plugins/introspection_filmicrgb.c:538
+#: ../build/lib/libre-dt-lab/plugins/introspection_filmicrgb.c:538
 msgid "soft"
 msgstr "меко"
 
-#: ../build/lib/darktable/plugins/introspection_globaltonemap.c:60
-#: ../build/lib/darktable/plugins/introspection_globaltonemap.c:125
+#: ../build/lib/libre-dt-lab/plugins/introspection_globaltonemap.c:60
+#: ../build/lib/libre-dt-lab/plugins/introspection_globaltonemap.c:125
 msgid "bias"
 msgstr "помак"
 
-#: ../build/lib/darktable/plugins/introspection_globaltonemap.c:66
-#: ../build/lib/darktable/plugins/introspection_globaltonemap.c:129
+#: ../build/lib/libre-dt-lab/plugins/introspection_globaltonemap.c:66
+#: ../build/lib/libre-dt-lab/plugins/introspection_globaltonemap.c:129
 msgid "target"
 msgstr "циљ"
 
-#: ../build/lib/darktable/plugins/introspection_globaltonemap.c:151
+#: ../build/lib/libre-dt-lab/plugins/introspection_globaltonemap.c:151
 msgid "reinhard"
 msgstr "рејнхард"
 
-#: ../build/lib/darktable/plugins/introspection_globaltonemap.c:152
+#: ../build/lib/libre-dt-lab/plugins/introspection_globaltonemap.c:152
 #: ../src/iop/filmic.c:164
 msgid "filmic"
 msgstr "филмски"
 
-#: ../build/lib/darktable/plugins/introspection_globaltonemap.c:153
+#: ../build/lib/libre-dt-lab/plugins/introspection_globaltonemap.c:153
 msgid "drago"
 msgstr "драго"
 
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:63
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:136
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:63
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:136
 msgid "density"
 msgstr "густина"
 
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:75
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:144
-#: ../build/lib/darktable/plugins/introspection_watermark.c:118
-#: ../build/lib/darktable/plugins/introspection_watermark.c:235
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:75
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:144
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:118
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:235
 #: ../src/iop/ashift.c:4688
 msgid "rotation"
 msgstr "ротација"
 
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:81
-#: ../build/lib/darktable/plugins/introspection_graduatednd.c:148
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:81
+#: ../build/lib/libre-dt-lab/plugins/introspection_graduatednd.c:148
 msgid "offset"
 msgstr "померај"
 
-#: ../build/lib/darktable/plugins/introspection_grain.c:58
-#: ../build/lib/darktable/plugins/introspection_grain.c:117
+#: ../build/lib/libre-dt-lab/plugins/introspection_grain.c:58
+#: ../build/lib/libre-dt-lab/plugins/introspection_grain.c:117
 #: ../src/iop/bilat.c:445
 msgid "coarseness"
 msgstr "грубост"
 
-#: ../build/lib/darktable/plugins/introspection_grain.c:70
-#: ../build/lib/darktable/plugins/introspection_grain.c:125
+#: ../build/lib/libre-dt-lab/plugins/introspection_grain.c:70
+#: ../build/lib/libre-dt-lab/plugins/introspection_grain.c:125
 msgid "midtones bias"
 msgstr "помак средњих тонова"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:80
-#: ../build/lib/darktable/plugins/introspection_highlights.c:139
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:80
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:139
 #: ../src/iop/exposure.c:843 ../src/views/darkroom.c:2239
 msgid "clipping threshold"
 msgstr "праг одсецања"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:153
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:153
 msgid "clip highlights"
 msgstr "одсецање светлог"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:154
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:154
 msgid "reconstruct in LCh"
 msgstr "поврати у LCh"
 
-#: ../build/lib/darktable/plugins/introspection_highlights.c:155
+#: ../build/lib/libre-dt-lab/plugins/introspection_highlights.c:155
 msgid "reconstruct color"
 msgstr "поврати боје"
 
-#: ../build/lib/darktable/plugins/introspection_highpass.c:44
-#: ../build/lib/darktable/plugins/introspection_highpass.c:91
+#: ../build/lib/libre-dt-lab/plugins/introspection_highpass.c:44
+#: ../build/lib/libre-dt-lab/plugins/introspection_highpass.c:91
 msgid "contrast boost"
 msgstr "јачање контраста"
 
-#: ../build/lib/darktable/plugins/introspection_hotpixels.c:59
-#: ../build/lib/darktable/plugins/introspection_hotpixels.c:116
+#: ../build/lib/libre-dt-lab/plugins/introspection_hotpixels.c:59
+#: ../build/lib/libre-dt-lab/plugins/introspection_hotpixels.c:116
 msgid "mark fixed pixels"
 msgstr "обележи фиксне пикселе"
 
-#: ../build/lib/darktable/plugins/introspection_hotpixels.c:65
-#: ../build/lib/darktable/plugins/introspection_hotpixels.c:120
+#: ../build/lib/libre-dt-lab/plugins/introspection_hotpixels.c:65
+#: ../build/lib/libre-dt-lab/plugins/introspection_hotpixels.c:120
 msgid "detect by 3 neighbors"
 msgstr "пронађи на основу 3 суседа"
 
 #. mode choice
-#: ../build/lib/darktable/plugins/introspection_lens.cc:106
-#: ../build/lib/darktable/plugins/introspection_lens.cc:237
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:128
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:219
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:51
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:118
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:106
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:237
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:128
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:219
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:51
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:118
 #: ../src/iop/bilat.c:426 ../src/iop/colorbalance.c:1882
 #: ../src/iop/denoiseprofile.c:3586 ../src/iop/exposure.c:877
 #: ../src/iop/levels.c:688 ../src/iop/profile_gamma.c:691
@@ -3038,217 +3038,217 @@ msgstr "пронађи на основу 3 суседа"
 msgid "mode"
 msgstr "режим"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:142
-#: ../build/lib/darktable/plugins/introspection_lens.cc:261
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:142
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:261
 #: ../src/iop/lens.cc:2343
 msgid "geometry"
 msgstr "геометрија"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:178
-#: ../build/lib/darktable/plugins/introspection_lens.cc:285
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:178
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:285
 msgid "TCA red"
 msgstr "TCA црвена"
 
-#: ../build/lib/darktable/plugins/introspection_lens.cc:184
-#: ../build/lib/darktable/plugins/introspection_lens.cc:289
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:184
+#: ../build/lib/libre-dt-lab/plugins/introspection_lens.cc:289
 msgid "TCA blue"
 msgstr "TCA плава"
 
-#: ../build/lib/darktable/plugins/introspection_liquify.c:428
+#: ../build/lib/libre-dt-lab/plugins/introspection_liquify.c:428
 msgid "invalidated"
 msgstr "невалидирано"
 
-#: ../build/lib/darktable/plugins/introspection_liquify.c:429
+#: ../build/lib/libre-dt-lab/plugins/introspection_liquify.c:429
 msgid "move"
 msgstr "померање"
 
-#: ../build/lib/darktable/plugins/introspection_liquify.c:430
+#: ../build/lib/libre-dt-lab/plugins/introspection_liquify.c:430
 msgid "line"
 msgstr "линија"
 
-#: ../build/lib/darktable/plugins/introspection_liquify.c:431
+#: ../build/lib/libre-dt-lab/plugins/introspection_liquify.c:431
 msgid "curve"
 msgstr "крива"
 
-#: ../build/lib/darktable/plugins/introspection_lowlight.c:43
-#: ../build/lib/darktable/plugins/introspection_lowlight.c:110
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowlight.c:43
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowlight.c:110
 msgid "blue shift"
 msgstr "помак плаве"
 
-#: ../build/lib/darktable/plugins/introspection_lowpass.c:96
-#: ../build/lib/darktable/plugins/introspection_lowpass.c:165
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:160
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:247
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowpass.c:96
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowpass.c:165
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:160
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:247
 msgid "soften with"
 msgstr "ублажи са"
 
-#: ../build/lib/darktable/plugins/introspection_lowpass.c:183
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:261
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowpass.c:183
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:261
 msgid "order 0"
 msgstr "редослед 0"
 
-#: ../build/lib/darktable/plugins/introspection_lowpass.c:184
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:262
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowpass.c:184
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:262
 msgid "order 1"
 msgstr "редослед 1"
 
-#: ../build/lib/darktable/plugins/introspection_lowpass.c:185
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:263
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowpass.c:185
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:263
 msgid "order 2"
 msgstr "редослед 2"
 
-#: ../build/lib/darktable/plugins/introspection_lowpass.c:189
-#: ../build/lib/darktable/plugins/introspection_retouch.c:421
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:267
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowpass.c:189
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:421
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:267
 #: ../src/iop/filmicrgb.c:3843
 msgid "gaussian"
 msgstr "гаус"
 
-#: ../build/lib/darktable/plugins/introspection_lowpass.c:190
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:268
+#: ../build/lib/libre-dt-lab/plugins/introspection_lowpass.c:190
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:268
 msgid "bilateral filter"
 msgstr "двобочни филтер"
 
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:76
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:163
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:76
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:163
 msgid "application color space"
 msgstr "простор боја апликације"
 
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:202
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:202
 msgid "Adobe RGB"
 msgstr "Adobe RGB"
 
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:203
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:203
 msgid "gamma rec709 RGB"
 msgstr "гама rec709 RGB"
 
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:204
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:204
 msgid "linear rec709 RGB"
 msgstr "линеарни rec709 RGB"
 
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:205
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:205
 msgid "linear rec2020 RGB"
 msgstr "линеарни rec2020 RGB"
 
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:209
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:209
 msgid "tetrahedral"
 msgstr "тетраедар"
 
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:210
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:210
 msgid "trilinear"
 msgstr "тролинијски"
 
-#: ../build/lib/darktable/plugins/introspection_lut3d.c:211
+#: ../build/lib/libre-dt-lab/plugins/introspection_lut3d.c:211
 msgid "pyramid"
 msgstr "пирамида"
 
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:84
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:199
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:84
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:199
 msgid "film stock"
 msgstr "врста филма"
 
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:132
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:231
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:132
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:231
 msgid "scan exposure bias"
 msgstr "експозиција скениране слике"
 
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:138
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:235
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:138
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:235
 msgid "paper black (density correction)"
 msgstr "црнило папира (корекција густине)"
 
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:144
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:239
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:144
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:239
 #: ../src/iop/negadoctor.c:972
 msgid "paper grade (gamma)"
 msgstr "тежина папира (гама)"
 
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:150
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:243
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:150
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:243
 msgid "paper gloss (specular highlights)"
 msgstr "сјај папира (рефлексија светлог)"
 
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:156
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:247
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:156
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:247
 msgid "print exposure adjustment"
 msgstr "дотеривање експозиције штампе"
 
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:261
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:261
 #: ../src/iop/negadoctor.c:390
 msgid "black and white film"
 msgstr "црно-бели филм"
 
-#: ../build/lib/darktable/plugins/introspection_negadoctor.c:262
+#: ../build/lib/libre-dt-lab/plugins/introspection_negadoctor.c:262
 #: ../src/iop/negadoctor.c:375
 msgid "color film"
 msgstr "филм у боји"
 
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:85
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:158
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:85
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:158
 msgid "dynamic range"
 msgstr "динамички опсег"
 
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:91
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:162
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:91
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:162
 msgid "middle grey luma"
 msgstr "лума средишње сиве"
 
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:103
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:170
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:103
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:170
 #: ../src/iop/filmic.c:1632
 msgid "safety factor"
 msgstr "сигурносни фактор"
 
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:184
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:184
 msgid "logarithmic"
 msgstr "логаритамски"
 
-#: ../build/lib/darktable/plugins/introspection_profile_gamma.c:185
+#: ../build/lib/libre-dt-lab/plugins/introspection_profile_gamma.c:185
 #: ../src/iop/profile_gamma.c:646
 msgid "gamma"
 msgstr "гама"
 
-#: ../build/lib/darktable/plugins/introspection_rawdenoise.c:43
-#: ../build/lib/darktable/plugins/introspection_rawdenoise.c:122
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawdenoise.c:43
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawdenoise.c:122
 msgid "noise threshold"
 msgstr "праг шума"
 
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:63
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:142
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:63
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:142
 msgid "crop x"
 msgstr "исеци x"
 
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:69
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:146
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:69
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:146
 msgid "crop y"
 msgstr "исеци y"
 
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:75
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:150
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:75
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:150
 msgid "crop width"
 msgstr "исеци ширину"
 
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:81
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:154
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:81
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:154
 msgid "crop height"
 msgstr "исеци висину"
 
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:87
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:93
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:158
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:162
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:87
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:93
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:158
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:162
 msgid "black level"
 msgstr "ниво црне"
 
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:99
-#: ../build/lib/darktable/plugins/introspection_rawprepare.c:166
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:99
+#: ../build/lib/libre-dt-lab/plugins/introspection_rawprepare.c:166
 #: ../src/iop/rawprepare.c:769
 msgid "white point"
 msgstr "бела тачка"
 
 #. exposure
-#: ../build/lib/darktable/plugins/introspection_relight.c:43
-#: ../build/lib/darktable/plugins/introspection_relight.c:98
+#: ../build/lib/libre-dt-lab/plugins/introspection_relight.c:43
+#: ../build/lib/libre-dt-lab/plugins/introspection_relight.c:98
 #: ../src/common/collection.c:691 ../src/gui/preferences.c:830
 #: ../src/gui/preferences.c:1953 ../src/gui/presets.c:495
 #: ../src/iop/basicadj.c:592 ../src/iop/exposure.c:107
@@ -3256,333 +3256,333 @@ msgstr "бела тачка"
 msgid "exposure"
 msgstr "експозиција"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:238
-#: ../build/lib/darktable/plugins/introspection_retouch.c:379
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:238
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:379
 msgid "blur type"
 msgstr "врста замућења"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:244
-#: ../build/lib/darktable/plugins/introspection_retouch.c:383
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:244
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:383
 msgid "blur radius"
 msgstr "полупречник замућења"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:250
-#: ../build/lib/darktable/plugins/introspection_retouch.c:387
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:250
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:387
 msgid "fill mode"
 msgstr "режим попуне"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:268
-#: ../build/lib/darktable/plugins/introspection_retouch.c:399
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:268
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:399
 #: ../src/iop/basicadj.c:616 ../src/iop/channelmixerrgb.c:3604
 #: ../src/iop/colisa.c:316 ../src/iop/lowpass.c:588 ../src/iop/soften.c:481
 #: ../src/iop/vignette.c:990 ../src/libs/history.c:908
 msgid "brightness"
 msgstr "осветљење"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:413
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:413
 #: ../src/libs/metadata_view.c:429
 msgid "unused"
 msgstr "некоришћено"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:414
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:414
 msgid "clone"
 msgstr "клон"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:415
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:415
 msgid "heal"
 msgstr "лечење"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:416
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:416
 msgid "blur"
 msgstr "замућење"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:417
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:417
 msgid "fill"
 msgstr "попуна"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:422
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:422
 msgid "bilateral"
 msgstr "двобочно"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:426
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:426
 msgid "erase"
 msgstr "брисање"
 
-#: ../build/lib/darktable/plugins/introspection_retouch.c:427
+#: ../build/lib/libre-dt-lab/plugins/introspection_retouch.c:427
 #: ../src/gui/preferences.c:97 ../src/gui/presets.c:60
 #: ../src/iop/watermark.c:1404 ../src/libs/image.c:574
 #: ../src/libs/modulegroups.c:2147
 msgid "color"
 msgstr "боја"
 
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:134
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:223
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:134
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:223
 #: ../src/iop/rgbcurve.c:1450
 msgid "compensate middle grey"
 msgstr "компензација средишње сиве"
 
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:246
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:148
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:266
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:246
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:148
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:266
 msgid "RGB, linked channels"
 msgstr "везани RGB канали"
 
-#: ../build/lib/darktable/plugins/introspection_rgbcurve.c:247
-#: ../build/lib/darktable/plugins/introspection_rgblevels.c:149
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgbcurve.c:247
+#: ../build/lib/libre-dt-lab/plugins/introspection_rgblevels.c:149
 msgid "RGB, independent channels"
 msgstr "независни RGB канали"
 
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:112
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:215
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:112
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:215
 msgid "white point adjustment"
 msgstr "дотеривање беле тачке"
 
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:136
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:231
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:136
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:231
 msgid "shadows color adjustment"
 msgstr "дотеривање боје сенки"
 
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:142
-#: ../build/lib/darktable/plugins/introspection_shadhi.c:235
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:142
+#: ../build/lib/libre-dt-lab/plugins/introspection_shadhi.c:235
 msgid "highlights color adjustment"
 msgstr "дотеривање боје светлих делова"
 
-#: ../build/lib/darktable/plugins/introspection_temperature.c:66
-#: ../build/lib/darktable/plugins/introspection_temperature.c:121
+#: ../build/lib/libre-dt-lab/plugins/introspection_temperature.c:66
+#: ../build/lib/libre-dt-lab/plugins/introspection_temperature.c:121
 #: ../src/iop/temperature.c:1884
 msgid "emerald"
 msgstr "дијамант"
 
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:135
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:232
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:135
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:232
 msgid "color space"
 msgstr "простор боја"
 
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:263
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:263
 msgid "Lab, linked channels"
 msgstr "Lab, везани канали"
 
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:264
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:264
 msgid "Lab, independent channels"
 msgstr "Lab, независни канали"
 
-#: ../build/lib/darktable/plugins/introspection_tonecurve.c:265
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonecurve.c:265
 msgid "XYZ, linked channels"
 msgstr "XYZ, везани канали"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:144
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:289
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:144
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:289
 msgid "blacks"
 msgstr "црне"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:150
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:293
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:150
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:293
 msgid "deep shadows"
 msgstr "тамне сенке"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:162
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:301
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:162
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:301
 msgid "light shadows"
 msgstr "светле сенке"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:174
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:309
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:174
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:309
 msgid "dark highlights"
 msgstr "тамни светли деливи"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:186
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:317
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:186
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:317
 msgid "whites"
 msgstr "беле"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:192
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:321
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:192
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:321
 msgid "speculars"
 msgstr "рефлексије"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:198
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:325
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:198
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:325
 msgid "smoothing diameter"
 msgstr "пречник умекшања"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:210
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:333
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:210
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:333
 msgid "edges refinement/feathering"
 msgstr "поправљање/умекшање ивица"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:216
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:337
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:216
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:337
 msgid "mask quantization"
 msgstr "квантизација маске"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:222
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:341
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:222
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:341
 msgid "mask contrast compensation"
 msgstr "компензација контраста маске"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:228
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:345
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:228
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:345
 msgid "mask exposure compensation"
 msgstr "компензација експозиције маске"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:240
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:353
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:240
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:353
 msgid "luminance estimator"
 msgstr "рачунање светлине"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:246
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:357
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:246
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:357
 msgid "filter diffusion"
 msgstr "филтер дифузије"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:372
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:372
 msgid "averaged guided filter"
 msgstr "филтер вођен просеком"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:373
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:373
 msgid "guided filter"
 msgstr "вођени филтер"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:374
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:374
 msgid "averaged eigf"
 msgstr "просечни вфне"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:375
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:375
 msgid "eigf"
 msgstr "вфне"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:379
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:379
 msgid "RGB average"
 msgstr "RGB просек"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:380
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:380
 msgid "HSL lightness"
 msgstr "HSL светлина"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:381
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:381
 msgid "HSV value / RGB max"
 msgstr "HSV вредност / највећи RGB"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:382
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:382
 msgid "RGB sum"
 msgstr "RGB збир"
 
-#: ../build/lib/darktable/plugins/introspection_toneequal.c:385
+#: ../build/lib/libre-dt-lab/plugins/introspection_toneequal.c:385
 msgid "RGB geometric mean"
 msgstr "RGB геометријска средина"
 
-#: ../build/lib/darktable/plugins/introspection_tonemap.cc:39
-#: ../build/lib/darktable/plugins/introspection_tonemap.cc:88
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonemap.cc:39
+#: ../build/lib/libre-dt-lab/plugins/introspection_tonemap.cc:88
 #: ../src/iop/rgbcurve.c:183 ../src/iop/tonecurve.c:554
 msgid "contrast compression"
 msgstr "компензација контраста"
 
-#: ../build/lib/darktable/plugins/introspection_velvia.c:44
-#: ../build/lib/darktable/plugins/introspection_velvia.c:91
+#: ../build/lib/libre-dt-lab/plugins/introspection_velvia.c:44
+#: ../build/lib/libre-dt-lab/plugins/introspection_velvia.c:91
 msgid "mid-tones bias"
 msgstr "померај средњих тонова"
 
-#: ../build/lib/darktable/plugins/introspection_vibrance.c:33
-#: ../build/lib/darktable/plugins/introspection_vibrance.c:76
+#: ../build/lib/libre-dt-lab/plugins/introspection_vibrance.c:33
+#: ../build/lib/libre-dt-lab/plugins/introspection_vibrance.c:76
 #: ../src/iop/basicadj.c:623 ../src/iop/vibrance.c:63
 msgid "vibrance"
 msgstr "живост боја"
 
-#: ../build/lib/darktable/plugins/introspection_vignette.c:97
-#: ../build/lib/darktable/plugins/introspection_vignette.c:204
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:97
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:204
 msgid "fall-off strength"
 msgstr "јачина отпадања"
 
-#: ../build/lib/darktable/plugins/introspection_vignette.c:115
-#: ../build/lib/darktable/plugins/introspection_vignette.c:216
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:115
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:216
 msgid "horizontal center"
 msgstr "водоравни центар"
 
-#: ../build/lib/darktable/plugins/introspection_vignette.c:121
-#: ../build/lib/darktable/plugins/introspection_vignette.c:220
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:121
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:220
 msgid "vertical center"
 msgstr "усправни центар"
 
-#: ../build/lib/darktable/plugins/introspection_vignette.c:133
-#: ../build/lib/darktable/plugins/introspection_vignette.c:228
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:133
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:228
 msgid "automatic ratio"
 msgstr "аутоматски однос"
 
-#: ../build/lib/darktable/plugins/introspection_vignette.c:139
-#: ../build/lib/darktable/plugins/introspection_vignette.c:232
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:139
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:232
 msgid "width/height ratio"
 msgstr "одност дужине/ширине"
 
-#: ../build/lib/darktable/plugins/introspection_vignette.c:145
-#: ../build/lib/darktable/plugins/introspection_vignette.c:236
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:145
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:236
 #: ../src/iop/vignette.c:994
 msgid "shape"
 msgstr "облик"
 
-#: ../build/lib/darktable/plugins/introspection_vignette.c:264
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:264
 msgid "8-bit output"
 msgstr "8. битни излаз"
 
-#: ../build/lib/darktable/plugins/introspection_vignette.c:265
+#: ../build/lib/libre-dt-lab/plugins/introspection_vignette.c:265
 msgid "16-bit output"
 msgstr "16. битни излаз"
 
-#: ../build/lib/darktable/plugins/introspection_watermark.c:100
-#: ../build/lib/darktable/plugins/introspection_watermark.c:223
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:100
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:223
 msgid "x offset"
 msgstr "x помак"
 
-#: ../build/lib/darktable/plugins/introspection_watermark.c:106
-#: ../build/lib/darktable/plugins/introspection_watermark.c:227
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:106
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:227
 msgid "y offset"
 msgstr "y помак"
 
-#: ../build/lib/darktable/plugins/introspection_watermark.c:124
-#: ../build/lib/darktable/plugins/introspection_watermark.c:239
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:124
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:239
 msgid "scale on"
 msgstr "повећај на"
 
-#: ../build/lib/darktable/plugins/introspection_watermark.c:285
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:285
 #: ../src/imageio/format/tiff.c:121 ../src/iop/borders.c:962
 msgid "image"
 msgstr "слика"
 
-#: ../build/lib/darktable/plugins/introspection_watermark.c:286
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:286
 msgid "larger border"
 msgstr "већа ивица"
 
-#: ../build/lib/darktable/plugins/introspection_watermark.c:287
+#: ../build/lib/libre-dt-lab/plugins/introspection_watermark.c:287
 msgid "smaller border"
 msgstr "мања ивица"
 
-#: ../build/lib/darktable/plugins/lighttable/tools/darktable_authors.h:6
+#: ../build/lib/libre-dt-lab/plugins/lighttable/tools/darktable_authors.h:6
 msgid "developers"
 msgstr "програмери"
 
-#: ../build/lib/darktable/plugins/lighttable/tools/darktable_authors.h:11
+#: ../build/lib/libre-dt-lab/plugins/lighttable/tools/darktable_authors.h:11
 msgid "translators"
 msgstr "преводиоци"
 
-#: ../build/lib/darktable/plugins/lighttable/tools/darktable_authors.h:16
+#: ../build/lib/libre-dt-lab/plugins/lighttable/tools/darktable_authors.h:16
 msgid "contributors"
 msgstr "допринели"
 
-#: ../build/lib/darktable/plugins/lighttable/tools/darktable_authors.h:21
+#: ../build/lib/libre-dt-lab/plugins/lighttable/tools/darktable_authors.h:21
 msgid "rawspeed contributors"
 msgstr "rawspeed-у допринели"
 
-#: ../build/share/darktable/darktable.desktop.in.h:1
+#: ../build/share/libre-dt-lab/darktable.desktop.in.h:1
 #: ../data/darktable.desktop.in.h:1
 msgid "Virtual Lighttable and Darkroom"
 msgstr "Виртуелни Светли сто у Тамној соби"
 
-#: ../build/share/darktable/darktable.desktop.in.h:2
+#: ../build/share/libre-dt-lab/darktable.desktop.in.h:2
 #: ../data/darktable.appdata.xml.in.h:1 ../data/darktable.desktop.in.h:2
 msgid "Organize and develop images from digital cameras"
 msgstr "Организујте и развијте слике из дигиталних камера"
 
 #. TRANSLATORS: Search terms to find this application. Do NOT translate or localize the semicolons! The list MUST also end with a semicolon!
-#: ../build/share/darktable/darktable.desktop.in.h:4
+#: ../build/share/libre-dt-lab/darktable.desktop.in.h:4
 #: ../data/darktable.desktop.in.h:4
 msgid "graphics;photography;raw;"
 msgstr ""

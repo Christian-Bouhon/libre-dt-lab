@@ -47,8 +47,8 @@ read -r answer
 # prefix rc with ~, so debian thinks its less than
 echo "* archiving git tree"
 
-dt_decoration=$(git describe --tags --match release-* |
-                    sed -e 's,^release-,,;s,-,+,;s,-,~,;' -e 's/rc/~rc/')
+dt_decoration=$(git describe --tags --match 'libre-*' |
+                    sed -e 's,^libre-,,;s,-,+,;s,-,~,;' -e 's/rc/~rc/')
 
 # Hot-fix for the compiler version if necessary
 if [[ -n $CLANG_VERSION ]]; then

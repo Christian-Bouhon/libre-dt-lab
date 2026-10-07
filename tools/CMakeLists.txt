@@ -10,10 +10,10 @@ set(TOOLSWIN purge_nonexistent_images.bat)
 
 if ((NOT WIN32) OR BUILD_MSYS2_INSTALL)
 
-  install(PROGRAMS ${TOOLS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable/tools)
+  install(PROGRAMS ${TOOLS} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab/tools)
 
 else()
 
-  install(PROGRAMS ${TOOLSWIN} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/darktable/tools)
+  install(PROGRAMS ${TOOLSWIN} DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab/tools)
 
 endif()

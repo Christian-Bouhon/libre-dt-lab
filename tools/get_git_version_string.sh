@@ -1,10 +1,10 @@
 #!/bin/sh
 
-VERSION="$(git describe --tags --dirty --match release-*)"
+VERSION="$(git describe --tags --dirty --match 'libre-*')"
 
 if [ $? -eq 0 ] ;
 then
-  echo "$VERSION" | sed 's,^release-,,;s,-,+,;s,-,~,;'
+  echo "$VERSION" | sed 's,^libre-,,;s,-,+,;s,-,~,;'
   exit 0
 fi
 

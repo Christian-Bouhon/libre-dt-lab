@@ -1,11 +1,11 @@
 
 =head1 NAME
 
-darktable-cli - a command line darktable variant
+libre-dt-lab-cli - a command line libre-dt-lab variant
 
 =head1 SYNOPSIS
 
-    darktable-cli IMG_1234.{RAW,...} [<xmp file>] <output file> [options] [--core <darktable options>]
+    libre-dt-lab-cli IMG_1234.{RAW,...} [<xmp file>] <output file> [options] [--core <libre-dt-lab options>]
 
 Options:
 
@@ -24,10 +24,10 @@ Options:
 
 =head1 DESCRIPTION
 
-B<darktable> is a digital photography workflow application for B<Linux>, B<Mac OS X> and several other B<Unices>.
-It's described further in L<darktable(1)|darktable(1)>.
+B<libre-dt-lab> is a digital photography workflow application for B<Linux>, B<Mac OS X> and several other B<Unices>.
+It's described further in L<libre-dt-lab(1)|libre-dt-lab(1)>.
 
-B<darktable-cli> is a command line variant to be used to export images
+B<libre-dt-lab-cli> is a command line variant to be used to export images
 given the raw file and the accompanying xmp file.
 
 =head1 OPTIONS
@@ -45,14 +45,14 @@ The name of the input file to export.
 
 The optional name of an XMP sidecar file containing the history stack
 data to be applied during export.
-If this option is not given darktable will search for an XMP file that
+If this option is not given libre-dt-lab will search for an XMP file that
 belongs to the given input file.
 
 =item B<< <output file>  >>
 
 The name of the output file.
-darktable derives the export file format from the file extension.
-You can also use all the variables available in B<darktable>'s export module in the output filename.
+libre-dt-lab derives the export file format from the file extension.
+You can also use all the variables available in B<libre-dt-lab>'s export module in the output filename.
 
 =item B<< --width <max width>  >>
 
@@ -94,8 +94,8 @@ Defaults to false.
 =item B<< --style <style name>  >>
 
 Specify the name of a style to be applied during export.  If a style
-is specified, the path to the darktable configuration directory must
-also be specified (i.e. --core --configdir ~/.config/darktable).
+is specified, the path to the libre-dt-lab configuration directory must
+also be specified (i.e. --core --configdir ~/.config/libre-dt-lab).
 Defaults to no style specified.
 
 =item B<< --style-overwrite  >>
@@ -105,8 +105,8 @@ appended to it.
 
 =item B<< --apply-custom-presets  >>
 
-With this option you can decide if darktable loads its set of default parameters from
-B<data.db> and applies them. Otherwise the defaults that ship with darktable are used.
+With this option you can decide if libre-dt-lab loads its set of default parameters from
+B<data.db> and applies them. Otherwise the defaults that ship with libre-dt-lab are used.
 
 Set this flag to false in order to run multiple instances.
 
@@ -114,21 +114,22 @@ Set this flag to false in order to run multiple instances.
 
 Enables verbose output.
 
-=item B<< --core <darktable options>  >>
+=item B<< --core <libre-dt-lab options>  >>
 
 All command line parameters following B<--core> are passed
-to the darktable core and handled as standard parameters.
-See L<darktable(1)|darktable(1)> for a detailed description of the options.
+to the libre-dt-lab core and handled as standard parameters.
+See L<libre-dt-lab(1)|libre-dt-lab(1)> for a detailed description of the options.
 
 =back
 
 =head1 SEE ALSO
 
-L<darktable(1)|darktable(1)>
+L<libre-dt-lab(1)|libre-dt-lab(1)>
 
 =head1 AUTHORS
 
 The principal developer of darktable is Johannes Hanika.
+Libre DT-Lab is an experimental fork of darktable.
 The (hopefully) complete list of contributors to the project is:
 
 DREGGNAUTHORS -- don't translate this line!
@@ -140,9 +141,6 @@ Additions were made by Tobias Ellinghaus E<lt>me@houz.orgE<gt>.
 
 B<Copyright (C)> 2009-2019 by Authors.
 
-B<darktable> is free software; you can redistribute it and/or modify it
+B<libre-dt-lab> is free software; you can redistribute it and/or modify it
 under the terms of the GPL v3 or (at your option) any later version.
 
-=for comment
-$Date: 2019-11-27$
-$Release: 3.0$

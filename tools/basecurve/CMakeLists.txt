@@ -30,18 +30,18 @@ if ((NOT WIN32) OR BUILD_MSYS2_INSTALL)
     install(TARGETS
                 darktable-curve-tool
             RUNTIME DESTINATION
-                ${CMAKE_INSTALL_LIBEXECDIR}/darktable/tools)
+                ${CMAKE_INSTALL_LIBEXECDIR}/libre-dt-lab/tools)
 
     install(PROGRAMS
                 darktable-curve-tool-helper
             DESTINATION
-                ${CMAKE_INSTALL_LIBEXECDIR}/darktable/tools)
+                ${CMAKE_INSTALL_LIBEXECDIR}/libre-dt-lab/tools)
 
 
     install(FILES
                 plot.basecurve plot.tonecurve
             DESTINATION
-                ${CMAKE_INSTALL_DATAROOTDIR}/darktable/tools/basecurve/)
+                ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab/tools/basecurve/)
     install(FILES
                 ${CMAKE_CURRENT_BINARY_DIR}/README.md
             RENAME

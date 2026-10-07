@@ -35,7 +35,7 @@ export DESTDIR=../AppDir
 # in the Exec field (relying on the OS's path lookup functionality).
 # When we'll do the same, this hack can be removed.
 cd build
-sed -i 's/\/usr\/bin\///' ../AppDir/usr/share/applications/org.libre-dt-lab.libre-dt-lab.desktop
+sed -i 's/\/usr\/bin\///' ../AppDir/usr/share/applications/org.libredtlab.libredtlab.desktop
 
 # The caller of the script should run `sudo lensfun-update-data` before making
 # AppImage, for the nightly builds we did this in the GitHub Action.
@@ -108,10 +108,10 @@ export AS_VALIDATE_NONET=1
 ./linuxdeploy-$ARCH.AppImage \
   --appdir ../AppDir \
   --plugin gtk \
-  --deploy-deps-only ../AppDir/usr/lib/$ARCH-linux-gnu/darktable/plugins \
-  --deploy-deps-only ../AppDir/usr/lib/$ARCH-linux-gnu/darktable/plugins/imageio/format \
-  --deploy-deps-only ../AppDir/usr/lib/$ARCH-linux-gnu/darktable/plugins/imageio/storage \
-  --deploy-deps-only ../AppDir/usr/lib/$ARCH-linux-gnu/darktable/plugins/lighttable \
-  --deploy-deps-only ../AppDir/usr/lib/$ARCH-linux-gnu/darktable/views \
+  --deploy-deps-only ../AppDir/usr/lib/$ARCH-linux-gnu/libre-dt-lab/plugins \
+  --deploy-deps-only ../AppDir/usr/lib/$ARCH-linux-gnu/libre-dt-lab/plugins/imageio/format \
+  --deploy-deps-only ../AppDir/usr/lib/$ARCH-linux-gnu/libre-dt-lab/plugins/imageio/storage \
+  --deploy-deps-only ../AppDir/usr/lib/$ARCH-linux-gnu/libre-dt-lab/plugins/lighttable \
+  --deploy-deps-only ../AppDir/usr/lib/$ARCH-linux-gnu/libre-dt-lab/views \
   --custom-apprun ../packaging/AppImage/AppRun \
   --output appimage

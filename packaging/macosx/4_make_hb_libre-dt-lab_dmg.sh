@@ -117,7 +117,7 @@ if [ $hdiutil_success -ne 1 ]; then
     echo "FATAL: 'hdiutil detach' FAILED!"
     exit 1
 fi
-VERSION=$(git describe --tags --match release-* 2>/dev/null | sed 's/^release-//;s/-/+/;s/-/~/;s/rc/~rc/') || VERSION=$(git rev-parse --short HEAD)
+VERSION=$(git describe --tags --match 'libre-*' 2>/dev/null | sed 's/^libre-//;s/-/+/;s/-/~/;s/rc/~rc/') || VERSION=$(git rev-parse --short HEAD)
 DMG="${PROGN}-${VERSION}-$(uname -m)"
 hdiutil convert "pack.temp.dmg" -format UDZO -imagekey zlib-level=9 -o "${DMG}"
 
@@ -128,5 +128,5 @@ rm -rf package/.background
 
 # Sign dmg image when a certificate has been provided
 if [ -n "$CODECERT" ]; then
-    codesign --deep --verbose --force --options runtime -i "org.libre-dt-lab" -s "${CODECERT}" "${DMG}".dmg
+    codesign --deep --verbose --force --options runtime -i "org.libredtlab.libredtlab" -s "${CODECERT}" "${DMG}".dmg
 fi

@@ -95,11 +95,11 @@ function reset_exec_path {
 
     # Handle liblibre-dt-lab.dylib
     if [[ "$oToolLDependencies" == *"@rpath/liblibre-dt-lab.dylib"* && "$1" != *"liblibre-dt-lab.dylib"* ]]; then
-        # Only need to reset binaries that live outside of lib/darktable
+        # Only need to reset binaries that live outside of lib/libre-dt-lab
         oToolLoader=$(otool -l "$1" 2>/dev/null | grep '@loader_path' | cut -d\( -f1 | sed 's/^[[:blank:]]*path[[:blank:]]*//;s/[[:blank:]]*$//' )
-        if [[ "$oToolLoader" == "@loader_path/../lib/darktable" ]]; then
+        if [[ "$oToolLoader" == "@loader_path/../lib/libre-dt-lab" ]]; then
             echo "Resetting loader path for liblibre-dt-lab.dylib of $libraryOrigFile"
-            install_name_tool -rpath @loader_path/../lib/darktable @loader_path/../Resources/lib/darktable "$1" || true
+            install_name_tool -rpath @loader_path/../lib/libre-dt-lab @loader_path/../Resources/lib/libre-dt-lab "$1" || true
         fi
     fi
 
@@ -230,8 +230,8 @@ gtk-icon-theme-name = Adwaita
 cp "$buildDir"/bin/libre-dt-lab{,-chart,-cli,-cltest,-generate-cache,-rs-identify} "$dtExecDir"/
 
 # Add libre-dt-lab tools if existent
-if [[ -d "$buildDir"/libexec/darktable/tools ]]; then
-    cp "$buildDir"/libexec/darktable/tools/* "$dtExecDir"/
+if [[ -d "$buildDir"/libexec/libre-dt-lab/tools ]]; then
+    cp "$buildDir"/libexec/libre-dt-lab/tools/* "$dtExecDir"/
 fi
 
 # Add libre-dt-lab directories

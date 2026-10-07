@@ -1,6 +1,6 @@
 if(WIN32 AND NOT BUILD_MSYS2_INSTALL)
 
-  set(plugin_dest_dir lib/darktable/plugins)
+  set(plugin_dest_dir lib/libre-dt-lab/plugins)
   set(APPS "\${CMAKE_INSTALL_PREFIX}/bin/libre-dt-lab.exe") # paths to executables
   get_filename_component(MINGW_PATH ${CMAKE_CXX_COMPILER} PATH)
 

@@ -63,10 +63,10 @@ OPTIONS
     --manifest <path>
         Use a custom ort_gpu.json manifest. Without this flag the
         script picks the first found:
-          1. <script>/../../{data,share/darktable}/ort_gpu.json
+          1. <script>/../../{data,share/libre-dt-lab}/ort_gpu.json
              (source checkout or installed-alongside-script layout)
-          2. /usr/{share,local/share}/darktable/ort_gpu.json
-             (system install of darktable)
+          2. /usr/{share,local/share}/libre-dt-lab/ort_gpu.json
+             (system install of Libre DT-Lab)
           3. https://raw.githubusercontent.com/.../master/data/ort_gpu.json
              (fetched as fallback for the "curl ... | bash" one-liner)
 
@@ -157,12 +157,12 @@ if [ -z "$MANIFEST" ]; then
   SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
   if [ -f "$SCRIPT_DIR/../../data/ort_gpu.json" ]; then
     MANIFEST="$SCRIPT_DIR/../../data/ort_gpu.json"
-  elif [ -f "$SCRIPT_DIR/../../share/darktable/ort_gpu.json" ]; then
-    MANIFEST="$SCRIPT_DIR/../../share/darktable/ort_gpu.json"
-  elif [ -f "/usr/share/darktable/ort_gpu.json" ]; then
-    MANIFEST="/usr/share/darktable/ort_gpu.json"
-  elif [ -f "/usr/local/share/darktable/ort_gpu.json" ]; then
-    MANIFEST="/usr/local/share/darktable/ort_gpu.json"
+  elif [ -f "$SCRIPT_DIR/../../share/libre-dt-lab/ort_gpu.json" ]; then
+    MANIFEST="$SCRIPT_DIR/../../share/libre-dt-lab/ort_gpu.json"
+  elif [ -f "/usr/share/libre-dt-lab/ort_gpu.json" ]; then
+    MANIFEST="/usr/share/libre-dt-lab/ort_gpu.json"
+  elif [ -f "/usr/local/share/libre-dt-lab/ort_gpu.json" ]; then
+    MANIFEST="/usr/local/share/libre-dt-lab/ort_gpu.json"
   else
     # No local copy found; fetch from GitHub so the script works when
     # downloaded and run directly from a raw GitHub URL.

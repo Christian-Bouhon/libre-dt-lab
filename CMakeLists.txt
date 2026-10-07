@@ -16,12 +16,17 @@ If(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
   message(FATAL_ERROR "In-source builds are not permitted. Make a separate folder for building:\nmkdir build; cd build; cmake ..\nBefore that, remove the files already created:\nrm -rf CMakeCache.txt CMakeFiles")
 endif(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
 
+# Capture an explicit version override passed on the command line
+# (e.g. -DPROJECT_VERSION=1.0.0, used by packagers). This must be done
+# before project(): project() itself defines PROJECT_VERSION, hence
+# testing DEFINED PROJECT_VERSION later would always succeed and shadow
+# the git-based version derivation below.
+set(_DT_VERSION_OVERRIDE "")
 if(DEFINED PROJECT_VERSION)
-  project(libre-dt-lab VERSION ${PROJECT_VERSION} LANGUAGES CXX C)
-else()
-  set(PROJECT_VERSION "1.0.0")
-  project(libre-dt-lab VERSION ${PROJECT_VERSION} LANGUAGES CXX C)
+  set(_DT_VERSION_OVERRIDE "${PROJECT_VERSION}")
 endif()
+
+project(libre-dt-lab VERSION 0.0.0 LANGUAGES CXX C)
 
 # Allow forcing the C/CPP compiler that is actually used during the compilation
 # to something other than what is used by the cmake run. This is useful when
@@ -48,10 +53,10 @@ include(FeatureSummary)
 # resolve symbolic links into real path?
 get_filename_component(CMAKE_INSTALL_BINDIR_ABS "${CMAKE_INSTALL_FULL_BINDIR}" REALPATH "${CMAKE_INSTALL_PREFIX}")
 # get relative paths specific to the system
-file(RELATIVE_PATH REL_BIN_TO_LIBDIR    ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_LIBDIR}/darktable")
+file(RELATIVE_PATH REL_BIN_TO_LIBDIR    ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_LIBDIR}/libre-dt-lab")
 file(RELATIVE_PATH REL_BIN_TO_SHAREDIR  ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_DATADIR}")
 file(RELATIVE_PATH REL_BIN_TO_LOCALEDIR ${CMAKE_INSTALL_FULL_BINDIR} "${CMAKE_INSTALL_FULL_LOCALEDIR}")
-set(REL_BIN_TO_DATADIR  "${REL_BIN_TO_SHAREDIR}/darktable")
+set(REL_BIN_TO_DATADIR  "${REL_BIN_TO_SHAREDIR}/libre-dt-lab")
 set(DARKTABLE_BINDIR    "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_BINDIR}")
 set(DARKTABLE_LIBDIR    "${DARKTABLE_BINDIR}/${REL_BIN_TO_LIBDIR}")
 set(DARKTABLE_SHAREDIR  "${DARKTABLE_BINDIR}/${REL_BIN_TO_SHAREDIR}")
@@ -181,10 +186,11 @@ function(generate_version_gen_c)
   )
 endfunction(generate_version_gen_c)
 
-if(DEFINED PROJECT_VERSION AND PROJECT_VERSION VERSION_GREATER 0)
-  #project version is defined by -D on the cmake command line
+if(NOT "${_DT_VERSION_OVERRIDE}" STREQUAL "")
+  # version is defined by -D on the cmake command line
   # only use that value, do not update it at make time
   # append short git hash for experimental builds
+  set(PROJECT_VERSION "${_DT_VERSION_OVERRIDE}")
   if(NOT SOURCE_PACKAGE)
     execute_process(
       COMMAND git rev-parse --short=7 HEAD
@@ -205,7 +211,7 @@ if(DEFINED PROJECT_VERSION AND PROJECT_VERSION VERSION_GREATER 0)
     endif()
   endif()
   generate_version_gen_c(${PROJECT_VERSION} "version override")
-else(DEFINED PROJECT_VERSION AND PROJECT_VERSION VERSION_GREATER 0)
+else()
   if(NOT SOURCE_PACKAGE) # i.e., a git checkout
     # this part is setting the corresponding CMake variable which gets used for example when creating a source package
     execute_process(
@@ -241,7 +247,7 @@ else(DEFINED PROJECT_VERSION AND PROJECT_VERSION VERSION_GREATER 0)
       )
     endif(NOT EXISTS ${CMAKE_SOURCE_DIR}/src/version_gen.c)
   endif(NOT SOURCE_PACKAGE)
-endif(DEFINED PROJECT_VERSION AND PROJECT_VERSION VERSION_GREATER 0)
+endif()
 
 # needed to make sure that version string is actually updated.
 add_custom_command(
@@ -278,14 +284,14 @@ message(STATUS "Looking for external programs")
 find_program(perl_BIN perl REQUIRED)
 message(STATUS "Found perl")
 
-# we need intltool-merge for org.libre-dt-lab.libre-dt-lab.desktop
+# we need intltool-merge for org.libredtlab.libredtlab.desktop
 find_program(intltool_merge_BIN intltool-merge REQUIRED)
 message(STATUS "Found intltool-merge")
 
-# we need desktop-file-validate to check org.libre-dt-lab.libre-dt-lab.desktop
+# we need desktop-file-validate to check org.libredtlab.libredtlab.desktop
 find_program(desktop_file_validate_BIN desktop-file-validate)
 if(${desktop_file_validate_BIN} STREQUAL "desktop_file_validate_BIN-NOTFOUND")
-  message(STATUS "Missing desktop-file-validate, problems in org.libre-dt-lab.libre-dt-lab.desktop might go unnoticed")
+  message(STATUS "Missing desktop-file-validate, problems in org.libredtlab.libredtlab.desktop might go unnoticed")
   set(VALIDATE_DESKTOP_FILE 0)
 else(${desktop_file_validate_BIN} STREQUAL "desktop_file_validate_BIN-NOTFOUND")
   message(STATUS "Found desktop-file-validate")

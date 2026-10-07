@@ -706,7 +706,7 @@ _("libre-dt-lab could not load `%s', switching to lighttable now.\n\n"
              "please check that the camera model that produced the image is supported in libre-dt-lab\n"
             "(list of supported cameras is at https://www.darktable.org/resources/camera-support/).\n"
             "if you are sure that the camera model is supported, please consider opening an issue\n"
-            "at https://github.com/darktable-org/darktable"),
+            "at https://github.com/Christian-Bouhon/libre-dt-lab"),
           dev->image_storage.filename);
         break;
       }

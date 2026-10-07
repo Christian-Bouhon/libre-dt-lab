@@ -11,14 +11,14 @@ if ((NOT WIN32) OR BUILD_MSYS2_INSTALL)
     install(TARGETS
                 darktable-noiseprofile
             DESTINATION
-                ${CMAKE_INSTALL_LIBEXECDIR}/darktable/tools
+                ${CMAKE_INSTALL_LIBEXECDIR}/libre-dt-lab/tools
             COMPONENT
                 DTApplication)
 
     install(PROGRAMS
                 darktable-gen-noiseprofile
             DESTINATION
-                ${CMAKE_INSTALL_LIBEXECDIR}/darktable/tools
+                ${CMAKE_INSTALL_LIBEXECDIR}/libre-dt-lab/tools
             COMPONENT
                 DTApplication)
 
@@ -26,7 +26,7 @@ if ((NOT WIN32) OR BUILD_MSYS2_INSTALL)
                 subr.sh
                 profiling-shot.xmp
             DESTINATION
-               ${CMAKE_INSTALL_LIBEXECDIR}/darktable/tools
+               ${CMAKE_INSTALL_LIBEXECDIR}/libre-dt-lab/tools
             COMPONENT
                 DTApplication)
 endif()

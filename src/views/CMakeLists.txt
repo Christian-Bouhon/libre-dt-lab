@@ -33,12 +33,12 @@ endforeach(module)
 
 foreach(module ${MODULES})
     if (WIN32)
-      _detach_debuginfo (${module} ${CMAKE_INSTALL_LIBDIR}/darktable/views)
+      _detach_debuginfo (${module} ${CMAKE_INSTALL_LIBDIR}/libre-dt-lab/views)
     else()
         set_target_properties(${module}
                               PROPERTIES
                               INSTALL_RPATH ${RPATH_ORIGIN}/..)
     endif(WIN32)
 
-    install(TARGETS ${module} DESTINATION ${CMAKE_INSTALL_LIBDIR}/darktable/views COMPONENT DTApplication)
+    install(TARGETS ${module} DESTINATION ${CMAKE_INSTALL_LIBDIR}/libre-dt-lab/views COMPONENT DTApplication)
 endforeach(module)

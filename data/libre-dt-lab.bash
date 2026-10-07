@@ -3,7 +3,7 @@ _dt_get_config_dir()
   local cur prev words
   _get_comp_words_by_ref -n ":" cur prev words
 
-  local configdir="${HOME}/.config/darktable"
+  local configdir="${HOME}/.config/libre-dt-lab"
   for (( i=1; i < ${#words[@]}; i=$(( ++i )) )); do
     local candidate="${words[i+1]}"
     __expand_tilde_by_ref candidate
@@ -20,7 +20,7 @@ _dt_get_config_file()
   local cur prev words
   _get_comp_words_by_ref -n ":" cur prev words
 
-  local configfile="${HOME}/.config/darktable/darktablerc"
+  local configfile="${HOME}/.config/libre-dt-lab/darktablerc"
   for (( i=1; i < ${#words[@]}; i=$(( ++i )) )); do
     local candidate="${words[i+1]}/darktablerc"
     __expand_tilde_by_ref candidate
@@ -32,7 +32,7 @@ _dt_get_config_file()
   local "$1" && _upvar $1 "${configfile}"
 } # _dt_get_config_file
 
-_darktable()
+_libre_dt_lab()
 {
   local cur prev words cword opts dopts
   _get_comp_words_by_ref -n ":" cur prev words cword
@@ -92,9 +92,9 @@ _darktable()
   fi
 
   return 0
-} # _darktable
+} # _libre_dt_lab
 
-_darktable_cli()
+_libre_dt_lab_cli()
 {
   local cur prev words cword opts dopts
   _get_comp_words_by_ref -n ":" cur prev words cword
@@ -104,10 +104,10 @@ _darktable_cli()
   # the possible options
   opts="--width --height --bpp --hq --upscale --style --style-overwrite --apply-custom-presets --verbose --version --core --help -h"
 
-  # if there was a --core earlier in the argument list then delegate to _darktable()
+  # if there was a --core earlier in the argument list then delegate to _libre_dt_lab()
   for (( i=1; i < ${cword}; i=$(( ++i )) )); do
     if [[ "${words[i]}" == "--core" ]]; then
-      _darktable
+      _libre_dt_lab
       return 0
     fi
   done
@@ -148,9 +148,9 @@ _darktable_cli()
   fi
 
   return 0
-} # _darktable_cli
+} # _libre_dt_lab_cli
 
-_darktable_chart()
+_libre_dt_lab_chart()
 {
   local cur prev words cword opts dopts
   _get_comp_words_by_ref -n ":" cur prev words cword
@@ -169,9 +169,9 @@ _darktable_chart()
   fi
 
   return 0
-} # _darktable_chart
+} # _libre_dt_lab_chart
 
-_darktable_generate_cache()
+_libre_dt_lab_generate_cache()
 {
   local cur prev words cword opts dopts
   _get_comp_words_by_ref -n ":" cur prev words cword
@@ -181,10 +181,10 @@ _darktable_generate_cache()
   # the possible options
   opts="-h --help --version --min-mip -m --max-mip --min-imgid --max-imgid --core"
 
-  # if there was a --core earlier in the argument list then delegate to _darktable()
+  # if there was a --core earlier in the argument list then delegate to _libre_dt_lab()
   for (( i=1; i < ${cword}; i=$(( ++i )) )); do
     if [[ "${words[i]}" == "--core" ]]; then
-      _darktable
+      _libre_dt_lab
       return 0
     fi
   done
@@ -196,14 +196,15 @@ _darktable_generate_cache()
       ;;
   esac
 
-  # darktable-generate-cache doesn't take filenames as arguments, so we can always suggest options
+  # libre-dt-lab-generate-cache doesn't take filenames as arguments, so we can always suggest options
   COMPREPLY=($(compgen -W "${opts}" -- ${cur}))
 
   return 0
-} # _darktable_generate_cache
+} # _libre_dt_lab_generate_cache
 
-complete -F _darktable darktable
-complete -F _darktable_chart darktable-chart
-complete -F _darktable_cli darktable-cli
-complete -F _darktable darktable-cltest
-complete -F _darktable_generate_cache darktable-generate-cache
+complete -F _libre_dt_lab libre-dt-lab
+complete -F _libre_dt_lab_chart libre-dt-lab-chart
+complete -F _libre_dt_lab_cli libre-dt-lab-cli
+complete -F _libre_dt_lab libre-dt-lab-cltest
+complete -F _libre_dt_lab libre-dt-lab-cmstest
+complete -F _libre_dt_lab_generate_cache libre-dt-lab-generate-cache

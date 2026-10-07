@@ -13,12 +13,12 @@ if ! command -v sqlite3 >/dev/null; then
     exit 1
 fi
 
-if pgrep -x "darktable" >/dev/null; then
-    echo "error: darktable is running, please exit first"
+if pgrep -x "libre-dt-lab" >/dev/null; then
+    echo "error: Libre DT-Lab is running, please exit first"
     exit 1
 fi
 
-configdir="${HOME}/.config/darktable"
+configdir="${HOME}/.config/libre-dt-lab"
 DBFILE="${configdir}/library.db"
 dryrun=1
 library=""

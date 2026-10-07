@@ -1036,7 +1036,7 @@ if(APPLE)
 endif(APPLE)
 if(NOT WIN32)
   # lib_darktable and ONNX Runtime are installed to the same directory
-  # (${CMAKE_INSTALL_LIBDIR}/darktable/) — set RPATH so the linker finds it
+  # (${CMAKE_INSTALL_LIBDIR}/libre-dt-lab/) — set RPATH so the linker finds it
   set_target_properties(lib_darktable PROPERTIES INSTALL_RPATH "${RPATH_ORIGIN}")
 endif()
 if(WIN32)
@@ -1073,7 +1073,7 @@ if(WIN32)
   # Windows needs its DLLs in the same directory as the executable to find them.
   install(TARGETS lib_darktable RUNTIME DESTINATION bin COMPONENT DTApplication)
 else(WIN32)
-  install(TARGETS lib_darktable DESTINATION ${CMAKE_INSTALL_LIBDIR}/darktable)
+  install(TARGETS lib_darktable DESTINATION ${CMAKE_INSTALL_LIBDIR}/libre-dt-lab)
 endif(WIN32)
 
 # Compile views modules

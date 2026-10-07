@@ -75,7 +75,7 @@ elseif(APPLE)
   file(GLOB _ORT_DYLIB "${ONNXRuntime_LIB_DIR}/libonnxruntime.*.dylib")
   if(_ORT_DYLIB)
     install(FILES ${_ORT_DYLIB}
-      DESTINATION ${CMAKE_INSTALL_LIBDIR}/darktable
+      DESTINATION ${CMAKE_INSTALL_LIBDIR}/libre-dt-lab
     )
   endif()
 elseif(WIN32)
@@ -91,7 +91,7 @@ elseif(UNIX)
   file(GLOB _ORT_SO "${ONNXRuntime_LIB_DIR}/libonnxruntime.so*")
   if(_ORT_SO)
     install(FILES ${_ORT_SO}
-      DESTINATION ${CMAKE_INSTALL_LIBDIR}/darktable
+      DESTINATION ${CMAKE_INSTALL_LIBDIR}/libre-dt-lab
     )
   endif()
 endif()
