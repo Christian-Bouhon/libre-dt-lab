@@ -52,6 +52,20 @@ FR:
 EN: `raw, photography, photo editor, darktable, non-destructive, opencl, aces`
 FR: `raw, photographie, éditeur photo, darktable, non destructif, opencl, aces`
 
+## Copyright and trademark info (optional, recommended)
+
+`Copyright © 2026 Christian-B. Based on darktable (https://www.darktable.org), distributed under the GNU General Public License v3.0.`
+
+## Additional license terms (optional)
+
+Leave empty. If you want to surface the GPL, you may use:
+
+`This application is free software distributed under the GNU General Public License version 3. Source code: https://github.com/Christian-Bouhon/libre-dt-lab`
+
+## Developed by (optional)
+
+`Christian B.` (or the studio/developer name you want displayed)
+
 ## Privacy policy URL
 
 `https://christian-bouhon.github.io/libre-dt-lab/privacy-policy.html`
