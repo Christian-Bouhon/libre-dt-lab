@@ -1,0 +1,23 @@
+What's new in version 1.0.0
+
+First Microsoft Store release of Libre DT-Lab, an independent fork of darktable.
+
+ORIGINAL MODULES
+• Tone & Texture: multi-scale tonal and contrast processing in scene-referred linear RGB.
+• 3DCF (3D Colorimetric Film): tone mapping based on the ACES 2.0 SSTS curve with a spectral film-gamut simulation.
+• ACES 2.0 Reference Rendering: faithful ACES 2.0 CAM DRT output transform.
+• Enhanced Basecurve with selectable tone-mapping engines.
+• Tone-mapping selector to switch the active tone mapper in one click.
+
+MASKS
+• New unified mask panel: the whole mask UI (shapes, operators, controls) is gathered in the module and can be detached into a floating window.
+• Per-shape list inside the module: each shape has its own opacity and invert, a combine operator, and can be renamed by double-clicking.
+• Reorder shapes with up/down arrows; the combine order is preserved.
+• Click a shape row to show only that shape (isolate it); click again to leave.
+• "Delete unused shapes" cleans up masks in one action, and unused forms are pruned from every history snapshot.
+• Path and brush masks: resize paths via rasterization/re-vectorization, smoother node editing (no unwanted snapping on release, no tangent smoothing across spikes), and better editing near or beyond the image borders.
+
+WORKFLOW
+• Native ".lab.xmp" sidecars for safe coexistence with darktable.
+• Detachable module panels.
+• Separate settings and cache directories.

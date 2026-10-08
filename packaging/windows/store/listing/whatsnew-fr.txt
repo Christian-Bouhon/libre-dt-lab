@@ -1,0 +1,23 @@
+Nouveautés de la version 1.0.0
+
+Première publication sur le Microsoft Store d'un fork indépendant de darktable.
+
+MODULES ORIGINAUX
+• Tone & Texture : traitement tonal et de contraste multi-échelles en espace linéaire scène-référencé.
+• 3DCF : mappage tonal basé sur la courbe ACES 2.0 SSTS et une simulation de gamut filmique spectrale.
+• ACES 2.0 Reference Rendering : transformée de sortie ACES 2.0 CAM DRT fidèle.
+• Basecurve enrichie avec moteurs de mappage tonal sélectionnables.
+• Sélecteur de tone mapper pour changer le moteur actif en un clic.
+
+MASQUES
+• Panneau de masques unifié : interface regroupée dans le module, détachable en fenêtre flottante.
+• Liste des formes : opacité et inversion par forme, opérateur de combinaison, renommage par double-clic.
+• Réorganisation des formes par flèches haut/bas ; l'ordre de combinaison est conservé.
+• Cliquez une forme pour l'isoler ; recliquez pour quitter.
+• « Supprimer les formes inutilisées » nettoie les masques ; les formes inutilisées sont élaguées de chaque instantané d'historique.
+• Masques chemin et pinceau : redimensionnement par rastérisation/re-vectorisation, édition plus fluide (pas d'aimantation au relâcher, pas de lissage des tangentes sur les pointes), meilleure édition près des bords.
+
+FLUX DE TRAVAIL
+• Sidecars natifs « .lab.xmp » (coexistence avec darktable).
+• Panneaux de modules détachables.
+• Répertoires de configuration et de cache séparés.

@@ -13,6 +13,11 @@ Full text:
 * English: `description-en.txt`
 * Français: `description-fr.txt`
 
+## What's new in this version
+
+* English: `whatsnew-en.txt`
+* Français: `whatsnew-fr.txt`
+
 ## Short text / tagline
 
 EN: `Open-source RAW photo workflow and editor — an experimental darktable fork.`
