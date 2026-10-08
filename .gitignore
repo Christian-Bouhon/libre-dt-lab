@@ -1,5 +1,7 @@
 build*/
 obj*/
+/AppDir/
+/dist/
 *~
 *.pot
 *.mo
