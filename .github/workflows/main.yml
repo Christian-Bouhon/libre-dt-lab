@@ -179,7 +179,7 @@ jobs:
           cd src
           SKIP_BUILD=1 bash tools/portable-package-build-script.sh
       - name: Upload portable packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: artifact-portable-${{ runner.arch }}
           path: |
@@ -208,7 +208,7 @@ jobs:
           echo "Fichiers prêts pour l'upload :"
           ls -lh
       - name: Package upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           path: ${{ github.workspace }}/src/build/*.AppImage
           name: artifact-appimage-${{ runner.arch }}
@@ -383,7 +383,7 @@ jobs:
             -LayoutDir "${env:BUILD_DIR}\msix-layout" `
             -OutputFile "${env:BUILD_DIR}\libre-dt-lab-${env:VERSION}-win64.msix"
       - name: Package upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           path: |
             ${{ env.BUILD_DIR }}/libre-dt-lab-*.exe
@@ -477,7 +477,7 @@ jobs:
         run: |
           ./src/packaging/macosx/4_make_hb_libre-dt-lab_dmg.sh
       - name: Package upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           path: ${{ env.INSTALL_PREFIX }}/libre-dt-lab-*.dmg
           name: artifact-macos-${{ runner.arch }}
