@@ -24,6 +24,7 @@ set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "iso-codes, ocl-icd-libopencl1 | libopencl1")
 set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "graphicsmagick, dcraw, libimage-exiftool-perl, ghostscript, gnuplot")
+set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${CMAKE_SOURCE_DIR}/packaging/linux/postinst;${CMAKE_SOURCE_DIR}/packaging/linux/postrm")
 
 # RPM package metadata. CPACK_RPM_PACKAGE_AUTOREQ computes the library
 # dependencies from the built binaries.
@@ -35,6 +36,8 @@ set(CPACK_RPM_PACKAGE_AUTOREQ ON)
 set(CPACK_RPM_PACKAGE_REQUIRES "iso-codes")
 set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
 set(CPACK_RPM_PACKAGE_RELEASE 1)
+set(CPACK_RPM_POST_INSTALL_SCRIPT_FILE "${CMAKE_SOURCE_DIR}/packaging/linux/postinst")
+set(CPACK_RPM_POST_UNINSTALL_SCRIPT_FILE "${CMAKE_SOURCE_DIR}/packaging/linux/postrm")
 
 set(CPACK_SOURCE_IGNORE_FILES
     "/.gitignore"
