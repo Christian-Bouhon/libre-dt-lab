@@ -27,9 +27,10 @@ Secrets and variables → Actions → Variables):
 |---|---|
 | `MSIX_IDENTITY_NAME` | Package/Identity `Name` from Partner Center |
 | `MSIX_PUBLISHER` | Package/Identity `Publisher` (`CN=...`) from Partner Center |
+| `MSIX_PUBLISHER_DISPLAY_NAME` | Package/Properties `PublisherDisplayName` from Partner Center |
 
-If unset, defaults (`LibreDTLab`, `CN=Libre DT-Lab`) are used so that a package
-can still be built for local testing / sideloading.
+If unset, defaults (`LibreDTLab`, `CN=Libre DT-Lab`, `Libre DT-Lab`) are used so
+that a package can still be built for local testing / sideloading.
 
 ## Local build
 
@@ -57,7 +58,7 @@ Developer Mode (`Add-AppxPackage -Path .\libre-dt-lab.msix`).
    *Product management → Product identity*:
    - *Package/Identity/Name* → repo variable `MSIX_IDENTITY_NAME`
    - *Package/Identity/Publisher* → repo variable `MSIX_PUBLISHER`
-   - *Package/Properties/PublisherDisplayName* (already `Libre DT-Lab`)
+   - *Package/Properties/PublisherDisplayName* → repo variable `MSIX_PUBLISHER_DISPLAY_NAME`
 3. **Store listing**: description, category, at least one screenshot
    (see `../store/screenshots/`), store logos, support/website, and the
    **privacy policy URL**:

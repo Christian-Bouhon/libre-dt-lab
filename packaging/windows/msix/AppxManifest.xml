@@ -24,7 +24,7 @@
 
   <Properties>
     <DisplayName>Libre DT-Lab</DisplayName>
-    <PublisherDisplayName>Libre DT-Lab</PublisherDisplayName>
+    <PublisherDisplayName>__PUBLISHER_DISPLAY_NAME__</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <Description>Libre DT-Lab, an experimental fork of darktable, a virtual lighttable and darkroom for photographers.</Description>
   </Properties>
