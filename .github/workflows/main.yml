@@ -235,9 +235,9 @@ jobs:
       CMAKE_BUILD_TYPE: ${{ matrix.btype }}
       TARGET: ${{ matrix.target }}
       GENERATOR: ${{ matrix.generator }}
-      MSIX_IDENTITY_NAME: ${{ vars.MSIX_IDENTITY_NAME || 'LibreDTLab' }}
-      MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER || 'CN=Libre DT-Lab' }}
-      MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.MSIX_PUBLISHER_DISPLAY_NAME || 'Libre DT-Lab' }}
+      MSIX_IDENTITY_NAME: ${{ vars.MSIX_IDENTITY_NAME || 'Christian-B.Libre-DT-Lab' }}
+      MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER || 'CN=9866BDE7-54D1-43A5-ACDF-81A156743408' }}
+      MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.MSIX_PUBLISHER_DISPLAY_NAME || 'Christian-B' }}
     steps:
       - uses: msys2/setup-msys2@v2
         with:

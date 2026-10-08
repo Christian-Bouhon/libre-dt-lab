@@ -23,14 +23,20 @@ The resulting `.msix` is uploaded with the other Windows artifacts.
 The package identity is taken from GitHub **repository variables** (Settings →
 Secrets and variables → Actions → Variables):
 
-| Variable | Meaning |
+| Variable | Default (reserved app) |
 |---|---|
-| `MSIX_IDENTITY_NAME` | Package/Identity `Name` from Partner Center |
-| `MSIX_PUBLISHER` | Package/Identity `Publisher` (`CN=...`) from Partner Center |
-| `MSIX_PUBLISHER_DISPLAY_NAME` | Package/Properties `PublisherDisplayName` from Partner Center |
+| `MSIX_IDENTITY_NAME` | `Christian-B.Libre-DT-Lab` |
+| `MSIX_PUBLISHER` | `CN=9866BDE7-54D1-43A5-ACDF-81A156743408` |
+| `MSIX_PUBLISHER_DISPLAY_NAME` | `Christian-B` |
 
-If unset, defaults (`LibreDTLab`, `CN=Libre DT-Lab`, `Libre DT-Lab`) are used so
-that a package can still be built for local testing / sideloading.
+These defaults are the identity reserved in Partner Center, so the CI produces
+a Store-ready package out of the box. Override the repository variables
+(Settings → Secrets and variables → Actions → Variables) if the identity
+changes.
+
+Reserved app:
+* Store URL: <https://apps.microsoft.com/detail/9P0P95CR18JP>
+* Store ID: `9P0P95CR18JP`
 
 ## Local build
 
@@ -40,7 +46,7 @@ packaging/windows/msix/make-layout.sh \
   /opt/libre-dt-lab ./msix-layout \
   data/pixmaps/256x256/libre-dt-lab.png \
   packaging/windows/msix/AppxManifest.xml \
-  1.0.0.0 x64 LibreDTLab "CN=Libre DT-Lab" \
+  1.0.0.0 x64 "Christian-B.Libre-DT-Lab" "CN=9866BDE7-54D1-43A5-ACDF-81A156743408" \
   packaging/windows/msix/file-associations.txt
 
 # from PowerShell
