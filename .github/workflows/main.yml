@@ -521,6 +521,10 @@ jobs:
         run: cmake --build build -- -j$(nproc)
       - name: Build .deb
         run: cd build && cpack -G DEB
+      - name: Rename .deb with the distro label (avoid collisions in the release)
+        run: |
+          cd build
+          for f in *.deb; do mv "$f" "${f%.deb}.${{ matrix.label }}.deb"; done
       - name: Package upload
         uses: actions/upload-artifact@v4
         with:
@@ -567,6 +571,10 @@ jobs:
         run: cmake --build build -- -j$(nproc)
       - name: Build .rpm
         run: cd build && cpack -G RPM
+      - name: Rename .rpm with the distro label (avoid collisions in the release)
+        run: |
+          cd build
+          for f in *.rpm; do mv "$f" "${f%.rpm}.${{ matrix.label }}.rpm"; done
       - name: Package upload
         uses: actions/upload-artifact@v4
         with:
