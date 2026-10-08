@@ -25,9 +25,10 @@ Secrets and variables → Actions → Variables):
 
 | Variable | Default (reserved app) |
 |---|---|
-| `MSIX_IDENTITY_NAME` | `Christian-B.Libre-DT-Lab` |
+| `MSIX_IDENTITY_NAME` | `Christian-B.6348823D232E9` |
 | `MSIX_PUBLISHER` | `CN=9866BDE7-54D1-43A5-ACDF-81A156743408` |
 | `MSIX_PUBLISHER_DISPLAY_NAME` | `Christian-B` |
+| `MSIX_DISPLAY_NAME` | `Libre DT-Lab` |
 
 These defaults are the identity reserved in Partner Center, so the CI produces
 a Store-ready package out of the box. Override the repository variables
@@ -35,8 +36,8 @@ a Store-ready package out of the box. Override the repository variables
 changes.
 
 Reserved app:
-* Store URL: <https://apps.microsoft.com/detail/9P0P95CR18JP>
-* Store ID: `9P0P95CR18JP`
+* Store URL: <https://apps.microsoft.com/detail/9P6L69MWW85C>
+* Store ID: `9P6L69MWW85C`
 
 ## Local build
 
@@ -46,7 +47,7 @@ packaging/windows/msix/make-layout.sh \
   /opt/libre-dt-lab ./msix-layout \
   data/pixmaps/256x256/libre-dt-lab.png \
   packaging/windows/msix/AppxManifest.xml \
-  1.0.0.0 x64 "Christian-B.Libre-DT-Lab" "CN=9866BDE7-54D1-43A5-ACDF-81A156743408" \
+  1.0.0.0 x64 "Christian-B.6348823D232E9" "CN=9866BDE7-54D1-43A5-ACDF-81A156743408" \
   packaging/windows/msix/file-associations.txt
 
 # from PowerShell

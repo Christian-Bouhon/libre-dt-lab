@@ -23,7 +23,7 @@
     ProcessorArchitecture="__ARCH__" />
 
   <Properties>
-    <DisplayName>Libre DT-Lab</DisplayName>
+    <DisplayName>__DISPLAY_NAME__</DisplayName>
     <PublisherDisplayName>__PUBLISHER_DISPLAY_NAME__</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <Description>Libre DT-Lab, an experimental fork of darktable, a virtual lighttable and darkroom for photographers.</Description>
@@ -40,7 +40,7 @@
   <Applications>
     <Application Id="LibreDTLab" Executable="bin\libre-dt-lab.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-        DisplayName="Libre DT-Lab"
+        DisplayName="__DISPLAY_NAME__"
         Description="Virtual lighttable and darkroom for photographers"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"

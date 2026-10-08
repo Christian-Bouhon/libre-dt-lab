@@ -25,6 +25,8 @@ FILE_ASSOC="${9:-}"
 
 # Publisher display name must match the developer account (see README).
 PUBLISHER_DISPLAY_NAME="${MSIX_PUBLISHER_DISPLAY_NAME:-Libre DT-Lab}"
+# Display name must match a reserved app name (see README).
+DISPLAY_NAME="${MSIX_DISPLAY_NAME:-Libre DT-Lab}"
 
 if [ ! -f "$ICON" ]; then
   echo "icon not found: $ICON" >&2
@@ -54,6 +56,7 @@ gen 620x300   "$LAYOUT/Assets/SplashScreen.png"
 sed -e "s|__IDENTITY_NAME__|${IDENTITY}|g" \
     -e "s|__PUBLISHER__|${PUBLISHER}|g" \
     -e "s|__PUBLISHER_DISPLAY_NAME__|${PUBLISHER_DISPLAY_NAME}|g" \
+    -e "s|__DISPLAY_NAME__|${DISPLAY_NAME}|g" \
     -e "s|__VERSION__|${MSIX_VERSION}|g" \
     -e "s|__ARCH__|${ARCH}|g" \
     "$MANIFEST" > "$LAYOUT/AppxManifest.xml.tmp"
