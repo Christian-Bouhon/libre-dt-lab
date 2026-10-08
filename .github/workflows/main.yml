@@ -7,6 +7,9 @@ on:
   push:
     branches:
       - main
+      - '1.0.*'
+    tags:
+      - 'libre-*'
 
 permissions:
   contents: read
@@ -532,9 +535,8 @@ jobs:
           removeArtifacts: true  # we don't want to pile up old artifacts in the Main release
           tag: Main
           prerelease: true
-          # We don't want a stable release that is in the process of being prepared
-          # and not yet ready for publication to be visible
-          draft: ${{ startsWith(github.ref, 'refs/tags/') }}
+          # The rolling "Main" release is always published (it is a prerelease).
+          draft: false
           name: 'Libre DT-Lab "experimental build" ${{ env.RELEASE_DATE }}'
           # Please do not modify the body text by adding line breaks in paragraphs, as this text should display well on screens of different widths
           body: |
