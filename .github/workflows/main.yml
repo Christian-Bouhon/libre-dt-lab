@@ -426,6 +426,10 @@ jobs:
       - name: Install Homebrew Dependencies
         run: |
           brew update > /dev/null || true
+          # The GitHub macOS image links openssl@1.1, which conflicts with the
+          # openssl@3 pulled in by subversion and makes the `brew link` step
+          # fail. Unlink the old one first.
+          brew unlink openssl@1.1 2>/dev/null || true
           brew install svn
           cd src/.ci
           export HOMEBREW_NO_INSTALL_UPGRADE=1
