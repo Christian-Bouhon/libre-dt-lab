@@ -1,0 +1,53 @@
+Libre DT-Lab — flux de travail et développement RAW
+Un laboratoire expérimental et open source construit sur darktable.
+
+Libre DT-Lab est un logiciel libre de développement RAW et de flux de travail
+photo, non destructif, destiné aux photographes. C'est un fork expérimental de
+darktable qui explore de nouvelles approches du flux de travail photographique
+et propose des modules originaux introuvables ailleurs. Tout s'exécute en local
+sur votre ordinateur : pas de compte, pas de télémétrie, pas de pistage.
+
+POURQUOI LIBRE DT-LAB
+• Développement RAW non destructif, avec table lumineuse zoomable et chambre noire.
+• Gestion complète des couleurs (ICC/LCMS2), traitement en virgule flottante 32 bits.
+• Accélération GPU via OpenCL.
+• Libre et open source (GNU GPL v3).
+
+MODULES ORIGINAUX
+• Tone & Texture — traitement tonal et de contraste multi-échelles en espace
+  linéaire scène-référencé avec prise en charge grand gamut (Rec.2020) :
+  contraste global centré sur le gris moyen, contraste local pyramidal du micro
+  à l'étendu, réglages des ombres et hautes lumières évalués sur une base basse
+  fréquence, et contraste chromatique (colorimétrique et chaud/froid).
+• 3DCF (3D Colorimetric Film) — mappage tonal global fondé sur la courbe
+  ACES 2.0 SSTS combinée à une simulation de gamut filmique spectrale préservant
+  la teinte perçue. Cibles d'affichage : sRGB, Rec.2020, Display P3, ProPhoto RGB,
+  Adobe RGB, avec looks colorimétriques et implémentations CPU / OpenCL.
+• ACES 2.0 Reference Rendering — implémentation fidèle de la transformée de
+  sortie ACES 2.0 CAM DRT, indépendante de l'espace de travail.
+• Basecurve enrichie — la courbe classique, plus des moteurs de mappage tonal
+  sélectionnables (kinematic, dynamic, cinematic DRT) avec protection des hautes
+  lumières basée sur JzAzBz.
+• Sélecteur de mappage tonal — changez le tone mapper actif (filmic, sigmoid,
+  AgX, basecurve, 3DCF, ACES 2.0) en un clic.
+• Modules détachables — sortez n'importe quel panneau de module dans sa propre fenêtre.
+
+CONÇU POUR COEXISTER AVEC DARKTABLE
+• Format annexe natif : Libre DT-Lab écrit « image.ext.lab.xmp » et, en
+  l'absence de « .lab.xmp », lit le « .xmp » standard. darktable n'est jamais
+  affecté par les retouches de Libre DT-Lab.
+• Répertoires de configuration et de cache séparés, indépendants de darktable.
+
+FORMATS PRIS EN CHARGE
+Fichiers RAW et images : DNG, CR2, CR3, CRW, NEF, NRW, ARW, SR2, SRF, RAF, ORF,
+RW2, PEF, MRW, KDC, DCR, ainsi que JPEG, PNG, TIFF, WebP, AVIF, HEIF/HEIC,
+JPEG XL, EXR et plus.
+
+IMPORTANT
+Logiciel expérimental. À utiliser avec prudence, de préférence avec une
+bibliothèque séparée. C'est un laboratoire pour tester de nouvelles idées, pas
+une version officielle de darktable.
+
+Politique de confidentialité : https://christian-bouhon.github.io/libre-dt-lab/privacy-policy.fr.html
+Code source : https://github.com/Christian-Bouhon/libre-dt-lab
+Basé sur darktable (https://www.darktable.org), GPLv3.

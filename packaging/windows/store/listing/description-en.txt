@@ -1,0 +1,51 @@
+Libre DT-Lab — RAW photo workflow and editor
+An experimental, open-source laboratory built on darktable.
+
+Libre DT-Lab is a free, non-destructive RAW developer and photo workflow
+application for photographers. It is an experimental fork of darktable that
+explores new approaches to the photographic workflow and ships original
+modules you will not find elsewhere. Everything runs locally on your computer:
+no account, no telemetry, no trackers.
+
+WHY LIBRE DT-LAB
+• Non-destructive RAW development with a zoomable lighttable and a powerful darkroom.
+• Fully colour-managed (ICC/LCMS2), 32-bit floating point processing.
+• OpenCL GPU acceleration.
+• Free and open source (GNU GPL v3).
+
+ORIGINAL MODULES
+• Tone & Texture — multi-scale tonal and contrast processing in scene-referred
+  linear RGB with wide-gamut (Rec.2020) support: global contrast centred on
+  middle grey, pyramidal local contrast from micro to extended, shadow and
+  highlight controls evaluated on a low-frequency base, and chromatic contrast
+  (colorimetric and warm/cool).
+• 3DCF (3D Colorimetric Film) — global tone mapping built on the ACES 2.0 SSTS
+  curve combined with a spectral film-gamut simulation that preserves perceived
+  hue. Display targets: sRGB, Rec.2020, Display P3, ProPhoto RGB, Adobe RGB,
+  with selectable colour looks and CPU / OpenCL implementations.
+• ACES 2.0 Reference Rendering — a faithful implementation of the ACES 2.0
+  CAM DRT output transform, working-space agnostic.
+• Enhanced Basecurve — the classic curve plus selectable tone-mapping engines
+  (kinematic, dynamic, cinematic DRT) with JzAzBz-based highlight protection.
+• Tone-mapping selector — switch the active tone mapper (filmic, sigmoid, AgX,
+  basecurve, 3DCF, ACES 2.0) in a single click.
+• Detachable modules — move any module panel into its own window.
+
+DESIGNED TO COEXIST WITH DARKTABLE
+• Native sidecar format: Libre DT-Lab writes "image.ext.lab.xmp" and, when no
+  ".lab.xmp" exists, falls back to reading the standard ".xmp". darktable is
+  never affected by Libre DT-Lab edits.
+• Separate settings and cache directories, independent from darktable.
+
+SUPPORTED FORMATS
+RAW and image files including DNG, CR2, CR3, CRW, NEF, NRW, ARW, SR2, SRF, RAF,
+ORF, RW2, PEF, MRW, KDC, DCR, plus JPEG, PNG, TIFF, WebP, AVIF, HEIF/HEIC,
+JPEG XL, EXR and more.
+
+PLEASE NOTE
+This is experimental software. Use it with care and prefer a separate library.
+It is a laboratory for testing new ideas, not an official darktable release.
+
+Privacy policy: https://christian-bouhon.github.io/libre-dt-lab/privacy-policy.html
+Source code: https://github.com/Christian-Bouhon/libre-dt-lab
+Based on darktable (https://www.darktable.org), GPLv3.
