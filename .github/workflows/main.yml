@@ -488,6 +488,7 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
           apt-get -y install --no-install-recommends git ca-certificates
+          git config --global --add safe.directory '*'
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -543,7 +544,9 @@ jobs:
     steps:
       # a container job needs git present before actions/checkout can run
       - name: Bootstrap git
-        run: dnf -y install git
+        run: |
+          dnf -y install git
+          git config --global --add safe.directory '*'
       - name: Checkout
         uses: actions/checkout@v4
         with:
