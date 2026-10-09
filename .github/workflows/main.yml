@@ -494,6 +494,11 @@ jobs:
     needs: [AppImage, Windows, macOS]
     # Publish whatever built successfully, even if one platform failed
     if: always()
+    # Serialize publish steps so concurrent runs (e.g. main + 1.0.0 for the
+    # same commit) cannot wipe each other's assets from the rolling release.
+    concurrency:
+      group: main-release
+      cancel-in-progress: false
     steps:
       - name: Checkout master to update 'Main' tag
         if: github.ref_name == 'master' # will be true only for Main builds
@@ -519,6 +524,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Download artifacts
         uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
       - name: Get current date and set as environment variable
         run: |
           # Format date as YYYYMMDD
@@ -550,11 +558,8 @@ jobs:
 
              The Windows package `*-win64.exe` requires at least Windows 10. The `*-woa64.exe` package requires at least "Windows 11 for ARM devices".
 
-            The macOS package `*-arm64.dmg` requires at least macOS 14.0 (Sonoma). The `*-x86_64.dmg` package requires at least macOS 15.0 (Sequoia).
+            The macOS package `*-arm64.dmg` requires at least macOS 15.0 (Sequoia).
 
             __Please help us improve Darktable by reporting any issues you encounter!__ :wink:
           artifacts: |
-            artifact-appimage-*/*
-            artifact-portable-*/*
-            artifact-windows-*/*
-            artifact-macos-*/*
+            dist/*

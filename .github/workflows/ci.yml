@@ -9,6 +9,8 @@ on:
     branches:
       - master
       - darktable-**
+      - main
+      - '1.0.*'
     paths-ignore:
         - "po/**"
         - "packaging/**"
@@ -26,6 +28,8 @@ on:
   pull_request:
     branches:
       - master
+      - main
+      - '1.0.*'
     paths-ignore:
         - "po/**"
         - "packaging/**"
@@ -48,7 +52,7 @@ permissions:
 jobs:
 
   Linux:
-    if: github.repository == 'darktable-org/darktable' || github.event_name == 'workflow_dispatch'
+    if: github.repository == 'darktable-org/darktable' || github.repository == 'Christian-Bouhon/libre-dt-lab' || github.event_name == 'workflow_dispatch'
     name: Linux_${{ matrix.distro }}_${{ matrix.compiler.compiler }}_${{ matrix.btype }}
     runs-on: ubuntu-latest
     container:
@@ -199,7 +203,7 @@ jobs:
                  --conf plugins/lighttable/export/iccintent=0
 
   Windows:
-    if: github.repository == 'darktable-org/darktable' || github.event_name == 'workflow_dispatch'
+    if: github.repository == 'darktable-org/darktable' || github.repository == 'Christian-Bouhon/libre-dt-lab' || github.event_name == 'workflow_dispatch'
     name: Windows_${{ matrix.msystem }}_${{ matrix.btype }}
     runs-on: windows-latest
     strategy:
@@ -314,7 +318,7 @@ jobs:
                  --conf plugins/lighttable/export/iccintent=0
 
   macOS:
-    if: github.repository == 'darktable-org/darktable' || github.event_name == 'workflow_dispatch'
+    if: github.repository == 'darktable-org/darktable' || github.repository == 'Christian-Bouhon/libre-dt-lab' || github.event_name == 'workflow_dispatch'
     name: macOS_${{ matrix.build.os }}_${{ matrix.compiler.compiler }}_${{ matrix.build.xcode }}_${{ matrix.btype }}
     runs-on: ${{ matrix.build.os }}
     strategy:
