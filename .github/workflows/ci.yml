@@ -92,7 +92,7 @@ jobs:
       CMAKE_BUILD_TYPE: ${{ matrix.btype }}
       GENERATOR: ${{ matrix.generator }}
       TARGET: ${{ matrix.target }}
-      DARKTABLE_CLI: ${{ github.workspace }}/install/bin/darktable-cli
+      LIBRE_DT_LAB_CLI: ${{ github.workspace }}/install/bin/libre-dt-lab-cli
       DEBIAN_FRONTEND: noninteractive
     steps:
       - name: Select fallback Ubuntu mirror if requested
@@ -191,11 +191,11 @@ jobs:
           ./src/.ci/ci-script.sh;
       - name: Check if it runs
         run: |
-          ${INSTALL_PREFIX}/bin/darktable --version || true
-          ${INSTALL_PREFIX}/bin/darktable-cli \
+          ${INSTALL_PREFIX}/bin/libre-dt-lab --version || true
+          ${INSTALL_PREFIX}/bin/libre-dt-lab-cli \
                  --width 1000 --height 1000 \
                  --hq true --apply-custom-presets false \
-                 "${SRC_DIR}/data/pixmaps/256x256/darktable.png" \
+                 "${SRC_DIR}/data/pixmaps/256x256/libre-dt-lab.png" \
                  output.png \
                  --core --disable-opencl --conf host_memory_limit=8192 \
                  --conf worker_threads=4 -t 4 \
@@ -304,13 +304,13 @@ jobs:
           $(cygpath ${SRC_DIR})/.ci/ci-script.sh
       - name: Check if it runs
         run: |
-          $(cygpath ${INSTALL_PREFIX})/bin/darktable.exe --version || true
-          $(cygpath ${INSTALL_PREFIX})/bin/darktable-cli.exe --version || true
+          $(cygpath ${INSTALL_PREFIX})/bin/libre-dt-lab.exe --version || true
+          $(cygpath ${INSTALL_PREFIX})/bin/libre-dt-lab-cli.exe --version || true
           echo "Testing RUN!"
-          $(cygpath ${INSTALL_PREFIX})/bin/darktable-cli.exe \
+          $(cygpath ${INSTALL_PREFIX})/bin/libre-dt-lab-cli.exe \
                  --width 1000 --height 1000 \
                  --hq true --apply-custom-presets false \
-                 $(cygpath ${SRC_DIR})/data/pixmaps/256x256/darktable.png \
+                 $(cygpath ${SRC_DIR})/data/pixmaps/256x256/libre-dt-lab.png \
                  output.png \
                  --core --disable-opencl --conf host_memory_limit=8192 \
                  --conf worker_threads=4 -t 4 \
@@ -372,11 +372,11 @@ jobs:
           ./src/.ci/ci-script.sh;
       - name: Check if it runs
         run: |
-          ${INSTALL_PREFIX}/bin/darktable --version || true
-          ${INSTALL_PREFIX}/bin/darktable-cli \
+          ${INSTALL_PREFIX}/bin/libre-dt-lab --version || true
+          ${INSTALL_PREFIX}/bin/libre-dt-lab-cli \
                  --width 1000 --height 1000 \
                  --hq true --apply-custom-presets false \
-                 "${SRC_DIR}/data/pixmaps/256x256/darktable.png" \
+                 "${SRC_DIR}/data/pixmaps/256x256/libre-dt-lab.png" \
                  output.png \
                  --core --disable-opencl --conf host_memory_limit=8192 \
                  --conf worker_threads=4 -t 4 \
