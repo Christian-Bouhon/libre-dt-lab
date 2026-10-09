@@ -540,11 +540,12 @@ jobs:
         with:
           allowUpdates: true     # required to allow Main release updates
           removeArtifacts: true  # we don't want to pile up old artifacts in the Main release
-          tag: Main
-          prerelease: true
-          # The rolling "Main" release is always published (it is a prerelease).
+          # Dev pushes (main) update the rolling "Main" prerelease; tagged
+          # builds (libre-X.Y.Z) create a dedicated stable release.
+          tag: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'Main' }}
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
           draft: false
-          name: 'Libre DT-Lab "experimental build" ${{ env.RELEASE_DATE }}'
+          name: ${{ startsWith(github.ref, 'refs/tags/') && format('Libre DT-Lab {0}', github.ref_name) || format('Libre DT-Lab "experimental build" {0}', env.RELEASE_DATE) }}
           # Please do not modify the body text by adding line breaks in paragraphs, as this text should display well on screens of different widths
           body: |
             This is a experimental version of the darktable raw development software. This fork serves as a development lab for exploring new approaches to the photographic workflow. It includes specific modules and modifications to existing tools that are not part of the official release.
