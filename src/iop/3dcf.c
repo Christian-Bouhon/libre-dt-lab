@@ -85,7 +85,7 @@
 #include <stdio.h>
 #include <string.h>
 
-DT_MODULE_INTROSPECTION(10, dt_iop_3dcf_params_t)
+DT_MODULE_INTROSPECTION(11, dt_iop_3dcf_params_t)
 
 /* Type definitions for the ACES 2.0 SSTS pipeline context.
    spectral_tone_data.c and spectral_tone_pipeline.c have been merged into
@@ -159,6 +159,12 @@ typedef struct dt_iop_3dcf_params_t
   float chroma_x_pivot;        // $MIN: 25.0 $MAX: 75.0 $DEFAULT: 50.0 $STEP: 0.1 $DESCRIPTION: "X-axis contrast pivot"
   float chroma_z_contrast;     // $MIN: 0.0 $MAX: 10.0 $DEFAULT: 0.0 $STEP: 0.01 $DESCRIPTION: "Z-axis chroma contrast"
   float chroma_z_pivot;        // $MIN: 25.0 $MAX: 75.0 $DEFAULT: 50.0 $STEP: 0.1 $DESCRIPTION: "Z-axis contrast pivot"
+
+  /* Monochrome green filter — subtracted equally from the X (warm/red) and Z
+     (cool/blue) monochrome filter strengths, so it brightens green tones while
+     darkening red and blue. Shares the chroma axes' scale and ST_MONO_FILTER_K
+     factor; mono-only (ignored in colour looks). Default 0.0 = no-op. */
+  float mono_green;            // $MIN: 0.0 $MAX: 10.0 $DEFAULT: 0.0 $STEP: 0.01 $DESCRIPTION: "green filter"
 } dt_iop_3dcf_params_t;
 
 /* SSTS (ACES 2.0 Single-Stage Tone Scale) precomputed parameters */
@@ -310,6 +316,9 @@ typedef struct dt_iop_3dcf_gui_data_t
   GtkWidget *chroma_x_pivot;
   GtkWidget *chroma_z_contrast;
   GtkWidget *chroma_z_pivot;
+  /* Monochrome-only green filter (mono_green parameter); visible only in the
+     monochrome look, independent of the X/Z padlock. */
+  GtkWidget *mono_green;
   /* Transient slider (not a module parameter) shown only while the X and Z
      axes are locked together; pans the shared contrast between the two axes. */
   GtkWidget *chroma_balance;
@@ -2010,8 +2019,12 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
     ctx->chroma_z_inv_range = inv_range_z;
     ctx->chroma_z_r05 = (1.0f / (1.0f + expf(-gz * (0.5f - sz))) - sig0z) * inv_range_z;
 
-    ctx->mono_x_gain = mono ? ST_MONO_FILTER_K * raw_x : 0.0f;
-    ctx->mono_z_gain = mono ? ST_MONO_FILTER_K * raw_z : 0.0f;
+    /* Monochrome green filter: shares the chroma axes' scale and factor and is
+       subtracted equally from X (warm/red) and Z (cool/blue), so a positive
+       value acts as a green filter (brightens green, darkens red and blue). */
+    const float t_green = mono ? ST_MONO_FILTER_K * p->mono_green : 0.0f;
+    ctx->mono_x_gain = mono ? ST_MONO_FILTER_K * raw_x - t_green : 0.0f;
+    ctx->mono_z_gain = mono ? ST_MONO_FILTER_K * raw_z - t_green : 0.0f;
   }
 
   /* Output gamut protection matrices from pre-computed lookup table */
@@ -2317,6 +2330,22 @@ int legacy_params(dt_iop_module_t *self,
     *new_params = new_p;
     *new_params_size = sizeof(dt_iop_3dcf_params_t);
     *new_version = 10;
+    return 0;
+  }
+
+  // v10 → v11: added mono_green (monochrome green filter). Defaults to 0, so
+  // existing edits/presets keep their exact rendering.
+  if(old_version == 10)
+  {
+    const dt_iop_3dcf_params_t *old = old_params;
+    dt_iop_3dcf_params_t *new_p = malloc(sizeof(dt_iop_3dcf_params_t));
+
+    *new_p = *old;
+    new_p->mono_green = 0.0f;
+
+    *new_params = new_p;
+    *new_params_size = sizeof(dt_iop_3dcf_params_t);
+    *new_version = 11;
     return 0;
   }
 
@@ -3075,14 +3104,14 @@ static void _chroma_set_visibility(dt_iop_module_t *self, const gboolean linked)
        strength, and the warm/cool balance splits it between the two axes.
        Unlocking turns X and Z into independent warm/red and cool/blue filters. */
     dt_bauhaus_widget_set_label(g->chroma_x_contrast, NULL,
-                                linked ? _("filter strength") : _("warm (red) filter"));
+                                linked ? _("warm/cool filter strength") : _("warm (red) filter"));
     dt_bauhaus_widget_set_label(g->chroma_z_contrast, NULL, _("cool (blue) filter"));
     dt_bauhaus_widget_set_label(g->chroma_x_pivot, NULL, _("warm filter neutral point"));
     dt_bauhaus_widget_set_label(g->chroma_z_pivot, NULL, _("cool filter neutral point"));
     dt_bauhaus_widget_set_label(g->chroma_balance, NULL, _("warm/cool balance"));
     gtk_widget_set_tooltip_text(g->chroma_x_contrast,
       linked
-        ? _("Monochrome filter strength applied to both the warm (red) and \n"
+        ? _("Monochrome warm/cool filter strength applied to both the warm (red) and \n"
             "cool (blue) CIE chroma axes before grey extraction. 0 % = neutral \n"
             "panchromatic grey; the X/Z balance splits the effect between the \n"
             "two axes. Unlock the padlock to drive warm and cool independently.")
@@ -3151,6 +3180,8 @@ static void _mono_set_visibility(dt_iop_3dcf_gui_data_t *g, const gboolean mono,
   gtk_widget_set_visible(g->chromatic_boost, !mono);
   gtk_widget_set_visible(g->hl_hue_shift, !mono);
   gtk_widget_set_visible(g->look_opacity, !mono && look_active);
+  /* The green filter only makes sense in the monochrome look. */
+  gtk_widget_set_visible(g->mono_green, mono);
 }
 
 void gui_update(dt_iop_module_t *self)
@@ -3174,6 +3205,7 @@ void gui_update(dt_iop_module_t *self)
   dt_bauhaus_slider_set(g->chroma_x_pivot, p->chroma_x_pivot);
   dt_bauhaus_slider_set(g->chroma_z_contrast, p->chroma_z_contrast);
   dt_bauhaus_slider_set(g->chroma_z_pivot, p->chroma_z_pivot);
+  dt_bauhaus_slider_set(g->mono_green, p->mono_green);
   /* The X/Z balance is transient: recompute it from the stored contrasts. */
   dt_bauhaus_slider_set(g->chroma_balance,
                         _chroma_balance_from_xz(p->chroma_x_contrast, p->chroma_z_contrast));
@@ -4208,6 +4240,18 @@ void gui_init(dt_iop_module_t *self)
       "symmetric position (0% = symmetric, the stored 50%)."));
   g_signal_connect_after(G_OBJECT(g->chroma_z_pivot), "value-changed",
                          G_CALLBACK(_chroma_z_changed), self);
+
+  /* Green filter (monochrome only): shares the chroma axes' scale and is shown
+     only in the monochrome look (see _mono_set_visibility). Displayed as a
+     percentage of the axis chroma range, like the X/Z contrast sliders. */
+  g->mono_green = dt_bauhaus_slider_from_params(self, "mono_green");
+  dt_bauhaus_slider_set_factor(g->mono_green, 10.0f);
+  dt_bauhaus_slider_set_format(g->mono_green, " %");
+  dt_bauhaus_slider_set_digits(g->mono_green, 1);
+  gtk_widget_set_tooltip_text(g->mono_green,
+    _("Green filter for the monochrome look: subtracts an equal amount from the \n"
+      "warm (red) X and cool (blue) Z filter responses, brightening green tones \n"
+      "while darkening red and blue. 0 % = off (neutral panchromatic grey)."));
 
   /* Abney rotation, kept at the very bottom of the color section. */
   g->hl_hue_shift = dt_bauhaus_slider_from_params(self, "hl_hue_shift");

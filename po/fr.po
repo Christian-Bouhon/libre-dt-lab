@@ -19537,8 +19537,8 @@ msgstr ""
 
 #. Monochrome look: X/Z filter labels and tooltips
 #: ../src/iop/3dcf.c:2999
-msgid "filter strength"
-msgstr "Force du filtre"
+msgid "warm/cool filter strength"
+msgstr "Force du filtre chaud/froid"
 
 #: ../src/iop/3dcf.c:2999
 msgid "warm (red) filter"
@@ -19547,6 +19547,10 @@ msgstr "Filtre chaud (rouge)"
 #: ../src/iop/3dcf.c:3000
 msgid "cool (blue) filter"
 msgstr "Filtre froid (bleu)"
+
+#: ../src/iop/3dcf.c:3000
+msgid "green filter"
+msgstr "Filtre vert"
 
 #: ../src/iop/3dcf.c:3001
 msgid "warm filter neutral point"
@@ -19562,12 +19566,12 @@ msgstr "Équilibre chaud/froid"
 
 #: ../src/iop/3dcf.c:3006
 msgid ""
-"Monochrome filter strength applied to both the warm (red) and \n"
+"Monochrome warm/cool filter strength applied to both the warm (red) and \n"
 "cool (blue) CIE chroma axes before grey extraction. 0 % = neutral \n"
 "panchromatic grey; the X/Z balance splits the effect between the \n"
 "two axes. Unlock the padlock to drive warm and cool independently."
 msgstr ""
-"Force du filtre monochrome appliquée aux deux axes de chromaticité CIE \n"
+"Force du filtre chaud/froid appliquée aux deux axes de chromaticité CIE \n"
 "chaud (rouge) et froid (bleu), avant l'extraction du gris. 0 % = gris \n"
 "panchromatique neutre ; l'équilibre X/Z répartit l'effet entre les deux \n"
 "axes. Déverrouillez le cadenas pour piloter le chaud et le froid "
@@ -19593,6 +19597,17 @@ msgstr ""
 "Filtre monochrome agissant sur l'axe de chromaticité CIE Z froid (bleu) \n"
 "avant l'extraction du gris. 0 % = neutre ; des valeurs plus élevées \n"
 "éclaircissent les tons froids/bleus et assombrissent les tons chauds/rouges."
+
+#: ../src/iop/3dcf.c:3014
+msgid ""
+"Green filter for the monochrome look: subtracts an equal amount from the \n"
+"warm (red) X and cool (blue) Z filter responses, brightening green tones \n"
+"while darkening red and blue. 0 % = off (neutral panchromatic grey)."
+msgstr ""
+"Filtre vert pour le rendu monochrome : retranche une quantité égale aux \n"
+"réponses des filtres chaud (rouge) X et froid (bleu) Z, ce qui éclaircit \n"
+"les tons verts et assombrit les rouges et les bleus. 0 % = inactif (gris \n"
+"panchromatique neutre)."
 
 #: ../src/iop/3dcf.c:3018
 msgid ""
