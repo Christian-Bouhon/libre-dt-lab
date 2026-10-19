@@ -1434,12 +1434,13 @@ static inline float st_chroma_norm(float h)
 #define ST_MONO_FILTER_K       0.1f
 /* The chroma-contrast sigmoid was designed for a chromaticity bounded by the
    spectral gamut; used directly as a luminance modulator its slope can exceed
-   1, amplifying gradients (banding) and clipping the grey. In mono the sigmoid
-   gain is therefore capped (limits the slope) and its normalized output is
-   blended toward identity (halves the pivot authority), while a separate,
-   uncapped gain keeps the filter strength the user expects. */
+   1 and amplify gradients (banding). Since mono turns chroma noise into
+   luminance noise, the sigmoid gain is capped in mono to bound that slope,
+   while a separate, uncapped gain keeps the filter strength the user expects.
+   The curve itself is shared with colour (no mono-specific blend): the
+   neutral-preserving renormalization below already makes the achromatic point
+   a fixed point for any pivot, so no extra damping is needed. */
 #define ST_MONO_SIGMOID_GMAX   4.0f   /* max sigmoid gain in mono (colour: 10) */
-#define ST_MONO_SIGMOID_BLEND  0.5f   /* 0 = full sigmoid, 1 = identity */
 /* Soft limit of the signed grey offset, relative to Y, so the filter can never
    crush the grey to black or blow it to white. */
 #define ST_MONO_OFFSET_FRAC    0.6f
@@ -1468,7 +1469,7 @@ static inline void st_chroma_contrast_sigmoid(
   const float r05_x,
   const float gain_z, const float shift_z, const float sig0_z, const float inv_range_z,
   const float r05_z,
-  const float blend, const float *spectral_boundary)
+  const float *spectral_boundary)
 {
   if(y_tm <= 0.0f) return;
   if(!isfinite(*x_tm) || !isfinite(*z_tm)) return;
@@ -1527,12 +1528,8 @@ static inline void st_chroma_contrast_sigmoid(
                        ? 0.5f * r_w / fmaxf(r05_z, 1e-4f)
                        : 0.5f + 0.5f * (r_w - r05_z) / fmaxf(1.0f - r05_z, 1e-4f);
 
-  /* blend = 1 in colour mode (only the renormalization applies). In mono it is
-     < 1: the curve is pulled toward identity to halve the pivot authority and
-     keep the response from becoming a luminance cliff. The neutral point is a
-     fixed point for any blend (u01 = 0.5 -> rn = 0.5). */
-  const float u01_new = u01 + blend * (rn_u - u01);
-  const float w01_new = w01 + blend * (rn_w - w01);
+  const float u01_new = rn_u;
+  const float w01_new = rn_w;
 
   const float u_new = 2.0f * u01_new - 1.0f;
   const float w_new = 2.0f * w01_new - 1.0f;
@@ -1709,7 +1706,6 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
                               ctx->chroma_z_gain, ctx->chroma_z_shift,
                               ctx->chroma_z_sig0, ctx->chroma_z_inv_range,
                               ctx->chroma_z_r05,
-                              ctx->monochrome ? ST_MONO_SIGMOID_BLEND : 1.0f,
                               ctx->spectral_boundary);
 
   /* Step 6: Spectral gamut — film-like chromaticity roll-off in CIE xy */

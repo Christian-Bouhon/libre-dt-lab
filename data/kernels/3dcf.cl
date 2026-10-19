@@ -280,7 +280,6 @@ static inline float st_chroma_norm(float h)
  * Must match the ST_MONO_* constants in src/iop/3dcf.c. */
 #define ST_MONO_FILTER_K       0.1f
 #define ST_MONO_SIGMOID_GMAX   4.0f   /* max sigmoid gain in mono (colour: 10) */
-#define ST_MONO_SIGMOID_BLEND  0.5f   /* 0 = full sigmoid, 1 = identity */
 #define ST_MONO_OFFSET_FRAC    0.6f
 
 /* Independent sigmoid contrast on the CIE-xz offset from white, applied
@@ -294,7 +293,7 @@ static inline void st_chroma_contrast_sigmoid(
   const float r05_x,
   const float gain_z, const float shift_z, const float sig0_z, const float inv_range_z,
   const float r05_z,
-  const float blend, const float *spectral_boundary)
+  const float *spectral_boundary)
 {
   if(y_tm <= 0.0f) return;
   if(!isfinite(*x_tm) || !isfinite(*z_tm)) return;
@@ -348,11 +347,8 @@ static inline void st_chroma_contrast_sigmoid(
                        ? 0.5f * r_w / fmax(r05_z, 1e-4f)
                        : 0.5f + 0.5f * (r_w - r05_z) / fmax(1.0f - r05_z, 1e-4f);
 
-  /* blend = 1 in colour mode (only the renormalization applies). In mono it is
-   * < 1: pull the curve toward identity to tame the pivot authority. The
-   * neutral point is a fixed point for any blend. Mirrors the CPU code. */
-  const float u01_new = u01 + blend * (rn_u - u01);
-  const float w01_new = w01 + blend * (rn_w - w01);
+  const float u01_new = rn_u;
+  const float w01_new = rn_w;
 
   const float u_new = 2.0f * u01_new - 1.0f;
   const float w_new = 2.0f * w01_new - 1.0f;
@@ -499,7 +495,6 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
                               p->chroma_z_gain, p->chroma_z_shift,
                               p->chroma_z_sig0, p->chroma_z_inv_range,
                               p->chroma_z_r05,
-                              p->monochrome ? ST_MONO_SIGMOID_BLEND : 1.0f,
                               p->spectral_boundary);
 
   /* Step 6: spectral gamut roll-off */
