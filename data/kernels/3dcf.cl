@@ -70,10 +70,14 @@ typedef struct dt_st_cl_params_t
   float chroma_x_shift;
   float chroma_x_sig0;
   float chroma_x_inv_range;
+  float chroma_x_r05;        // normalized sigmoid response at the neutral point (0.5)
   float chroma_z_gain;
   float chroma_z_shift;
   float chroma_z_sig0;
   float chroma_z_inv_range;
+  float chroma_z_r05;
+  float mono_x_gain;         // uncapped monochrome filter strength (0 = colour look)
+  float mono_z_gain;
   int   look_idx;            // 0 = no look, 1..10 = color_look_mat is active
   int   gamut_enable;
   int   monochrome;          // 1 = project chroma-modulated XYZ onto grey (R=G=B)
@@ -273,8 +277,11 @@ static inline float st_chroma_norm(float h)
 
 /* Monochrome look: gain applied to the signed CIE X/Z chroma offsets when the
  * axes are interpreted as optical coloured filters before grey extraction.
- * Must match ST_MONO_FILTER_K in src/iop/3dcf.c. */
-#define ST_MONO_FILTER_K 0.1f
+ * Must match the ST_MONO_* constants in src/iop/3dcf.c. */
+#define ST_MONO_FILTER_K       0.1f
+#define ST_MONO_SIGMOID_GMAX   4.0f   /* max sigmoid gain in mono (colour: 10) */
+#define ST_MONO_SIGMOID_BLEND  0.5f   /* 0 = full sigmoid, 1 = identity */
+#define ST_MONO_OFFSET_FRAC    0.6f
 
 /* Independent sigmoid contrast on the CIE-xz offset from white, applied
  * BEFORE st_spectral_gamut() so its knee compression absorbs any excursion
@@ -284,8 +291,10 @@ static inline void st_chroma_contrast_sigmoid(
   float *x_tm, float *z_tm, const float y_tm,
   const float white_x_ratio, const float white_z_ratio,
   const float gain_x, const float shift_x, const float sig0_x, const float inv_range_x,
+  const float r05_x,
   const float gain_z, const float shift_z, const float sig0_z, const float inv_range_z,
-  const float *spectral_boundary)
+  const float r05_z,
+  const float blend, const float *spectral_boundary)
 {
   if(y_tm <= 0.0f) return;
   if(!isfinite(*x_tm) || !isfinite(*z_tm)) return;
@@ -325,8 +334,25 @@ static inline void st_chroma_contrast_sigmoid(
   const float sig_u = 1.0f / (1.0f + exp(-gain_x * (u01 - shift_x)));
   const float sig_w = 1.0f / (1.0f + exp(-gain_z * (w01 - shift_z)));
 
-  const float u01_new = (sig_u - sig0_x) * inv_range_x;
-  const float w01_new = (sig_w - sig0_z) * inv_range_z;
+  /* Normalized sigmoid response, r(0)=0 and r(1)=1. */
+  const float r_u = (sig_u - sig0_x) * inv_range_x;
+  const float r_w = (sig_w - sig0_z) * inv_range_z;
+
+  /* Neutral-preserving renormalization: force r(0.5)=0.5 so the achromatic
+   * point is a fixed point whatever the pivot (see the CPU code for the full
+   * rationale). Piecewise-linear about 0.5, keeps 0->0, 1->1 and monotonic. */
+  const float rn_u = (u01 <= 0.5f)
+                       ? 0.5f * r_u / fmax(r05_x, 1e-4f)
+                       : 0.5f + 0.5f * (r_u - r05_x) / fmax(1.0f - r05_x, 1e-4f);
+  const float rn_w = (w01 <= 0.5f)
+                       ? 0.5f * r_w / fmax(r05_z, 1e-4f)
+                       : 0.5f + 0.5f * (r_w - r05_z) / fmax(1.0f - r05_z, 1e-4f);
+
+  /* blend = 1 in colour mode (only the renormalization applies). In mono it is
+   * < 1: pull the curve toward identity to tame the pivot authority. The
+   * neutral point is a fixed point for any blend. Mirrors the CPU code. */
+  const float u01_new = u01 + blend * (rn_u - u01);
+  const float w01_new = w01 + blend * (rn_w - w01);
 
   const float u_new = 2.0f * u01_new - 1.0f;
   const float w_new = 2.0f * w01_new - 1.0f;
@@ -469,8 +495,11 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
                               p->white_chroma_x, p->white_chroma_z,
                               p->chroma_x_gain, p->chroma_x_shift,
                               p->chroma_x_sig0, p->chroma_x_inv_range,
+                              p->chroma_x_r05,
                               p->chroma_z_gain, p->chroma_z_shift,
                               p->chroma_z_sig0, p->chroma_z_inv_range,
+                              p->chroma_z_r05,
+                              p->monochrome ? ST_MONO_SIGMOID_BLEND : 1.0f,
                               p->spectral_boundary);
 
   /* Step 6: spectral gamut roll-off */
@@ -487,9 +516,22 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
   {
     const float x_off = x_tm - p->white_chroma_x * y_tm;
     const float z_off = z_tm - p->white_chroma_z * y_tm;
-    const float gx = ST_MONO_FILTER_K * p->chroma_x_gain;
-    const float gz = ST_MONO_FILTER_K * p->chroma_z_gain;
-    float grey = fmax(y_tm + gx * x_off + gz * z_off, 0.0f);
+    float off = p->mono_x_gain * x_off + p->mono_z_gain * z_off;
+
+    /* Soft shoulder bounds the signed offset to ~1.5*lim (same shape as the
+     * spectral gamut roll-off), so the grey never crushes to black or blows
+     * to white. Mirrors the CPU code. */
+    const float lim = ST_MONO_OFFSET_FRAC * y_tm;
+    const float a = fabs(off);
+    if(a > lim)
+    {
+      const float b = fmax(lim * 0.5f, 1e-6f);
+      const float e = a - lim;
+      off = copysign(lim + e / (e + b) * b, off);
+    }
+
+    float grey = fmax(y_tm + off, 0.0f);
+    grey = isfinite(grey) ? grey : 0.0f;
 
     const float y_exposed = y_abs * p->exposure_factor;
     const float w = st_desat_weight(y_exposed, p->hl_desat, p->hl_desat_threshold);

@@ -207,10 +207,17 @@ typedef struct
   float chroma_x_shift;        // = chroma_x_pivot / 100
   float chroma_x_sig0;         // = sigmoid(0, gain, shift)
   float chroma_x_inv_range;    // = 1 / (sigmoid(1, gain, shift) - sig0)
+  float chroma_x_r05;          // normalized sigmoid response at the neutral point (0.5)
   float chroma_z_gain;
   float chroma_z_shift;
   float chroma_z_sig0;
   float chroma_z_inv_range;
+  float chroma_z_r05;
+
+  /* Monochrome filter strength (uncapped, unlike chroma_x/z_gain which is
+     capped for the sigmoid in mono). 0 when the look is not monochrome. */
+  float mono_x_gain;
+  float mono_z_gain;
 
   /* Monochrome look active: skip all chroma-only operators and project the
      chroma-modulated XYZ onto a single grey level R=G=B (see
@@ -266,10 +273,14 @@ typedef struct dt_st_cl_params_t
   float chroma_x_shift;
   float chroma_x_sig0;
   float chroma_x_inv_range;
+  float chroma_x_r05;
   float chroma_z_gain;
   float chroma_z_shift;
   float chroma_z_sig0;
   float chroma_z_inv_range;
+  float chroma_z_r05;
+  float mono_x_gain;
+  float mono_z_gain;
   int   look_idx;
   int   gamut_enable;
   int   monochrome;
@@ -1420,7 +1431,18 @@ static inline float st_chroma_norm(float h)
    axes are interpreted as optical coloured filters (red/blue) before grey
    extraction. Scaled so that a full X/Z chroma contrast (10 = 100%) gives a
    strong filter while 0 (neutral) leaves plain panchromatic luminance. */
-#define ST_MONO_FILTER_K 0.1f
+#define ST_MONO_FILTER_K       0.1f
+/* The chroma-contrast sigmoid was designed for a chromaticity bounded by the
+   spectral gamut; used directly as a luminance modulator its slope can exceed
+   1, amplifying gradients (banding) and clipping the grey. In mono the sigmoid
+   gain is therefore capped (limits the slope) and its normalized output is
+   blended toward identity (halves the pivot authority), while a separate,
+   uncapped gain keeps the filter strength the user expects. */
+#define ST_MONO_SIGMOID_GMAX   4.0f   /* max sigmoid gain in mono (colour: 10) */
+#define ST_MONO_SIGMOID_BLEND  0.5f   /* 0 = full sigmoid, 1 = identity */
+/* Soft limit of the signed grey offset, relative to Y, so the filter can never
+   crush the grey to black or blow it to white. */
+#define ST_MONO_OFFSET_FRAC    0.6f
 
 /* Mean of st_reach_from_table(h)/st_chroma_norm(h) over h=0..359, precomputed
    offline from the table above, used to normalise the shape factor below to
@@ -1443,8 +1465,10 @@ static inline void st_chroma_contrast_sigmoid(
   float *x_tm, float *z_tm, const float y_tm,
   const float white_x_ratio, const float white_z_ratio,
   const float gain_x, const float shift_x, const float sig0_x, const float inv_range_x,
+  const float r05_x,
   const float gain_z, const float shift_z, const float sig0_z, const float inv_range_z,
-  const float *spectral_boundary)
+  const float r05_z,
+  const float blend, const float *spectral_boundary)
 {
   if(y_tm <= 0.0f) return;
   if(!isfinite(*x_tm) || !isfinite(*z_tm)) return;
@@ -1486,8 +1510,29 @@ static inline void st_chroma_contrast_sigmoid(
   const float sig_u = 1.0f / (1.0f + expf(-gain_x * (u01 - shift_x)));
   const float sig_w = 1.0f / (1.0f + expf(-gain_z * (w01 - shift_z)));
 
-  const float u01_new = (sig_u - sig0_x) * inv_range_x;
-  const float w01_new = (sig_w - sig0_z) * inv_range_z;
+  /* Normalized sigmoid response, r(0)=0 and r(1)=1. */
+  const float r_u = (sig_u - sig0_x) * inv_range_x;
+  const float r_w = (sig_w - sig0_z) * inv_range_z;
+
+  /* Neutral-preserving renormalization: force r(0.5)=0.5 so the achromatic
+     point is a fixed point whatever the pivot. Without this, a pivot != 50%
+     shifts the neutral point by (r(0.5)-0.5)*2*max_dist, which depends on the
+     hue (max_dist is hue-dependent) and is discontinuous near grey where the
+     hue is ill-defined -- the cause of colour/grey blotches in near-neutral
+     areas. Piecewise-linear about 0.5, keeps 0->0, 1->1 and monotonicity. */
+  const float rn_u = (u01 <= 0.5f)
+                       ? 0.5f * r_u / fmaxf(r05_x, 1e-4f)
+                       : 0.5f + 0.5f * (r_u - r05_x) / fmaxf(1.0f - r05_x, 1e-4f);
+  const float rn_w = (w01 <= 0.5f)
+                       ? 0.5f * r_w / fmaxf(r05_z, 1e-4f)
+                       : 0.5f + 0.5f * (r_w - r05_z) / fmaxf(1.0f - r05_z, 1e-4f);
+
+  /* blend = 1 in colour mode (only the renormalization applies). In mono it is
+     < 1: the curve is pulled toward identity to halve the pivot authority and
+     keep the response from becoming a luminance cliff. The neutral point is a
+     fixed point for any blend (u01 = 0.5 -> rn = 0.5). */
+  const float u01_new = u01 + blend * (rn_u - u01);
+  const float w01_new = w01 + blend * (rn_w - w01);
 
   const float u_new = 2.0f * u01_new - 1.0f;
   const float w_new = 2.0f * w01_new - 1.0f;
@@ -1660,8 +1705,11 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
                               ctx->white_chroma_x, ctx->white_chroma_z,
                               ctx->chroma_x_gain, ctx->chroma_x_shift,
                               ctx->chroma_x_sig0, ctx->chroma_x_inv_range,
+                              ctx->chroma_x_r05,
                               ctx->chroma_z_gain, ctx->chroma_z_shift,
                               ctx->chroma_z_sig0, ctx->chroma_z_inv_range,
+                              ctx->chroma_z_r05,
+                              ctx->monochrome ? ST_MONO_SIGMOID_BLEND : 1.0f,
                               ctx->spectral_boundary);
 
   /* Step 6: Spectral gamut — film-like chromaticity roll-off in CIE xy */
@@ -1683,9 +1731,22 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
   {
     const float x_off = x_tm - ctx->white_chroma_x * y_tm;
     const float z_off = z_tm - ctx->white_chroma_z * y_tm;
-    const float gx = ST_MONO_FILTER_K * ctx->chroma_x_gain;
-    const float gz = ST_MONO_FILTER_K * ctx->chroma_z_gain;
-    float grey = fmaxf(y_tm + gx * x_off + gz * z_off, 0.0f);
+    float off = ctx->mono_x_gain * x_off + ctx->mono_z_gain * z_off;
+
+    /* Soft shoulder (same shape as the spectral gamut roll-off): bounds the
+       signed offset to ~1.5*lim so the grey can never be crushed to black or
+       blown to white, which prevents posterisation and clipping halos. */
+    const float lim = ST_MONO_OFFSET_FRAC * y_tm;
+    const float a_off = fabsf(off);
+    if(a_off > lim)
+    {
+      const float soft = fmaxf(lim * 0.5f, 1e-6f);
+      const float over = a_off - lim;
+      off = copysignf(lim + over / (over + soft) * soft, off);
+    }
+
+    float grey = fmaxf(y_tm + off, 0.0f);
+    grey = isfinite(grey) ? grey : 0.0f;
 
     const float y_exposed = y_abs * ctx->exposure_factor;
     const float w = st_desat_weight(y_exposed, ctx->hl_desat, ctx->hl_desat_threshold);
@@ -1864,6 +1925,10 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
 static void st_compute_context(dt_iop_3dcf_params_t *p,
                                 dt_st_context_t *ctx)
 {
+  /* Monochrome look, known up-front: it changes how the chroma sigmoid is
+     precomputed (gain capped) and arms the separate filter strength. */
+  const int mono = (p->color_look == DT_ST_LOOK_MONOMACHROME) ? 1 : 0;
+
   /* Exposure factor from independent EV slider (ACES 2.0 parity) */
   ctx->exposure_factor = exp2f(p->input_exposure);
 
@@ -1920,23 +1985,37 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
      gain guarded away from 0 to avoid division by zero in the endpoint
      normalization; as gain -> 0 the normalized curve tends to identity. */
   {
-    const float gx = fmaxf(p->chroma_x_contrast, 1e-4f);
+    /* Raw contrast drives the monochrome filter strength (uncapped). The
+       sigmoid gain itself is capped in mono to keep its slope tame. */
+    const float raw_x = fmaxf(p->chroma_x_contrast, 1e-4f);
+    const float raw_z = fmaxf(p->chroma_z_contrast, 1e-4f);
+    const float gx = mono ? fminf(raw_x, ST_MONO_SIGMOID_GMAX) : raw_x;
+    const float gz = mono ? fminf(raw_z, ST_MONO_SIGMOID_GMAX) : raw_z;
+
     const float sx = p->chroma_x_pivot / 100.0f;
     const float sig0x = 1.0f / (1.0f + expf(-gx * (0.0f - sx)));
     const float sig1x = 1.0f / (1.0f + expf(-gx * (1.0f - sx)));
+    const float inv_range_x = 1.0f / fmaxf(sig1x - sig0x, 1e-6f);
     ctx->chroma_x_gain = gx;
     ctx->chroma_x_shift = sx;
     ctx->chroma_x_sig0 = sig0x;
-    ctx->chroma_x_inv_range = 1.0f / fmaxf(sig1x - sig0x, 1e-6f);
+    ctx->chroma_x_inv_range = inv_range_x;
+    /* Response at the neutral point (u01 = 0.5); used to renormalize the curve
+       so neutral stays neutral whatever the pivot (see the kernel/CPU sigmoid). */
+    ctx->chroma_x_r05 = (1.0f / (1.0f + expf(-gx * (0.5f - sx))) - sig0x) * inv_range_x;
 
-    const float gz = fmaxf(p->chroma_z_contrast, 1e-4f);
     const float sz = p->chroma_z_pivot / 100.0f;
     const float sig0z = 1.0f / (1.0f + expf(-gz * (0.0f - sz)));
     const float sig1z = 1.0f / (1.0f + expf(-gz * (1.0f - sz)));
+    const float inv_range_z = 1.0f / fmaxf(sig1z - sig0z, 1e-6f);
     ctx->chroma_z_gain = gz;
     ctx->chroma_z_shift = sz;
     ctx->chroma_z_sig0 = sig0z;
-    ctx->chroma_z_inv_range = 1.0f / fmaxf(sig1z - sig0z, 1e-6f);
+    ctx->chroma_z_inv_range = inv_range_z;
+    ctx->chroma_z_r05 = (1.0f / (1.0f + expf(-gz * (0.5f - sz))) - sig0z) * inv_range_z;
+
+    ctx->mono_x_gain = mono ? ST_MONO_FILTER_K * raw_x : 0.0f;
+    ctx->mono_z_gain = mono ? ST_MONO_FILTER_K * raw_z : 0.0f;
   }
 
   /* Output gamut protection matrices from pre-computed lookup table */
@@ -1989,7 +2068,7 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
   /* Monochrome look. Selected through the color_look combobox (value 11).
      Forces the pipeline to skip all chroma-only operators and project the
      chroma-modulated XYZ onto a single grey level (see dt_st_pipeline_eval). */
-  ctx->monochrome = (p->color_look == DT_ST_LOOK_MONOMACHROME) ? 1 : 0;
+  ctx->monochrome = mono;
 
   /* Initialize ACES 2.0 SSTS from peak_luminance (%, 0% = 200 nits) */
   {
@@ -2694,10 +2773,14 @@ static void st_fill_cl_params(const dt_iop_3dcf_data_t *d,
   clp->chroma_x_shift     = ctx->chroma_x_shift;
   clp->chroma_x_sig0      = ctx->chroma_x_sig0;
   clp->chroma_x_inv_range = ctx->chroma_x_inv_range;
+  clp->chroma_x_r05       = ctx->chroma_x_r05;
   clp->chroma_z_gain      = ctx->chroma_z_gain;
   clp->chroma_z_shift     = ctx->chroma_z_shift;
   clp->chroma_z_sig0      = ctx->chroma_z_sig0;
   clp->chroma_z_inv_range = ctx->chroma_z_inv_range;
+  clp->chroma_z_r05       = ctx->chroma_z_r05;
+  clp->mono_x_gain = ctx->mono_x_gain;
+  clp->mono_z_gain = ctx->mono_z_gain;
 
   /* Same clamp as process(): color_looks has 11 entries (0..10) */
   const int look_idx = (d->params.color_look > 0 && d->params.color_look <= 10)
