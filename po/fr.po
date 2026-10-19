@@ -19535,6 +19535,91 @@ msgstr ""
 "rapport à la\n"
 "position symétrique (0 % = symétrique, 50 % = valeur enregistrée)."
 
+#. Monochrome look: X/Z filter labels and tooltips
+#: ../src/iop/3dcf.c:2999
+msgid "filter strength"
+msgstr "Force du filtre"
+
+#: ../src/iop/3dcf.c:2999
+msgid "warm (red) filter"
+msgstr "Filtre chaud (rouge)"
+
+#: ../src/iop/3dcf.c:3000
+msgid "cool (blue) filter"
+msgstr "Filtre froid (bleu)"
+
+#: ../src/iop/3dcf.c:3001
+msgid "warm filter neutral point"
+msgstr "Point neutre du filtre chaud"
+
+#: ../src/iop/3dcf.c:3002
+msgid "cool filter neutral point"
+msgstr "Point neutre du filtre froid"
+
+#: ../src/iop/3dcf.c:3003
+msgid "warm/cool balance"
+msgstr "Équilibre chaud/froid"
+
+#: ../src/iop/3dcf.c:3006
+msgid ""
+"Monochrome filter strength applied to both the warm (red) and \n"
+"cool (blue) CIE chroma axes before grey extraction. 0 % = neutral \n"
+"panchromatic grey; the X/Z balance splits the effect between the \n"
+"two axes. Unlock the padlock to drive warm and cool independently."
+msgstr ""
+"Force du filtre monochrome appliquée aux deux axes de chromaticité CIE \n"
+"chaud (rouge) et froid (bleu), avant l'extraction du gris. 0 % = gris \n"
+"panchromatique neutre ; l'équilibre X/Z répartit l'effet entre les deux \n"
+"axes. Déverrouillez le cadenas pour piloter le chaud et le froid "
+"indépendamment."
+
+#: ../src/iop/3dcf.c:3010
+msgid ""
+"Monochrome filter acting on the warm (red) CIE X chroma axis before \n"
+"grey extraction. 0 % = neutral panchromatic grey; higher values \n"
+"brighten warm/red tones and darken cool/blue ones."
+msgstr ""
+"Filtre monochrome agissant sur l'axe de chromaticité CIE X chaud (rouge) \n"
+"avant l'extraction du gris. 0 % = gris panchromatique neutre ; des valeurs \n"
+"plus élevées éclaircissent les tons chauds/rouges et assombrissent les \n"
+"tons froids/bleus."
+
+#: ../src/iop/3dcf.c:3014
+msgid ""
+"Monochrome filter acting on the cool (blue) CIE Z chroma axis before \n"
+"grey extraction. 0 % = neutral; higher values brighten cool/blue tones \n"
+"and darken warm/red ones."
+msgstr ""
+"Filtre monochrome agissant sur l'axe de chromaticité CIE Z froid (bleu) \n"
+"avant l'extraction du gris. 0 % = neutre ; des valeurs plus élevées \n"
+"éclaircissent les tons froids/bleus et assombrissent les tons chauds/rouges."
+
+#: ../src/iop/3dcf.c:3018
+msgid ""
+"Neutral point of the warm (red) filter response, relative to the \n"
+"symmetric position (0% = symmetric)."
+msgstr ""
+"Point neutre de la réponse du filtre chaud (rouge), par rapport à la \n"
+"position symétrique (0 % = symétrique)."
+
+#: ../src/iop/3dcf.c:3021
+msgid ""
+"Neutral point of the cool (blue) filter response, relative to the \n"
+"symmetric position (0% = symmetric)."
+msgstr ""
+"Point neutre de la réponse du filtre froid (bleu), par rapport à la \n"
+"position symétrique (0 % = symétrique)."
+
+#: ../src/iop/3dcf.c:3024
+msgid ""
+"Share the monochrome filter strength between the warm (red) and \n"
+"cool (blue) axes. 0% = symmetric. Only available while the padlock \n"
+"locks X and Z together."
+msgstr ""
+"Répartit la force du filtre monochrome entre les axes chaud (rouge) et \n"
+"froid (bleu). 0 % = symétrique. Disponible uniquement lorsque le cadenas \n"
+"verrouille X et Z ensemble."
+
 #: ../src/iop/3dcf.c:4003
 msgid ""
 "Abney rotation in highlights, tied to the SSTS compression ratio. \n"

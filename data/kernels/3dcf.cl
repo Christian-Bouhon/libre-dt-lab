@@ -76,6 +76,7 @@ typedef struct dt_st_cl_params_t
   float chroma_z_inv_range;
   int   look_idx;            // 0 = no look, 1..10 = color_look_mat is active
   int   gamut_enable;
+  int   monochrome;          // 1 = project chroma-modulated XYZ onto grey (R=G=B)
 } dt_st_cl_params_t;
 
 /* ACES 2.0 SSTS forward — Michaelis-Menten segment + flare compensation */
@@ -269,6 +270,11 @@ static inline float st_chroma_norm(float h)
 }
 
 #define ST_GAMUT_SHAPE_REF  2.090563f
+
+/* Monochrome look: gain applied to the signed CIE X/Z chroma offsets when the
+ * axes are interpreted as optical coloured filters before grey extraction.
+ * Must match ST_MONO_FILTER_K in src/iop/3dcf.c. */
+#define ST_MONO_FILTER_K 0.1f
 
 /* Independent sigmoid contrast on the CIE-xz offset from white, applied
  * BEFORE st_spectral_gamut() so its knee compression absorbs any excursion
@@ -472,6 +478,28 @@ static inline float3 st_pipeline_eval(float3 rgb_in, const dt_st_cl_params_t *p)
                     p->white_chroma_x, p->white_chroma_z,
                     p->gamut_knee, p->gamut_steepness,
                     p->spectral_boundary);
+
+  /* Monochrome look: re-weight the signed chroma offsets into a single grey
+   * level so the X/Z axes act as optical coloured filters (warm/red on X,
+   * cool/blue on Z). Skips every chroma-only operator below, giving
+   * R = G = B = Y_modified. Mirrors dt_st_pipeline_eval() in src/iop/3dcf.c. */
+  if(p->monochrome)
+  {
+    const float x_off = x_tm - p->white_chroma_x * y_tm;
+    const float z_off = z_tm - p->white_chroma_z * y_tm;
+    const float gx = ST_MONO_FILTER_K * p->chroma_x_gain;
+    const float gz = ST_MONO_FILTER_K * p->chroma_z_gain;
+    float grey = fmax(y_tm + gx * x_off + gz * z_off, 0.0f);
+
+    const float y_exposed = y_abs * p->exposure_factor;
+    const float w = st_desat_weight(y_exposed, p->hl_desat, p->hl_desat_threshold);
+    if(w > 0.0f && isfinite(w))
+    {
+      const float ts = fmin(w, 1.0f);
+      grey = grey * (1.0f - ts) + 1.0f * ts;
+    }
+    return (float3)(grey, grey, grey);
+  }
 
   /* Step 7: XYZ -> output RGB */
   float3 rgb;

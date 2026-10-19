@@ -120,6 +120,7 @@ typedef enum dt_iop_st_look_t
   DT_ST_LOOK_DEEPCOOL,       // $DESCRIPTION: "deep cool"
   DT_ST_LOOK_CINEMA,         // $DESCRIPTION: "authentic cinema"
   DT_ST_LOOK_BRIGHT,         // $DESCRIPTION: "bright atmosphere"
+  DT_ST_LOOK_MONOMACHROME,   // $DESCRIPTION: "monochrome"
 } dt_iop_st_look_t;
 
 typedef enum dt_iop_st_auto_mode_t
@@ -210,6 +211,11 @@ typedef struct
   float chroma_z_shift;
   float chroma_z_sig0;
   float chroma_z_inv_range;
+
+  /* Monochrome look active: skip all chroma-only operators and project the
+     chroma-modulated XYZ onto a single grey level R=G=B (see
+     dt_st_pipeline_eval()). Must stay in sync with dt_st_cl_params_t. */
+  int   monochrome;
 } dt_st_context_t;
 
 typedef struct dt_iop_3dcf_data_t
@@ -266,6 +272,7 @@ typedef struct dt_st_cl_params_t
   float chroma_z_inv_range;
   int   look_idx;
   int   gamut_enable;
+  int   monochrome;
 } dt_st_cl_params_t;
 
 typedef struct dt_iop_3dcf_global_data_t
@@ -1409,6 +1416,12 @@ static inline float st_chroma_norm(float h)
   return m;
 }
 
+/* Monochrome look: gain applied to the signed CIE X/Z chroma offsets when the
+   axes are interpreted as optical coloured filters (red/blue) before grey
+   extraction. Scaled so that a full X/Z chroma contrast (10 = 100%) gives a
+   strong filter while 0 (neutral) leaves plain panchromatic luminance. */
+#define ST_MONO_FILTER_K 0.1f
+
 /* Mean of st_reach_from_table(h)/st_chroma_norm(h) over h=0..359, precomputed
    offline from the table above, used to normalise the shape factor below to
    ~1.0 on average. */
@@ -1658,6 +1671,35 @@ void dt_st_pipeline_eval(const float rgb_in[3], float rgb_out[3],
                     ctx->gamut_knee,
                     ctx->gamut_steepness,
                     ctx->spectral_boundary);
+
+  /* Monochrome look: the X/Z chroma contrast (and its pivots/balance) have
+     reshaped the chromaticity above. Instead of converting back to a colour
+     RGB, re-weight the signed chroma offsets into the grey level, which makes
+     the X/Z axes behave as optical coloured filters (warm/red on X, cool/blue
+     on Z). All remaining operators are chroma-only and thus skipped, giving
+     R = G = B = Y_modified. The highlight roll-off (hl_desaturation) is kept,
+     applied achromatically on the grey value. */
+  if(ctx->monochrome)
+  {
+    const float x_off = x_tm - ctx->white_chroma_x * y_tm;
+    const float z_off = z_tm - ctx->white_chroma_z * y_tm;
+    const float gx = ST_MONO_FILTER_K * ctx->chroma_x_gain;
+    const float gz = ST_MONO_FILTER_K * ctx->chroma_z_gain;
+    float grey = fmaxf(y_tm + gx * x_off + gz * z_off, 0.0f);
+
+    const float y_exposed = y_abs * ctx->exposure_factor;
+    const float w = st_desat_weight(y_exposed, ctx->hl_desat, ctx->hl_desat_threshold);
+    if(w > 0.0f && isfinite(w))
+    {
+      const float ts = fminf(w, 1.0f);
+      grey = grey * (1.0f - ts) + 1.0f * ts;
+    }
+
+    rgb_out[0] = grey;
+    rgb_out[1] = grey;
+    rgb_out[2] = grey;
+    return;
+  }
 
   /* Step 7: XYZ -> Output RGB via precomputed matrix */
   const float *M = ctx->output_matrix;
@@ -1943,6 +1985,11 @@ static void st_compute_context(dt_iop_3dcf_params_t *p,
 
   ctx->vibrance = fmaxf(p->vibrance, 0.0f);
   ctx->chromatic_boost = fmaxf(p->chromatic_boost, 0.0f);
+
+  /* Monochrome look. Selected through the color_look combobox (value 11).
+     Forces the pipeline to skip all chroma-only operators and project the
+     chroma-modulated XYZ onto a single grey level (see dt_st_pipeline_eval). */
+  ctx->monochrome = (p->color_look == DT_ST_LOOK_MONOMACHROME) ? 1 : 0;
 
   /* Initialize ACES 2.0 SSTS from peak_luminance (%, 0% = 200 nits) */
   {
@@ -2632,6 +2679,7 @@ static void st_fill_cl_params(const dt_iop_3dcf_data_t *d,
   for(int i = 0; i < 9; i++) clp->gamut_fwd[i] = ctx->gamut_fwd[i];
   for(int i = 0; i < 9; i++) clp->gamut_inv[i] = ctx->gamut_inv[i];
   clp->gamut_enable    = ctx->gamut_enable;
+  clp->monochrome      = ctx->monochrome;
 
   clp->ssts_s_2 = (float)ctx->ssts.s_2;
   clp->ssts_m_2 = (float)ctx->ssts.m_2;
@@ -2925,17 +2973,105 @@ static inline float _chroma_x_from_z(const float z, const float b)
 
 /* While X and Z are locked together the X axis alone drives both, so the
    balance slider replaces the redundant sliders (Z contrast, Z pivot and X
-   pivot are hidden); unlocking brings them back and hides the balance. */
-static void _chroma_set_visibility(dt_iop_3dcf_gui_data_t *g, const gboolean linked)
+   pivot are hidden); unlocking brings them back and hides the balance.
+
+   In the monochrome look the same widgets are relabelled: the X/Z axes no
+   longer steer a colour response but act as optical coloured filters before
+   grey extraction (see dt_st_pipeline_eval), so warm/red and cool/blue
+   wording is used instead. */
+static void _chroma_set_visibility(dt_iop_module_t *self, const gboolean linked)
 {
+  dt_iop_3dcf_gui_data_t *g = self->gui_data;
+  const dt_iop_3dcf_params_t *p = self->params;
+  const gboolean mono = (p->color_look == DT_ST_LOOK_MONOMACHROME);
+
   gtk_widget_set_visible(g->chroma_x_pivot, !linked);
   gtk_widget_set_visible(g->chroma_z_contrast, !linked);
   gtk_widget_set_visible(g->chroma_z_pivot, !linked);
   gtk_widget_set_visible(g->chroma_balance, linked);
-  /* While locked, X alone drives both axes: drop the axis qualifier from the
-     X contrast label (and restore it on unlock). */
-  dt_bauhaus_widget_set_label(g->chroma_x_contrast, NULL,
-                              linked ? _("chroma contrast") : _("X-axis chroma contrast"));
+
+  if(mono)
+  {
+    /* While locked, the X slider drives both axes: it is a global filter
+       strength, and the warm/cool balance splits it between the two axes.
+       Unlocking turns X and Z into independent warm/red and cool/blue filters. */
+    dt_bauhaus_widget_set_label(g->chroma_x_contrast, NULL,
+                                linked ? _("filter strength") : _("warm (red) filter"));
+    dt_bauhaus_widget_set_label(g->chroma_z_contrast, NULL, _("cool (blue) filter"));
+    dt_bauhaus_widget_set_label(g->chroma_x_pivot, NULL, _("warm filter neutral point"));
+    dt_bauhaus_widget_set_label(g->chroma_z_pivot, NULL, _("cool filter neutral point"));
+    dt_bauhaus_widget_set_label(g->chroma_balance, NULL, _("warm/cool balance"));
+    gtk_widget_set_tooltip_text(g->chroma_x_contrast,
+      linked
+        ? _("Monochrome filter strength applied to both the warm (red) and \n"
+            "cool (blue) CIE chroma axes before grey extraction. 0 % = neutral \n"
+            "panchromatic grey; the X/Z balance splits the effect between the \n"
+            "two axes. Unlock the padlock to drive warm and cool independently.")
+        : _("Monochrome filter acting on the warm (red) CIE X chroma axis before \n"
+            "grey extraction. 0 % = neutral panchromatic grey; higher values \n"
+            "brighten warm/red tones and darken cool/blue ones."));
+    gtk_widget_set_tooltip_text(g->chroma_z_contrast,
+      _("Monochrome filter acting on the cool (blue) CIE Z chroma axis before \n"
+        "grey extraction. 0 % = neutral; higher values brighten cool/blue tones \n"
+        "and darken warm/red ones."));
+    gtk_widget_set_tooltip_text(g->chroma_x_pivot,
+      _("Neutral point of the warm (red) filter response, relative to the \n"
+        "symmetric position (0% = symmetric)."));
+    gtk_widget_set_tooltip_text(g->chroma_z_pivot,
+      _("Neutral point of the cool (blue) filter response, relative to the \n"
+        "symmetric position (0% = symmetric)."));
+    gtk_widget_set_tooltip_text(g->chroma_balance,
+      _("Share the monochrome filter strength between the warm (red) and \n"
+        "cool (blue) axes. 0% = symmetric. Only available while the padlock \n"
+        "locks X and Z together."));
+  }
+  else
+  {
+    /* While locked, X alone drives both axes: drop the axis qualifier from the
+       X contrast label (and restore it on unlock). */
+    dt_bauhaus_widget_set_label(g->chroma_x_contrast, NULL,
+                                linked ? _("chroma contrast") : _("X-axis chroma contrast"));
+    dt_bauhaus_widget_set_label(g->chroma_z_contrast, NULL, _("Z-axis chroma contrast"));
+    dt_bauhaus_widget_set_label(g->chroma_x_pivot, NULL, _("X-axis contrast pivot"));
+    dt_bauhaus_widget_set_label(g->chroma_z_pivot, NULL, _("Z-axis contrast pivot"));
+    dt_bauhaus_widget_set_label(g->chroma_balance, NULL, _("X/Z balance"));
+    gtk_widget_set_tooltip_text(g->chroma_x_contrast,
+      _("Independent contrast on the CIE X-axis chroma offset from white, applied \n"
+        "right after chromaticity scaling and before spectral gamut roll-off. \n"
+        "0 % = off (no-op)."));
+    gtk_widget_set_tooltip_text(g->chroma_z_contrast,
+      _("Independent contrast on the CIE Z-axis chroma offset from white, applied \n"
+        "right after chromaticity scaling and before spectral gamut roll-off. \n"
+        "0 % = off (no-op)."));
+    gtk_widget_set_tooltip_text(g->chroma_x_pivot,
+      _("Pivot point for the X-axis chroma contrast sigmoid, relative to the \n"
+        "symmetric position (0% = symmetric, the stored 50%)."));
+    gtk_widget_set_tooltip_text(g->chroma_z_pivot,
+      _("Pivot point for the Z-axis chroma contrast sigmoid, relative to the \n"
+        "symmetric position (0% = symmetric, the stored 50%)."));
+    gtk_widget_set_tooltip_text(g->chroma_balance,
+      _("Split the chroma contrast between the X and Z axes around their average.\n"
+        "0% = symmetric (X = Z). Negative favors Z, positive favors X.\n"
+        "Only available while X and Z are locked together (padlock)."));
+  }
+}
+
+/* Monochrome look: the chroma-only operators below all preserve luminance and
+   therefore do nothing once the output is forced to a single grey level. Hide
+   and disable them so the active controls match the actual processing. The
+   look-opacity slider is additionally gated on a colour look being selected. */
+static void _mono_set_visibility(dt_iop_3dcf_gui_data_t *g, const gboolean mono,
+                                 const gboolean look_active)
+{
+  gtk_widget_set_sensitive(g->vibrance, !mono);
+  gtk_widget_set_sensitive(g->chromatic_boost, !mono);
+  gtk_widget_set_sensitive(g->hl_hue_shift, !mono);
+  gtk_widget_set_sensitive(g->look_opacity, !mono);
+
+  gtk_widget_set_visible(g->vibrance, !mono);
+  gtk_widget_set_visible(g->chromatic_boost, !mono);
+  gtk_widget_set_visible(g->hl_hue_shift, !mono);
+  gtk_widget_set_visible(g->look_opacity, !mono && look_active);
 }
 
 void gui_update(dt_iop_module_t *self)
@@ -2989,7 +3125,7 @@ void gui_update(dt_iop_module_t *self)
   }
 
   dt_bauhaus_widget_set_quad_active(g->chroma_x_contrast, g->chroma_linked);
-  _chroma_set_visibility(g, g->chroma_linked);
+  _chroma_set_visibility(self, g->chroma_linked);
 
   gui_changed(self, NULL, NULL);
 }
@@ -3666,7 +3802,7 @@ static void _chroma_link_toggled(GtkWidget *quad, dt_iop_module_t *self)
     g->chroma_syncing = FALSE;
   }
 
-  _chroma_set_visibility(g, g->chroma_linked);
+  _chroma_set_visibility(self, g->chroma_linked);
 }
 
 static void _chroma_x_changed(GtkWidget *slider, dt_iop_module_t *self)
@@ -4007,7 +4143,7 @@ void gui_init(dt_iop_module_t *self)
       "Independent of highlight roll-off."));
 
   /* Apply the initial show/hide for the lock-dependent chroma widgets. */
-  _chroma_set_visibility(g, g->chroma_linked);
+  _chroma_set_visibility(self, g->chroma_linked);
 
   /* === Advanced section === */
   dt_gui_new_collapsible_section(&g->advanced_section,
@@ -4099,7 +4235,14 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
   if(!w || w == g->color_look)
   {
-    gtk_widget_set_visible(g->look_opacity, p->color_look > DT_ST_LOOK_NEUTRAL);
+    const gboolean mono = (p->color_look == DT_ST_LOOK_MONOMACHROME);
+    /* A colour look is active for every entry above neutral except the
+       monochrome one, which has no look opacity of its own. */
+    const gboolean look_active = (p->color_look > DT_ST_LOOK_NEUTRAL)
+                              && (p->color_look != DT_ST_LOOK_MONOMACHROME);
+    _mono_set_visibility(g, mono, look_active);
+    /* Refresh the X/Z labels: they are relabelled as colour filters in mono. */
+    _chroma_set_visibility(self, g->chroma_linked);
   }
 
   /* redraw curve graph on any parameter change */
