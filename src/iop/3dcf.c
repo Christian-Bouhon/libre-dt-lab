@@ -2117,7 +2117,7 @@ int legacy_params(dt_iop_module_t *self,
     } dt_iop_3dcf_params_v4_t;
 
     const dt_iop_3dcf_params_v4_t *old = old_params;
-    dt_iop_3dcf_params_t *new_p = malloc(sizeof(dt_iop_3dcf_params_t));
+    dt_iop_3dcf_params_t *new_p = calloc(1, sizeof(dt_iop_3dcf_params_t));
 
     new_p->contrast            = old->contrast;
     new_p->gamma               = old->gray_point;
@@ -2168,7 +2168,7 @@ int legacy_params(dt_iop_module_t *self,
     } dt_iop_3dcf_params_v5_t;
 
     const dt_iop_3dcf_params_v5_t *old = old_params;
-    dt_iop_3dcf_params_t *new_p = malloc(sizeof(dt_iop_3dcf_params_t));
+    dt_iop_3dcf_params_t *new_p = calloc(1, sizeof(dt_iop_3dcf_params_t));
 
     new_p->contrast            = old->contrast;
     new_p->gamma               = old->gray_point;
@@ -2220,7 +2220,7 @@ int legacy_params(dt_iop_module_t *self,
     } dt_iop_3dcf_params_v6_t;
 
     const dt_iop_3dcf_params_v6_t *old = old_params;
-    dt_iop_3dcf_params_t *new_p = malloc(sizeof(dt_iop_3dcf_params_t));
+    dt_iop_3dcf_params_t *new_p = calloc(1, sizeof(dt_iop_3dcf_params_t));
 
     new_p->contrast            = old->contrast;
     new_p->gamma               = old->gray_point;
@@ -2272,7 +2272,7 @@ int legacy_params(dt_iop_module_t *self,
     } dt_iop_3dcf_params_v7_t;
 
     const dt_iop_3dcf_params_v7_t *old = old_params;
-    dt_iop_3dcf_params_t *new_p = malloc(sizeof(dt_iop_3dcf_params_t));
+    dt_iop_3dcf_params_t *new_p = calloc(1, sizeof(dt_iop_3dcf_params_t));
 
     new_p->contrast            = old->contrast;
     new_p->gamma               = old->gamma;
@@ -2299,15 +2299,54 @@ int legacy_params(dt_iop_module_t *self,
     return 0;
   }
 
-  // v8 → v9: spectral_brilliance split into peak_luminance + input_exposure
+  // v8 → v9: spectral_brilliance and hl_exposure were replaced by
+  // peak_luminance + input_exposure. The layouts differ (one field becomes
+  // two, one is dropped), so copy field by field instead of by position.
   if(old_version == 8)
   {
-    const dt_iop_3dcf_params_t *old = old_params;
-    dt_iop_3dcf_params_t *new_p = malloc(sizeof(dt_iop_3dcf_params_t));
+    typedef struct dt_iop_3dcf_params_v8_t
+    {
+      float contrast;
+      float gamma;
+      float vibrance;
+      float chromatic_boost;
+      float spectral_brilliance;
+      float hl_hue_shift;
+      float hl_desaturation;
+      float hl_desat_threshold;
+      float gamut_knee;
+      float gamut_steepness;
+      dt_iop_st_colorspace_t output_cs;
+      dt_iop_st_look_t color_look;
+      float look_opacity;
+      float contrast_pivot;
+      float toe_power;
+      float shoulder_power;
+      float hl_detail_recovery;
+      float hl_exposure;
+    } dt_iop_3dcf_params_v8_t;
 
-    *new_p = *old;
-    new_p->peak_luminance = 0.0f;
-    new_p->input_exposure = 0.0f;
+    const dt_iop_3dcf_params_v8_t *old = old_params;
+    dt_iop_3dcf_params_t *new_p = calloc(1, sizeof(dt_iop_3dcf_params_t));
+
+    new_p->contrast            = old->contrast;
+    new_p->gamma               = old->gamma;
+    new_p->vibrance            = old->vibrance;
+    new_p->chromatic_boost     = old->chromatic_boost;
+    new_p->peak_luminance      = 0.0f;
+    new_p->input_exposure      = 0.0f;
+    new_p->hl_hue_shift        = old->hl_hue_shift;
+    new_p->hl_desaturation     = old->hl_desaturation;
+    new_p->hl_desat_threshold  = old->hl_desat_threshold;
+    new_p->gamut_knee          = old->gamut_knee;
+    new_p->gamut_steepness     = old->gamut_steepness;
+    new_p->output_cs           = old->output_cs;
+    new_p->color_look          = old->color_look;
+    new_p->look_opacity        = old->look_opacity;
+    new_p->contrast_pivot      = old->contrast_pivot;
+    new_p->toe_power           = old->toe_power;
+    new_p->shoulder_power      = old->shoulder_power;
+    new_p->hl_detail_recovery  = old->hl_detail_recovery;
 
     *new_params = new_p;
     *new_params_size = sizeof(dt_iop_3dcf_params_t);
@@ -2315,13 +2354,36 @@ int legacy_params(dt_iop_module_t *self,
     return 0;
   }
 
-  // v9 → v10: added chroma_x_contrast/pivot, chroma_z_contrast/pivot
+  // v9 → v10: added chroma_x_contrast/pivot, chroma_z_contrast/pivot. The
+  // fields appended after the v9 layout are set below; read only those bytes.
   if(old_version == 9)
   {
-    const dt_iop_3dcf_params_t *old = old_params;
-    dt_iop_3dcf_params_t *new_p = malloc(sizeof(dt_iop_3dcf_params_t));
+    typedef struct dt_iop_3dcf_params_v9_t
+    {
+      float contrast;
+      float gamma;
+      float vibrance;
+      float chromatic_boost;
+      float peak_luminance;
+      float input_exposure;
+      float hl_hue_shift;
+      float hl_desaturation;
+      float hl_desat_threshold;
+      float gamut_knee;
+      float gamut_steepness;
+      dt_iop_st_colorspace_t output_cs;
+      dt_iop_st_look_t color_look;
+      float look_opacity;
+      float contrast_pivot;
+      float toe_power;
+      float shoulder_power;
+      float hl_detail_recovery;
+    } dt_iop_3dcf_params_v9_t;
 
-    *new_p = *old;
+    const dt_iop_3dcf_params_v9_t *old = old_params;
+    dt_iop_3dcf_params_t *new_p = calloc(1, sizeof(dt_iop_3dcf_params_t));
+    memcpy(new_p, old, sizeof(dt_iop_3dcf_params_v9_t));
+
     new_p->chroma_x_contrast = 0.0f;
     new_p->chroma_x_pivot    = 50.0f;
     new_p->chroma_z_contrast = 0.0f;
@@ -2334,13 +2396,40 @@ int legacy_params(dt_iop_module_t *self,
   }
 
   // v10 → v11: added mono_green (monochrome green filter). Defaults to 0, so
-  // existing edits/presets keep their exact rendering.
+  // existing edits/presets keep their exact rendering. Read only the v10
+  // bytes, not the larger current struct.
   if(old_version == 10)
   {
-    const dt_iop_3dcf_params_t *old = old_params;
-    dt_iop_3dcf_params_t *new_p = malloc(sizeof(dt_iop_3dcf_params_t));
+    typedef struct dt_iop_3dcf_params_v10_t
+    {
+      float contrast;
+      float gamma;
+      float vibrance;
+      float chromatic_boost;
+      float peak_luminance;
+      float input_exposure;
+      float hl_hue_shift;
+      float hl_desaturation;
+      float hl_desat_threshold;
+      float gamut_knee;
+      float gamut_steepness;
+      dt_iop_st_colorspace_t output_cs;
+      dt_iop_st_look_t color_look;
+      float look_opacity;
+      float contrast_pivot;
+      float toe_power;
+      float shoulder_power;
+      float hl_detail_recovery;
+      float chroma_x_contrast;
+      float chroma_x_pivot;
+      float chroma_z_contrast;
+      float chroma_z_pivot;
+    } dt_iop_3dcf_params_v10_t;
 
-    *new_p = *old;
+    const dt_iop_3dcf_params_v10_t *old = old_params;
+    dt_iop_3dcf_params_t *new_p = calloc(1, sizeof(dt_iop_3dcf_params_t));
+    memcpy(new_p, old, sizeof(dt_iop_3dcf_params_v10_t));
+
     new_p->mono_green = 0.0f;
 
     *new_params = new_p;
@@ -2452,8 +2541,25 @@ void tiling_callback(dt_iop_module_t *self, dt_dev_pixelpipe_iop_t *piece,
   tiling->maxbuf = 1.0f;
   tiling->maxbuf_cl = 1.0f;
   tiling->overhead = 0;
-  tiling->overlap = 0;
   tiling->align = 1;
+
+  /* The guided filter is the only spatial stage: without overlap, each tile
+     would compute its base from a truncated neighbourhood and leave visible
+     seams. Request the filter radius so tiling keeps a valid margin. The
+     pixel-to-pixel tiling path keeps roi_in == roi_out and copies back only
+     the good part, so process()/process_cl() need no offset handling. */
+  if(hl_active)
+  {
+    const float diag = sqrtf((float)piece->iwidth * piece->iwidth
+                            + (float)piece->iheight * piece->iheight);
+    /* The guided filter applies two radius-r box passes (mean of the
+       coefficients, then their smoothing), so its total support is 2r. */
+    tiling->overlap = 2 * (int)fmaxf(4.0f, 8.0f * diag / 8848.0f);
+  }
+  else
+  {
+    tiling->overlap = 0;
+  }
 }
 
 typedef struct _3dcf_preview_fill_t
@@ -3969,7 +4075,6 @@ static void _chroma_balance_changed(GtkWidget *slider, dt_iop_module_t *self)
 {
   dt_iop_3dcf_gui_data_t *g = self->gui_data;
   dt_iop_3dcf_params_t *p = self->params;
-  (void)slider;
 
   if(g->chroma_syncing) return;
 
@@ -3983,16 +4088,37 @@ static void _chroma_balance_changed(GtkWidget *slider, dt_iop_module_t *self)
 
   const float b = dt_bauhaus_slider_get(g->chroma_balance);
   const float s = fmaxf(p->chroma_x_contrast, p->chroma_z_contrast);
-  /* Both axes are written; the guard mutes _chroma_x/z_changed() so they do
-     not recompute each other. The Z pivot tracks the X pivot (axes are
-     locked). Setting the sliders updates the parameters and records the
-     history step for this move (the balance slider is transient). */
+  const float new_x = s * fminf(1.0f, 1.0f + b);
+  const float new_z = s * fminf(1.0f, 1.0f - b);
+
+  /* Update both bound sliders inside a GUI-update block: dt_bauhaus_slider_set()
+     then only refreshes the widgets, it neither writes the parameters nor
+     records history. The parameters are written back from the sliders'
+     quantized values below, and the move is recorded once (targeting the
+     balance widget) so a drag that crosses 0 % does not split into two undo
+     steps. */
   g->chroma_syncing = TRUE;
+  DT_ENTER_GUI_UPDATE();
+  dt_bauhaus_slider_set(g->chroma_x_contrast, new_x);
+  dt_bauhaus_slider_set(g->chroma_z_contrast, new_z);
+  dt_bauhaus_slider_set(g->chroma_z_pivot, p->chroma_x_pivot);
+  DT_LEAVE_GUI_UPDATE();
+
+  const float x = dt_bauhaus_slider_get(g->chroma_x_contrast);
+  const float z = dt_bauhaus_slider_get(g->chroma_z_contrast);
+  const gboolean changed = (x != p->chroma_x_contrast)
+                           || (z != p->chroma_z_contrast)
+                           || (p->chroma_z_pivot != p->chroma_x_pivot);
+  p->chroma_x_contrast = x;
+  p->chroma_z_contrast = z;
   p->chroma_z_pivot = p->chroma_x_pivot;
-  dt_bauhaus_slider_set(g->chroma_z_pivot, p->chroma_z_pivot);
-  dt_bauhaus_slider_set(g->chroma_x_contrast, s * fminf(1.0f, 1.0f + b));
-  dt_bauhaus_slider_set(g->chroma_z_contrast, s * fminf(1.0f, 1.0f - b));
   g->chroma_syncing = FALSE;
+
+  if(changed)
+  {
+    dt_iop_color_picker_reset(self, TRUE);
+    dt_dev_add_history_item_target(darktable.develop, self, TRUE, slider);
+  }
 }
 
 /* Reset quad on the X/Z balance slider: restores the four X/Z chroma sliders
