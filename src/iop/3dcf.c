@@ -3053,30 +3053,39 @@ void gui_reset(dt_iop_module_t *self)
   dt_iop_color_picker_reset(self, TRUE);
 }
 
-/* Derived asymmetry helpers for the transient X/Z balance widget. The
-   balance is not a parameter: it is recomputed from the stored X/Z contrast
-   values and, when X and Z are locked together, decides how a shared
-   contrast level is split between the two axes. */
+/* Derived symmetry helpers for the transient X/Z balance widget. The balance
+   is not a parameter: it is recomputed from the stored X/Z contrast values
+   and, when X and Z are locked together, splits a shared strength S between
+   the two axes. The favored (larger) axis carries the full strength S, the
+   other is reduced proportionally:
+     b >= 0: X = S,      Z = S*(1-b)
+     b <  0: X = S*(1+b), Z = S
+   Nothing ever exceeds S, so no value is clamped away and a round-trip to the
+   extremes restores the original X = Z = S. */
+
+/* Balance from the stored X/Z pair, inverse of the split above:
+     X >= Z -> b = 1 - Z/X      Z >= X -> b = X/Z - 1
+   b = 0 when X = Z (or both zero). */
 static inline float _chroma_balance_from_xz(const float x, const float z)
 {
-  const float sum = x + z;
-  return sum > 1e-6f ? CLAMPF((x - z) / sum, -1.0f, 1.0f) : 0.0f;
+  if(x >= z)
+    return (x > 1e-6f) ? CLAMPF(1.0f - z / x, -1.0f, 1.0f) : 0.0f;
+  return (z > 1e-6f) ? CLAMPF(x / z - 1.0f, -1.0f, 1.0f) : 0.0f;
 }
 
-/* Z contrast that preserves the current balance when X contrast changes:
-   b = (X-Z)/(X+Z)  =>  Z = X*(1-b)/(1+b).  b is clamped away from the
-   singularities at ±1 so the ratio always stays finite. */
+/* Z contrast derived from X while preserving the balance (see the split
+   above). The 1/(1+b) divisor is guarded away from the b = -1 singularity. */
 static inline float _chroma_z_from_x(const float x, const float b)
 {
-  const float bf = CLAMPF(b, -0.999f, 0.999f);
-  return CLAMPF(x * (1.0f - bf) / (1.0f + bf), 0.0f, 10.0f);
+  return (b >= 0.0f) ? CLAMPF(x * (1.0f - b), 0.0f, 10.0f)
+                     : CLAMPF(x / fmaxf(1.0f + b, 1e-3f), 0.0f, 10.0f);
 }
 
 /* Mirror of _chroma_z_from_x() for the (hidden while linked) Z slider. */
 static inline float _chroma_x_from_z(const float z, const float b)
 {
-  const float bf = CLAMPF(b, -0.999f, 0.999f);
-  return CLAMPF(z * (1.0f + bf) / (1.0f - bf), 0.0f, 10.0f);
+  return (b <= 0.0f) ? CLAMPF(z * (1.0f + b), 0.0f, 10.0f)
+                     : CLAMPF(z / fmaxf(1.0f - b, 1e-3f), 0.0f, 10.0f);
 }
 
 /* While X and Z are locked together the X axis alone drives both, so the
@@ -3129,9 +3138,10 @@ static void _chroma_set_visibility(dt_iop_module_t *self, const gboolean linked)
       _("Neutral point of the cool (blue) filter response, relative to the \n"
         "symmetric position (0% = symmetric)."));
     gtk_widget_set_tooltip_text(g->chroma_balance,
-      _("Share the monochrome filter strength between the warm (red) and \n"
-        "cool (blue) axes. 0% = symmetric. Only available while the padlock \n"
-        "locks X and Z together."));
+      _("Set how the warm/cool balance splits the monochrome filter strength:\n"
+        "the favored axis keeps the full strength, the other is reduced\n"
+        "proportionally. 0% = symmetric, +100% = warm only, -100% = cool only.\n"
+        "Only available while the padlock locks X and Z together."));
   }
   else
   {
@@ -3158,8 +3168,9 @@ static void _chroma_set_visibility(dt_iop_module_t *self, const gboolean linked)
       _("Pivot point for the Z-axis chroma contrast sigmoid, relative to the \n"
         "symmetric position (0% = symmetric, the stored 50%)."));
     gtk_widget_set_tooltip_text(g->chroma_balance,
-      _("Split the chroma contrast between the X and Z axes around their average.\n"
-        "0% = symmetric (X = Z). Negative favors Z, positive favors X.\n"
+      _("Set how the X/Z balance splits the chroma contrast: the favored axis\n"
+        "keeps the full strength, the other is reduced proportionally.\n"
+        "0% = symmetric (X = Z), +100% = X only, -100% = Z only.\n"
         "Only available while X and Z are locked together (padlock)."));
   }
 }
@@ -3951,10 +3962,9 @@ static void _chroma_z_changed(GtkWidget *slider, dt_iop_module_t *self)
   g->chroma_syncing = FALSE;
 }
 
-/* Balance slider: pans the shared contrast level between the X and Z axes.
-   base = (X+Z)/2 stays constant; X = base*(1+b), Z = base*(1-b). Only X is
-   driven here -- _chroma_x_changed() propagates the derived Z, so the two
-   axes stay coherent with a single history step. */
+/* Balance slider: splits the shared strength S = max(X, Z) between the two
+   axes. The favored axis keeps S, the other is reduced proportionally, so the
+   strength survives a round-trip to the extremes (see the split helpers). */
 static void _chroma_balance_changed(GtkWidget *slider, dt_iop_module_t *self)
 {
   dt_iop_3dcf_gui_data_t *g = self->gui_data;
@@ -3972,9 +3982,17 @@ static void _chroma_balance_changed(GtkWidget *slider, dt_iop_module_t *self)
   }
 
   const float b = dt_bauhaus_slider_get(g->chroma_balance);
-  const float base = 0.5f * (p->chroma_x_contrast + p->chroma_z_contrast);
-  const float newx = CLAMPF(base * (1.0f + b), 0.0f, 10.0f);
-  dt_bauhaus_slider_set(g->chroma_x_contrast, newx);
+  const float s = fmaxf(p->chroma_x_contrast, p->chroma_z_contrast);
+  /* Both axes are written; the guard mutes _chroma_x/z_changed() so they do
+     not recompute each other. The Z pivot tracks the X pivot (axes are
+     locked). Setting the sliders updates the parameters and records the
+     history step for this move (the balance slider is transient). */
+  g->chroma_syncing = TRUE;
+  p->chroma_z_pivot = p->chroma_x_pivot;
+  dt_bauhaus_slider_set(g->chroma_z_pivot, p->chroma_z_pivot);
+  dt_bauhaus_slider_set(g->chroma_x_contrast, s * fminf(1.0f, 1.0f + b));
+  dt_bauhaus_slider_set(g->chroma_z_contrast, s * fminf(1.0f, 1.0f - b));
+  g->chroma_syncing = FALSE;
 }
 
 /* Reset quad on the X/Z balance slider: restores the four X/Z chroma sliders
@@ -4202,8 +4220,9 @@ void gui_init(dt_iop_module_t *self)
   dt_bauhaus_slider_set_format(g->chroma_balance, " %");
   dt_bauhaus_slider_set_digits(g->chroma_balance, 0);
   gtk_widget_set_tooltip_text(g->chroma_balance,
-    _("Split the chroma contrast between the X and Z axes around their average.\n"
-      "0% = symmetric (X = Z). Negative favors Z, positive favors X.\n"
+    _("Set how the X/Z balance splits the chroma contrast: the favored axis\n"
+      "keeps the full strength, the other is reduced proportionally.\n"
+      "0% = symmetric (X = Z), +100% = X only, -100% = Z only.\n"
       "Only available while X and Z are locked together (padlock)."));
   g_signal_connect(G_OBJECT(g->chroma_balance), "value-changed",
                    G_CALLBACK(_chroma_balance_changed), self);
