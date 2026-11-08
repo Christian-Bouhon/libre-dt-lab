@@ -171,6 +171,12 @@ typedef struct dt_dev_chroma_t
   double D65coeffs[4];                  // both read from exif data or "best guess"
   double as_shot[4];
   gboolean late_correction;
+  // TRUE when temperature drives the chromatic adaptation through pipe->wb
+  gboolean cat_pipeline;
+  // TRUE while color calibration extracts a color checker in the new pipeline;
+  // the hidden CAT module then bypasses adaptation so the chart is analysed
+  // in the unadapted working space.
+  gboolean calibrating;
 } dt_dev_chroma_t;
 
 typedef struct dt_develop_t
@@ -286,6 +292,11 @@ typedef struct dt_develop_t
                                        GtkWidget *widget,
                                        const gboolean doit);
     } modulegroups;
+
+    // white balance hook: the color checker calibration in color calibration
+    // sends its computed illuminant to the white balance module when the
+    // D65+CAT pipeline is active. GTK main thread only.
+    void (*wb_set_illuminant)(struct dt_develop_t *dev, float x, float y);
 
     // masks plugin hooks
     struct

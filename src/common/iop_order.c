@@ -112,6 +112,7 @@ const dt_iop_order_entry_t legacy_order[] = {
   { {25.0f }, "profile_gamma", 0},
   { {26.0f }, "hazeremoval", 0},
   { {27.0f }, "colorin", 0},
+  { {27.25f }, "cat", 0},
   { {27.5f }, "channelmixerrgb", 0},
   { {27.5f }, "contrast", 0}, 
   { {27.5f }, "diffuse", 0},
@@ -220,6 +221,7 @@ const dt_iop_order_entry_t v30_order[] = {
   { {26.0f }, "profile_gamma", 0},
   { {27.0f }, "equalizer", 0},
   { {28.0f }, "colorin", 0},
+  { {28.25f }, "cat", 0},
   { {28.5f }, "channelmixerrgb", 0},
   { {28.5f }, "contrast", 0},
   { {28.5f }, "diffuse", 0},
@@ -343,6 +345,7 @@ const dt_iop_order_entry_t v50_order[] = {
   { {26.0f }, "profile_gamma", 0},
   { {27.0f }, "equalizer", 0},
   { {28.0f }, "colorin", 0},
+  { {28.25f }, "cat", 0},
   { {28.5f }, "channelmixerrgb", 0},
   { {28.5f }, "contrast", 0},
   { {28.5f }, "diffuse", 0},
@@ -467,6 +470,7 @@ const dt_iop_order_entry_t v30_jpg_order[] = {
   { { 28.0f }, "profile_gamma", 0},
   { { 28.0f }, "equalizer", 0},
   // from there, it's the same as the raw order
+  { { 28.25f }, "cat", 0 },
   { { 28.5f }, "channelmixerrgb", 0 },
   { { 28.5f }, "contrast", 0 },
   { { 28.5f }, "diffuse", 0 },
@@ -593,6 +597,7 @@ const dt_iop_order_entry_t v50_jpg_order[] = {
   { { 28.0f }, "profile_gamma", 0},
   { { 28.0f }, "equalizer", 0},
   // from there, it's the same as the raw order
+  { { 28.25f }, "cat", 0 },
   { { 28.5f }, "channelmixerrgb", 0 },
   { { 28.5f }, "contrast", 0 },
   { { 28.5f }, "diffuse", 0 },
@@ -743,6 +748,7 @@ void dt_ioppr_migrate_legacy_iop_order_list(GList *iop_order_list)
   //                The insertion can be done depending on the current
   //                iop-order list kind.
   _insert_before(iop_order_list, "nlmeans", "negadoctor");
+  _insert_before(iop_order_list, "channelmixerrgb", "cat");
   _insert_before(iop_order_list, "negadoctor", "channelmixerrgb");
   _insert_before(iop_order_list, "negadoctor", "contrast");  
   _insert_before(iop_order_list, "negadoctor", "censorize");
@@ -834,7 +840,8 @@ GList *dt_ioppr_get_iop_order_rules(void)
     { .op_prev = "flip",        .op_next = "crop"        }, // crop GUI broken if flip is done on top
     { .op_prev = "flip",        .op_next = "clipping"    }, // clipping GUI broken if flip is done on top
     { .op_prev = "ashift",      .op_next = "clipping"    }, // clipping GUI broken if ashift is done on top
-    { .op_prev = "colorin",     .op_next = "channelmixerrgb"},
+    { .op_prev = "colorin",     .op_next = "cat"        },
+    { .op_prev = "cat",         .op_next = "channelmixerrgb"},
     { .op_prev = "channelmixerrgb", .op_next = "contrast"},
     { "\0", "\0" } };
 

@@ -4157,6 +4157,8 @@ void dt_dev_reset_chroma(dt_develop_t *dev)
   dt_dev_chroma_t *chr = &dev->chroma;
   chr->adaptation = NULL;
   chr->temperature = NULL;
+  chr->cat_pipeline = FALSE;
+  chr->calibrating = FALSE;
   for_four_channels(c)
     chr->wb_coeffs[c] = 1.0f;
 }
@@ -4166,6 +4168,8 @@ void dt_dev_init_chroma(dt_develop_t *dev)
   dt_dev_reset_chroma(dev);
   dt_dev_chroma_t *chr = &dev->chroma;
   chr->late_correction = FALSE;
+  chr->cat_pipeline = FALSE;
+  chr->calibrating = FALSE;
   for_four_channels(c)
   {
     chr->D65coeffs[c] = 1.0;

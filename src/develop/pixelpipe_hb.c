@@ -296,6 +296,7 @@ gboolean dt_dev_pixelpipe_init_cached(dt_dev_pixelpipe_t *pipe,
   pipe->icc_type = DT_COLORSPACE_NONE;
   pipe->icc_filename = NULL;
   pipe->icc_intent = DT_INTENT_LAST;
+  memset(&pipe->wb, 0, sizeof(dt_dev_wb_t));
   pipe->iop = NULL;
   pipe->iop_order_list = NULL;
   pipe->forms = NULL;
@@ -484,6 +485,7 @@ void dt_dev_pixelpipe_create_nodes(dt_dev_pixelpipe_t *pipe,
   g_assert(pipe->nodes == NULL);
   g_assert(pipe->iop == NULL);
   g_assert(pipe->iop_order_list == NULL);
+  memset(&pipe->wb, 0, sizeof(dt_dev_wb_t));
   pipe->iop_order_list = dt_ioppr_iop_order_copy_deep(dev->iop_order_list);
   // for all modules in dev:
   pipe->iop = g_list_copy(dev->iop);
@@ -675,6 +677,20 @@ void dt_dev_pixelpipe_synch_all(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     _dev_pixelpipe_synch(pipe, dev, history);
     history = g_list_next(history);
   }
+
+  // The hidden chromatic-adaptation module is not in history, but it depends
+  // on the final white balance state published during the history pass. Commit
+  // it again so that legacy edits keep it disabled and new edits enable it.
+  for(GList *nodes = pipe->nodes; nodes; nodes = g_list_next(nodes))
+  {
+    dt_dev_pixelpipe_iop_t *piece = nodes->data;
+    if(!dt_iop_module_is(piece->module, "cat")) continue;
+
+    piece->enabled = piece->module->default_enabled;
+    dt_iop_commit_params(piece->module, piece->module->default_params,
+                         piece->module->default_blendop_params, pipe, piece);
+  }
+
   dt_print_pipe(DT_DEBUG_PARAMS,
            "synch all modules done",
            pipe, NULL, DT_DEVICE_NONE, NULL, NULL,

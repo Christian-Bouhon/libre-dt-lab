@@ -4077,7 +4077,7 @@
         <option>effect emulation</option>
       </enum>
     </type>
-    <default>no color</default>
+    <default>illuminant color</default>
     <shortdescription>white balance slider colors</shortdescription>
     <longdescription>visual indication of temperature adjustments.\nin 'illuminant color' mode slider colors represent the color of the light source,\nin 'effect emulation' slider colors represent the effect the adjustment would have on the scene</longdescription>
   </dtconfig>
@@ -4087,6 +4087,13 @@
     <default>false</default>
     <shortdescription>whether to show coefficients</shortdescription>
     <longdescription>this is just for remembering whether to show coefficients or not and remember it</longdescription>
+  </dtconfig>
+  <dtconfig>
+    <name>plugins/darkroom/temperature/expand_cat</name>
+    <type>bool</type>
+    <default>true</default>
+    <shortdescription>whether to show chromatic adaptation controls</shortdescription>
+    <longdescription>remember whether the chromatic adaptation section of the white balance module is expanded</longdescription>
   </dtconfig>
   <dtconfig>
     <name>plugins/darkroom/temperature/button_bar</name>

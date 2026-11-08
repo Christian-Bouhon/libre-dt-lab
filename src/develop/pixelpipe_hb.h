@@ -175,6 +175,10 @@ typedef struct dt_dev_pixelpipe_t
   // and should be modified by process*(), if necessary.
   dt_iop_buffer_dsc_t dsc;
 
+  /** white balance state published by the white balance module. It is
+      per-pipe so that processing threads do not read shared mutable state. */
+  dt_dev_wb_t wb;
+
   /** work profile info of the image */
   struct dt_iop_order_iccprofile_info_t *work_profile_info;
   /** input profile info **/

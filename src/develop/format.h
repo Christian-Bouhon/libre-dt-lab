@@ -26,6 +26,19 @@ struct dt_dev_pixelpipe_iop_t;
 struct dt_dev_pixelpipe_t;
 struct dt_iop_module_t;
 
+/** white balance state published by the white balance module for the modules
+    that complete the correction (colorin) and perform the chromatic
+    adaptation (channelmixerrgb). It is stored per pipe so that processing
+    threads never have to read shared, mutable developer state. */
+typedef struct dt_dev_wb_t
+{
+  gboolean active;          // white balance module is active in this pipe
+  gboolean has_cat;         // the scene illuminant is valid for chromatic adaptation
+  float illuminant_xy[2];   // scene illuminant chromaticity for the CAT
+  int adaptation;           // dt_adaptation_t, kept as int here to avoid
+                            // pulling chromatic adaptation into this header
+} dt_dev_wb_t;
+
 typedef enum dt_iop_buffer_type_t {
   TYPE_UNKNOWN,
   TYPE_FLOAT,

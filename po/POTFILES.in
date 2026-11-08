@@ -16,6 +16,7 @@ build/lib/libre-dt-lab/plugins/introspection_blurs.c
 build/lib/libre-dt-lab/plugins/introspection_borders.c
 build/lib/libre-dt-lab/plugins/introspection_cacorrect.c
 build/lib/libre-dt-lab/plugins/introspection_cacorrectrgb.c
+build/lib/libre-dt-lab/plugins/introspection_cat.c
 build/lib/libre-dt-lab/plugins/introspection_censorize.c
 build/lib/libre-dt-lab/plugins/introspection_channelmixer.c
 build/lib/libre-dt-lab/plugins/introspection_channelmixerrgb.c
@@ -267,6 +268,7 @@ src/iop/blurs.c
 src/iop/borders.c
 src/iop/cacorrect.c
 src/iop/cacorrectrgb.c
+src/iop/cat.c
 src/iop/censorize.c
 src/iop/channelmixer.c
 src/iop/channelmixerrgb.c

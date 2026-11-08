@@ -40,10 +40,12 @@
 #include "iop/iop_api.h"
 
 // for Kelvin temperature and bogus WB
+#include "common/chromatic_adaptation.h"
 #include "common/colorspaces.h"
+#include "common/illuminants.h"
 #include "external/cie_colorimetric_tables.c"
 
-DT_MODULE_INTROSPECTION(4, dt_iop_temperature_params_t)
+DT_MODULE_INTROSPECTION(6, dt_iop_temperature_params_t)
 
 #define INITIALBLACKBODYTEMPERATURE 4000
 
@@ -55,6 +57,9 @@ DT_MODULE_INTROSPECTION(4, dt_iop_temperature_params_t)
 
 #define DT_IOP_NUM_OF_STD_TEMP_PRESETS 5
 
+#define DT_IOP_WB_CAT_HUE_MAX 360.0f
+#define DT_IOP_WB_CAT_CHROMA_MAX 300.0f
+
 // If you reorder presets combo, change this consts
 #define DT_IOP_TEMP_UNKNOWN -1
 #define DT_IOP_TEMP_AS_SHOT 0
@@ -64,6 +69,8 @@ DT_MODULE_INTROSPECTION(4, dt_iop_temperature_params_t)
 #define DT_IOP_TEMP_D65_LATE 4
 
 static void _gui_sliders_update(dt_iop_module_t *self);
+static void _cat_controls_update(dt_iop_module_t *self);
+static void _cat_xy_sliders_update(dt_iop_module_t *self);
 
 typedef struct dt_iop_temperature_params_t
 {
@@ -72,6 +79,16 @@ typedef struct dt_iop_temperature_params_t
   float blue;    // $MIN: 0.0 $MAX: 8.0
   float various; // $MIN: 0.0 $MAX: 8.0
   int preset;
+
+  // D65+CAT pipeline: reference the raw channels to D65 before demosaicing and
+  // let color calibration perform the chromatic adaptation
+  gboolean use_cat;                // $DEFAULT: TRUE $DESCRIPTION: "prepare raw in D65 and drive chromatic adaptation"
+  dt_illuminant_t cat_illuminant;  // $DEFAULT: DT_ILLUMINANT_FROM_WB $DESCRIPTION: "source"
+  dt_illuminant_fluo_t cat_illum_fluo; // $DEFAULT: DT_ILLUMINANT_FLUO_F3 $DESCRIPTION: "F source"
+  dt_illuminant_led_t cat_illum_led;   // $DEFAULT: DT_ILLUMINANT_LED_B5 $DESCRIPTION: "LED source"
+  dt_adaptation_t cat_adaptation;  // $DEFAULT: DT_ADAPTATION_CAT16 $DESCRIPTION: "adaptation"
+  float cat_x;                     // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.3127 $DESCRIPTION: "x"
+  float cat_y;                     // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.3290 $DESCRIPTION: "y"
 } dt_iop_temperature_params_t;
 
 typedef struct dt_iop_temperature_gui_data_t
@@ -96,6 +113,11 @@ typedef struct dt_iop_temperature_gui_data_t
   gboolean blackbody_is_confusing;
   gboolean button_bar_visible;
   dt_gui_collapsible_section_t cs;
+
+  // chromatic adaptation section
+  GtkWidget *cat_illuminant, *cat_illum_fluo, *cat_illum_led;
+  GtkWidget *cat_adaptation, *cat_x, *cat_y;
+  dt_gui_collapsible_section_t cat_cs;
 } dt_iop_temperature_gui_data_t;
 
 typedef struct dt_iop_temperature_data_t
@@ -142,6 +164,40 @@ int legacy_params(dt_iop_module_t *self,
     int preset;
   } dt_iop_temperature_params_v4_t;
 
+  typedef struct dt_iop_temperature_params_v5_t
+  {
+    float red;
+    float green;
+    float blue;
+    float various;
+    int preset;
+    gboolean use_cat;
+    gboolean advanced;
+    dt_illuminant_t cat_illuminant;
+    dt_illuminant_fluo_t cat_illum_fluo;
+    dt_illuminant_led_t cat_illum_led;
+    dt_adaptation_t cat_adaptation;
+    float cat_x;
+    float cat_y;
+    float cat_temperature;
+  } dt_iop_temperature_params_v5_t;
+
+  typedef struct dt_iop_temperature_params_v6_t
+  {
+    float red;
+    float green;
+    float blue;
+    float various;
+    int preset;
+    gboolean use_cat;
+    dt_illuminant_t cat_illuminant;
+    dt_illuminant_fluo_t cat_illum_fluo;
+    dt_illuminant_led_t cat_illum_led;
+    dt_adaptation_t cat_adaptation;
+    float cat_x;
+    float cat_y;
+  } dt_iop_temperature_params_v6_t;
+
   if(old_version == 2)
   {
     typedef struct dt_iop_temperature_params_v2_t
@@ -179,6 +235,58 @@ int legacy_params(dt_iop_module_t *self,
     *new_version = 4;
     return 0;
   }
+
+  if(old_version == 4)
+  {
+    const dt_iop_temperature_params_v4_t *o = (dt_iop_temperature_params_v4_t *)old_params;
+    dt_iop_temperature_params_v5_t *n = malloc(sizeof(dt_iop_temperature_params_v5_t));
+
+    n->red = o->red;
+    n->green = o->green;
+    n->blue = o->blue;
+    n->various = o->various;
+    n->preset = o->preset;
+
+    // old edits keep the legacy pipeline and render exactly as before
+    n->use_cat = FALSE;
+    n->advanced = FALSE;
+    n->cat_illuminant = DT_ILLUMINANT_FROM_WB;
+    n->cat_illum_fluo = DT_ILLUMINANT_FLUO_F3;
+    n->cat_illum_led = DT_ILLUMINANT_LED_B5;
+    n->cat_adaptation = DT_ADAPTATION_CAT16;
+    n->cat_x = 0.3127f;
+    n->cat_y = 0.3290f;
+    n->cat_temperature = 6504.0f;
+
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_temperature_params_v5_t);
+    *new_version = 5;
+    return 0;
+  }
+
+  if(old_version == 5)
+  {
+    const dt_iop_temperature_params_v5_t *o = (dt_iop_temperature_params_v5_t *)old_params;
+    dt_iop_temperature_params_v6_t *n = malloc(sizeof(dt_iop_temperature_params_v6_t));
+
+    n->red = o->red;
+    n->green = o->green;
+    n->blue = o->blue;
+    n->various = o->various;
+    n->preset = o->preset;
+    n->use_cat = o->use_cat;
+    n->cat_illuminant = o->cat_illuminant;
+    n->cat_illum_fluo = o->cat_illum_fluo;
+    n->cat_illum_led = o->cat_illum_led;
+    n->cat_adaptation = o->cat_adaptation;
+    n->cat_x = o->cat_x;
+    n->cat_y = o->cat_y;
+
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_temperature_params_v6_t);
+    *new_version = 6;
+    return 0;
+  }
   return 1;
 }
 
@@ -196,6 +304,58 @@ static inline void _temp_array_from_params(double a[4],
   float *coeffs = (float *)p;
   for_four_channels(c)
    a[c] = coeffs[c];
+}
+
+// derive the scene illuminant chromaticity from camera WB coefficients
+static gboolean _coeffs_to_illuminant_xy(const dt_image_t *img,
+                                         const dt_aligned_pixel_t coeffs,
+                                         float *x, float *y)
+{
+  if(!dt_image_is_matrix_correction_supported(img)) return FALSE;
+
+  float XYZ_to_CAM[4][3];
+  dt_mark_colormatrix_invalid(&XYZ_to_CAM[0][0]);
+
+  if(dt_is_valid_colormatrix(img->d65_color_matrix[0]))
+  {
+    XYZ_to_CAM[0][0] = img->d65_color_matrix[0];
+    XYZ_to_CAM[0][1] = img->d65_color_matrix[1];
+    XYZ_to_CAM[0][2] = img->d65_color_matrix[2];
+    XYZ_to_CAM[1][0] = img->d65_color_matrix[3];
+    XYZ_to_CAM[1][1] = img->d65_color_matrix[4];
+    XYZ_to_CAM[1][2] = img->d65_color_matrix[5];
+    XYZ_to_CAM[2][0] = img->d65_color_matrix[6];
+    XYZ_to_CAM[2][1] = img->d65_color_matrix[7];
+    XYZ_to_CAM[2][2] = img->d65_color_matrix[8];
+  }
+  else
+  {
+    for(int k = 0; k < 4; k++)
+      for(int i = 0; i < 3; i++)
+        XYZ_to_CAM[k][i] = img->adobe_XYZ_to_CAM[k][i];
+  }
+
+  if(!dt_is_valid_colormatrix(XYZ_to_CAM[0][0])) return FALSE;
+
+  float CAM_to_XYZ[4][3];
+  dt_mark_colormatrix_invalid(&CAM_to_XYZ[0][0]);
+  matrice_pseudoinverse(XYZ_to_CAM, CAM_to_XYZ, 3);
+  if(!dt_is_valid_colormatrix(CAM_to_XYZ[0][0])) return FALSE;
+
+  WB_coeffs_to_illuminant_xy(CAM_to_XYZ, coeffs, x, y);
+  return (x && y && *x > 0.0f && *y > 0.0f);
+}
+
+static gboolean _is_usable_illuminant_xy(const float x, const float y)
+{
+  const float z = 1.f - x - y;
+  if(!(x > 0.f && y > 0.f && z > 0.f)) return FALSE;
+
+  dt_aligned_pixel_t XYZ = { 0.f };
+  dt_aligned_pixel_t LMS = { 0.f };
+  illuminant_xy_to_XYZ(x, y, XYZ);
+  convert_XYZ_to_CAT16_LMS(XYZ, LMS);
+  return LMS[0] > 0.f && LMS[1] > 0.f && LMS[2] > 0.f;
 }
 
 static gboolean _ignore_missing_wb(dt_image_t *img)
@@ -526,7 +686,8 @@ static inline void _publish_chroma(dt_dev_pixelpipe_iop_t *piece)
       d->coeffs[k] * piece->pipe->dsc.processed_maximum[k];
     chr->wb_coeffs[k] = d->coeffs[k];
   }
-  chr->late_correction = (d->preset == DT_IOP_TEMP_D65_LATE);
+  chr->late_correction = !piece->pipe->wb.active && piece->enabled
+                          && (d->preset == DT_IOP_TEMP_D65_LATE);
 }
 
 void process(dt_iop_module_t *self,
@@ -697,6 +858,86 @@ void commit_params(dt_iop_module_t *self,
     piece->enabled = FALSE;
 
   dt_dev_chroma_t *chr = &self->dev->chroma;
+  const dt_image_t *img = &self->dev->image_storage;
+  const gboolean true_monochrome =
+    dt_image_monochrome_flags(img) & DT_IMAGE_MONOCHROME;
+  const gboolean is_raw = dt_image_is_rawprepare_supported(img);
+  const gboolean active = piece->enabled && !true_monochrome;
+
+  // always start from a clean per-pipe state
+  pipe->wb.active = FALSE;
+  pipe->wb.has_cat = FALSE;
+
+  if(active && p->use_cat)
+  {
+    // raw channels are always referenced to the camera D65 white before
+    // demosaicing, and color calibration performs the scene adaptation
+    double D65[4] = { 2.0, 1.0, 1.5, 1.0 };
+    if(chr->D65coeffs[0] > 0.0 && chr->D65coeffs[1] > 0.0 && chr->D65coeffs[2] > 0.0)
+      for_four_channels(k) D65[k] = chr->D65coeffs[k];
+
+    const dt_aligned_pixel_t M =
+      { p->red, p->green, p->blue, p->various };
+
+    float x = 0.3127f;
+    float y = 0.3290f;
+    gboolean found = FALSE;
+
+    if(p->cat_illuminant == DT_ILLUMINANT_FROM_WB
+       || p->cat_illuminant == DT_ILLUMINANT_D
+       || p->cat_illuminant == DT_ILLUMINANT_BB)
+    {
+      // the selected white balance coefficients define the scene illuminant.
+      // in D/BB modes only the temp/tint controls are active, but the same
+      // derivation applies.
+      found = _coeffs_to_illuminant_xy(img, M, &x, &y)
+              && _is_usable_illuminant_xy(x, y);
+    }
+    else
+    {
+      float cx = p->cat_x;
+      float cy = p->cat_y;
+      found = illuminant_to_xy(p->cat_illuminant, img, NULL, &cx, &cy,
+                               6504.0f, p->cat_illum_fluo,
+                               p->cat_illum_led)
+              && _is_usable_illuminant_xy(cx, cy);
+      if(found) { x = cx; y = cy; }
+    }
+
+    if(!found)
+    {
+      x = 0.3127f;
+      y = 0.3290f;
+    }
+
+    for_four_channels(k)
+      d->coeffs[k] = is_raw ? (float)D65[k] : 1.0f;
+    d->preset = p->preset;
+
+    chr->late_correction = FALSE;
+    chr->cat_pipeline = TRUE;
+    for_four_channels(k)
+      chr->wb_coeffs[k] = d->coeffs[k];
+
+    const gboolean has_cat =
+      dt_image_is_matrix_correction_supported(img)
+      && p->cat_adaptation != DT_ADAPTATION_RGB;
+
+    pipe->wb.active = TRUE;
+    pipe->wb.has_cat = has_cat;
+    pipe->wb.illuminant_xy[0] = x;
+    pipe->wb.illuminant_xy[1] = y;
+    pipe->wb.adaptation = has_cat ? (int)p->cat_adaptation : (int)DT_ADAPTATION_RGB;
+
+    chr->temperature = self;
+
+    if(dt_pipe_is_preview(pipe) && !piece->enabled)
+      dt_iop_set_module_trouble_message(self, NULL, NULL, NULL);
+    return;
+  }
+
+  // legacy pipeline
+  chr->cat_pipeline = FALSE;
 
   if(self->hide_enable_button)
   {
@@ -721,7 +962,8 @@ void commit_params(dt_iop_module_t *self,
      If piece is disabled we always clear the trouble message and
      make sure chroma does know there is no temperature module.
   */
-  chr->late_correction = p->preset == DT_IOP_TEMP_D65_LATE;
+  chr->late_correction = piece->enabled
+                          && p->preset == DT_IOP_TEMP_D65_LATE;
   chr->temperature = piece->enabled ? self : NULL;
   if(dt_pipe_is_preview(pipe) && !piece->enabled)
     dt_iop_set_module_trouble_message(self, NULL, NULL, NULL);
@@ -1165,7 +1407,7 @@ static void _update_preset(dt_iop_module_t *self, int mode)
   dt_dev_chroma_t *chr = &self->dev->chroma;
 
   p->preset = mode;
-  chr->late_correction = mode == DT_IOP_TEMP_D65_LATE;
+  chr->late_correction = self->enabled && mode == DT_IOP_TEMP_D65_LATE;
 }
 
 void gui_update(dt_iop_module_t *self)
@@ -1174,7 +1416,10 @@ void gui_update(dt_iop_module_t *self)
   dt_iop_temperature_params_t *p = self->params;
   dt_iop_temperature_params_t *d = self->default_params;
 
-  d->preset = dt_is_scene_referred() ? DT_IOP_TEMP_D65_LATE : DT_IOP_TEMP_AS_SHOT;
+  d->preset = p->use_cat
+              ? DT_IOP_TEMP_AS_SHOT
+              : (dt_is_scene_referred() ? DT_IOP_TEMP_D65_LATE
+                                        : DT_IOP_TEMP_AS_SHOT);
 
   const gboolean true_monochrome =
     dt_image_monochrome_flags(&self->dev->image_storage) & DT_IMAGE_MONOCHROME;
@@ -1375,6 +1620,8 @@ void gui_update(dt_iop_module_t *self)
     chr->D65coeffs[0], chr->D65coeffs[1], chr->D65coeffs[2], chr->as_shot[0], chr->as_shot[1], chr->as_shot[2]);
 
   dt_gui_update_collapsible_section(&g->cs);
+  dt_gui_update_collapsible_section(&g->cat_cs);
+  _cat_controls_update(self);
 
   gtk_widget_queue_draw(self->widget);
 }
@@ -1515,9 +1762,19 @@ void reload_defaults(dt_iop_module_t *self)
   dt_iop_temperature_params_t *d = self->default_params;
   dt_iop_temperature_params_t *p = self->params;
 
-  d->preset = dt_is_scene_referred() ? DT_IOP_TEMP_D65_LATE : DT_IOP_TEMP_AS_SHOT;
+  d->preset = DT_IOP_TEMP_AS_SHOT;
 
-  const gboolean scene_referred = d->preset == DT_IOP_TEMP_D65_LATE;
+  // defaults for new edits: reference the raw in D65 and let color
+  // calibration perform the chromatic adaptation
+  d->use_cat = TRUE;
+  d->cat_illuminant = DT_ILLUMINANT_FROM_WB;
+  d->cat_illum_fluo = DT_ILLUMINANT_FLUO_F3;
+  d->cat_illum_led = DT_ILLUMINANT_LED_B5;
+  d->cat_adaptation = DT_ADAPTATION_CAT16;
+  d->cat_x = 0.3127f;
+  d->cat_y = 0.3290f;
+
+  const gboolean scene_referred = dt_is_scene_referred();
 
   float *dcoeffs = (float *)d;
   for_four_channels(k)
@@ -1619,14 +1876,14 @@ void reload_defaults(dt_iop_module_t *self)
       // raw images need wb:
       self->default_enabled = TRUE;
 
-      // if workflow = modern, only set WB coeffs equivalent to D65 illuminant
-      // full chromatic adaptation is deferred to channelmixerrgb
+      // if workflow = modern, only set WB coeffs to the as-shot coefficients.
+      // the hidden cat module performs the chromatic adaptation.
       double coeffs[4] = { 0 };
       if(is_modern && !_calculate_bogus_daylight_wb(self, coeffs))
       {
         for_four_channels(k)
           dcoeffs[k] = as_shot[k];
-        d->preset = p->preset = DT_IOP_TEMP_D65_LATE;
+        d->preset = p->preset = DT_IOP_TEMP_AS_SHOT;
       }
       else
       {
@@ -1688,6 +1945,7 @@ void reload_defaults(dt_iop_module_t *self)
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->btn_user), FALSE);
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->btn_d65), FALSE);
   }
+
 }
 
 void init_global(dt_iop_module_so_t *self)
@@ -1734,10 +1992,162 @@ static void _temp_tint_callback(GtkWidget *slider, dt_iop_module_t *self)
   _update_preset(self, DT_IOP_TEMP_USER);
 }
 
+static void _cat_hue_chroma_callback(GtkWidget *slider, dt_iop_module_t *self)
+{
+  DT_GUARD_GUI_UPDATE();
+  dt_iop_temperature_gui_data_t *g = self->gui_data;
+  dt_iop_temperature_params_t *p = self->params;
+
+  dt_aligned_pixel_t Lch = { 0.0f };
+  Lch[0] = 100.f;
+  Lch[2] = deg2radf(dt_bauhaus_slider_get(g->cat_x));
+  Lch[1] = dt_bauhaus_slider_get(g->cat_y);
+
+  dt_aligned_pixel_t xyY = { 0.0f };
+  dt_Lch_to_xyY(Lch, xyY);
+  p->cat_x = xyY[0];
+  p->cat_y = xyY[1];
+
+  _cat_xy_sliders_update(self);
+  dt_dev_add_history_item(darktable.develop, self, TRUE);
+}
+
+static void _cat_xy_sliders_update(dt_iop_module_t *self)
+{
+  dt_iop_temperature_gui_data_t *g = self->gui_data;
+  const dt_iop_temperature_params_t *p = self->params;
+  if(!g || !g->cat_x || !g->cat_y) return;
+
+  const dt_aligned_pixel_t xyY = { p->cat_x, p->cat_y, 1.f, 0.f };
+  dt_aligned_pixel_t Lch = { 0.0f };
+  dt_xyY_to_Lch(xyY, Lch);
+
+  DT_ENTER_GUI_UPDATE();
+  dt_bauhaus_slider_set(g->cat_x, rad2degf(Lch[2]));
+  dt_bauhaus_slider_set(g->cat_y, Lch[1]);
+  DT_LEAVE_GUI_UPDATE();
+
+  dt_bauhaus_slider_clear_stops(g->cat_x);
+  dt_bauhaus_slider_clear_stops(g->cat_y);
+
+  // the hue slider uses a hollow indicator when a gradient is shown, so that
+  // the reference color stays visible. Without a gradient it must use the
+  // regular filled indicator to follow the theme.
+  dt_bauhaus_slider_set_feedback(g->cat_x, !g->colored_sliders);
+
+  if(!g->colored_sliders) return;
+
+  // hue reference: fixed chroma, same as color calibration
+  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
+  {
+    const float stop = i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1);
+    const dt_aligned_pixel_t Lch_h = { 100.f, 50.f,
+                                       deg2radf(stop * DT_IOP_WB_CAT_HUE_MAX) };
+    dt_aligned_pixel_t xyY_h = { 0.0f };
+    dt_Lch_to_xyY(Lch_h, xyY_h);
+    dt_aligned_pixel_t RGB = { 0.0f };
+    illuminant_xy_to_RGB(xyY_h[0], xyY_h[1], RGB);
+    dt_bauhaus_slider_set_stop(g->cat_x, stop, RGB[0], RGB[1], RGB[2]);
+  }
+
+  // chroma reference: current hue, same as color calibration
+  const float hue = deg2radf(dt_bauhaus_slider_get(g->cat_x));
+  for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
+  {
+    const float stop = i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1);
+    const float chroma = stop * DT_IOP_WB_CAT_CHROMA_MAX / 2.0f;
+    const dt_aligned_pixel_t Lch_c = { 75.f, chroma, hue };
+    dt_aligned_pixel_t xyY_c = { 0.0f };
+    dt_Lch_to_xyY(Lch_c, xyY_c);
+    dt_aligned_pixel_t RGB = { 0.0f };
+    illuminant_xy_to_RGB(xyY_c[0], xyY_c[1], RGB);
+    dt_bauhaus_slider_set_stop(g->cat_y, stop, RGB[0], RGB[1], RGB[2]);
+  }
+}
+
+static void _cat_controls_update(dt_iop_module_t *self)
+{
+  dt_iop_temperature_gui_data_t *g = self->gui_data;
+  const dt_iop_temperature_params_t *p = self->params;
+
+  if(!g) return;
+
+  const gboolean legacy = !p->use_cat;
+
+  // the bulb+body mode only makes sense for the legacy late-correction path
+  gtk_widget_set_visible(GTK_WIDGET(g->btn_d65_late), legacy);
+  if(dt_bauhaus_combobox_length(g->presets) > DT_IOP_TEMP_D65_LATE)
+    dt_bauhaus_combobox_entry_set_sensitive(g->presets, DT_IOP_TEMP_D65_LATE, legacy);
+
+  // legacy edits keep the old pipeline and must not show a CAT section here
+  if(!p->use_cat)
+  {
+    gtk_widget_set_visible(GTK_WIDGET(g->cat_cs.expander), FALSE);
+    gtk_widget_set_sensitive(GTK_WIDGET(g->buttonbar), TRUE);
+    gtk_widget_set_sensitive(GTK_WIDGET(g->presets), TRUE);
+    gtk_widget_set_sensitive(GTK_WIDGET(g->finetune), TRUE);
+    gtk_widget_set_sensitive(GTK_WIDGET(g->colorpicker), TRUE);
+    gtk_widget_set_sensitive(GTK_WIDGET(g->scale_k), TRUE);
+    gtk_widget_set_sensitive(GTK_WIDGET(g->scale_tint), TRUE);
+    gtk_widget_set_sensitive(GTK_WIDGET(g->scale_r), TRUE);
+    gtk_widget_set_sensitive(GTK_WIDGET(g->scale_g), TRUE);
+    gtk_widget_set_sensitive(GTK_WIDGET(g->scale_b), TRUE);
+    gtk_widget_set_sensitive(GTK_WIDGET(g->scale_y), TRUE);
+    return;
+  }
+
+  gtk_widget_set_visible(GTK_WIDGET(g->cat_cs.expander), TRUE);
+
+  const gboolean from_wb = p->cat_illuminant == DT_ILLUMINANT_FROM_WB;
+  const gboolean temp_only = p->cat_illuminant == DT_ILLUMINANT_D
+                             || p->cat_illuminant == DT_ILLUMINANT_BB;
+
+  // the classic white balance controls are active only when the CAT follows
+  // them, or when only the temp/tint pair defines the source
+  gtk_widget_set_sensitive(GTK_WIDGET(g->buttonbar), from_wb);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->presets), from_wb);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->finetune), from_wb);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->colorpicker), from_wb);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->scale_r), from_wb);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->scale_g), from_wb);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->scale_b), from_wb);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->scale_y), from_wb);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->scale_k), from_wb || temp_only);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->scale_tint), from_wb || temp_only);
+
+  // CAT controls: the source and adaptation are always available
+  gtk_widget_set_sensitive(GTK_WIDGET(g->cat_illuminant), TRUE);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->cat_adaptation), TRUE);
+
+  const gboolean is_f = p->cat_illuminant == DT_ILLUMINANT_F;
+  const gboolean is_led = p->cat_illuminant == DT_ILLUMINANT_LED;
+  const gboolean is_custom = p->cat_illuminant == DT_ILLUMINANT_CUSTOM;
+
+  gtk_widget_set_visible(GTK_WIDGET(g->cat_illum_fluo), is_f);
+  gtk_widget_set_visible(GTK_WIDGET(g->cat_illum_led), is_led);
+  gtk_widget_set_visible(GTK_WIDGET(g->cat_x), is_custom);
+  gtk_widget_set_visible(GTK_WIDGET(g->cat_y), is_custom);
+
+  gtk_widget_set_sensitive(GTK_WIDGET(g->cat_illum_fluo), is_f);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->cat_illum_led), is_led);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->cat_x), is_custom);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->cat_y), is_custom);
+
+  _cat_xy_sliders_update(self);
+}
+
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 {
   dt_iop_temperature_gui_data_t *g = self->gui_data;
   dt_iop_temperature_params_t *p = self->params;
+
+  if(w && (w == g->cat_illuminant
+           || w == g->cat_illum_fluo || w == g->cat_illum_led
+           || w == g->cat_adaptation || w == g->cat_x || w == g->cat_y))
+  {
+    _cat_controls_update(self);
+    return;
+  }
 
   _temp_array_from_params(g->mod_coeff, p);
 
@@ -2044,6 +2454,7 @@ static gboolean temp_label_click(GtkWidget *label,
   _color_temptint_sliders(self);
   _color_rgb_sliders(self);
   _color_finetuning_slider(self);
+  _cat_xy_sliders_update(self);
   return TRUE;
 }
 
@@ -2061,6 +2472,29 @@ static void _preference_changed(gpointer instance, dt_iop_module_t *self)
   _color_temptint_sliders(self);
   _color_rgb_sliders(self);
   _color_finetuning_slider(self);
+  _cat_xy_sliders_update(self);
+  _cat_controls_update(self);
+}
+
+static void _wb_set_custom_illuminant(dt_develop_t *dev, float x, float y)
+{
+  if(!dev) return;
+
+  for(GList *modules = dev->iop; modules; modules = g_list_next(modules))
+  {
+    dt_iop_module_t *mod = modules->data;
+    if(!dt_iop_module_is(mod, "temperature")) continue;
+
+    dt_iop_temperature_params_t *p = mod->params;
+    p->use_cat = TRUE;
+    p->cat_illuminant = DT_ILLUMINANT_CUSTOM;
+    p->cat_x = x;
+    p->cat_y = y;
+
+    dt_iop_gui_update(mod);
+    dt_dev_add_history_item(dev, mod, TRUE);
+    break;
+  }
 }
 
 void gui_init(dt_iop_module_t *self)
@@ -2192,6 +2626,76 @@ void gui_init(dt_iop_module_t *self)
 
   gtk_widget_set_no_show_all(g->scale_y, TRUE);
 
+  // chromatic adaptation section. The widgets are created while self->widget
+  // points at the collapsible container so that the *_from_params helpers add
+  // them to the right place.
+  dt_gui_new_collapsible_section
+    (&g->cat_cs,
+     "plugins/darkroom/temperature/expand_cat",
+     _("chromatic adaptation"),
+     GTK_BOX(box_enabled),
+     DT_ACTION(self));
+
+  self->widget = GTK_WIDGET(g->cat_cs.container);
+
+  g->cat_illuminant = dt_bauhaus_combobox_from_params(self, "cat_illuminant");
+  gtk_widget_set_tooltip_text
+    (g->cat_illuminant,
+     _("choose where the scene illuminant comes from.\n"
+       "from white balance derives it from the settings above;\n"
+       "a fixed illuminant disables the conflicting white balance controls."));
+
+  // keep only the meaningful sources: from WB, D, A, E, F, LED, BB and custom
+  const dt_illuminant_t removed_sources[] = {
+    DT_ILLUMINANT_PIPE,
+    DT_ILLUMINANT_CAMERA,
+    DT_ILLUMINANT_DETECT_EDGES,
+    DT_ILLUMINANT_DETECT_SURFACES,
+    DT_ILLUMINANT_LAST
+  };
+  for(size_t i = 0; i < sizeof(removed_sources) / sizeof(removed_sources[0]); i++)
+  {
+    const int pos = dt_bauhaus_combobox_get_from_value(g->cat_illuminant,
+                                                       removed_sources[i]);
+    if(pos >= 0) dt_bauhaus_combobox_remove_at(g->cat_illuminant, pos);
+  }
+
+  // keep "from white balance settings" as the first source
+  const int from_wb_pos =
+    dt_bauhaus_combobox_get_from_value(g->cat_illuminant, DT_ILLUMINANT_FROM_WB);
+  if(from_wb_pos > 0)
+  {
+    char *from_wb_text =
+      g_strdup(dt_bauhaus_combobox_get_entry(g->cat_illuminant, from_wb_pos));
+    dt_bauhaus_combobox_remove_at(g->cat_illuminant, from_wb_pos);
+    dt_bauhaus_combobox_insert_full(g->cat_illuminant, from_wb_text,
+                                    DT_BAUHAUS_COMBOBOX_ALIGN_RIGHT,
+                                    GINT_TO_POINTER(DT_ILLUMINANT_FROM_WB),
+                                    NULL, 0);
+    g_free(from_wb_text);
+    dt_bauhaus_combobox_set_from_value
+      (g->cat_illuminant, ((dt_iop_temperature_params_t *)self->params)->cat_illuminant);
+  }
+
+  g->cat_illum_fluo = dt_bauhaus_combobox_from_params(self, "cat_illum_fluo");
+  g->cat_illum_led = dt_bauhaus_combobox_from_params(self, "cat_illum_led");
+  g->cat_adaptation = dt_bauhaus_combobox_from_params(self, "cat_adaptation");
+  g->cat_x = dt_bauhaus_slider_new_with_range_and_feedback
+    (self, 0.0, DT_IOP_WB_CAT_HUE_MAX, 0, 0.0, 1, 0);
+  dt_bauhaus_widget_set_label(g->cat_x, NULL, N_("hue"));
+  dt_bauhaus_slider_set_format(g->cat_x, "°");
+  g_signal_connect(G_OBJECT(g->cat_x), "value-changed",
+                   G_CALLBACK(_cat_hue_chroma_callback), self);
+
+  g->cat_y = dt_bauhaus_slider_new_with_range(self, 0.0, 100.0, 0, 0.0, 1);
+  dt_bauhaus_widget_set_label(g->cat_y, NULL, N_("chroma"));
+  dt_bauhaus_slider_set_format(g->cat_y, "%");
+  dt_bauhaus_slider_set_hard_max(g->cat_y, DT_IOP_WB_CAT_CHROMA_MAX);
+  g_signal_connect(G_OBJECT(g->cat_y), "value-changed",
+                   G_CALLBACK(_cat_hue_chroma_callback), self);
+
+  dt_gui_box_add(self->widget, g->cat_x, g->cat_y);
+
   g_signal_connect(G_OBJECT(g->scale_k), "value-changed",
                    G_CALLBACK(_temp_tint_callback), self);
   g_signal_connect(G_OBJECT(g->scale_tint), "value-changed",
@@ -2215,6 +2719,9 @@ void gui_init(dt_iop_module_t *self)
 
   gtk_stack_add_named(GTK_STACK(self->widget), GTK_WIDGET(box_enabled), "enabled");
   gtk_stack_add_named(GTK_STACK(self->widget), label_disabled, "disabled");
+
+  if(self->dev)
+    self->dev->proxy.wb_set_illuminant = _wb_set_custom_illuminant;
 }
 
 void gui_cleanup(dt_iop_module_t *self)
@@ -2227,7 +2734,11 @@ void gui_reset(dt_iop_module_t *self)
   dt_iop_temperature_gui_data_t *g = self->gui_data;
   dt_iop_temperature_params_t *d = self->default_params;
 
-  const int preset = d->preset = dt_is_scene_referred() ? DT_IOP_TEMP_D65_LATE : DT_IOP_TEMP_AS_SHOT;
+  const dt_iop_temperature_params_t *p = self->params;
+  const int preset = d->preset = p->use_cat
+                                 ? DT_IOP_TEMP_AS_SHOT
+                                 : (dt_is_scene_referred() ? DT_IOP_TEMP_D65_LATE
+                                                           : DT_IOP_TEMP_AS_SHOT);
 
   dt_iop_color_picker_reset(self, TRUE);
 
@@ -2243,6 +2754,7 @@ void gui_reset(dt_iop_module_t *self)
   _color_finetuning_slider(self);
   _color_rgb_sliders(self);
   _color_temptint_sliders(self);
+  _cat_controls_update(self);
   _update_preset(self, preset);
 }
 

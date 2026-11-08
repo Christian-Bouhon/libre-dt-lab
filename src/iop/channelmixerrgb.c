@@ -46,6 +46,7 @@
 #include "common/colorspaces_inline_conversions.h"
 #include "common/colorchecker.h"
 #include "common/opencl.h"
+#include "common/wb_gamut_mapping.h"
 #include "common/illuminants.h"
 #include "common/imagebuf.h"
 #include "common/iop_profile.h"
@@ -138,6 +139,7 @@ typedef enum dt_spot_mode_t
 typedef struct dt_iop_channelmixer_rgb_gui_data_t
 {
   GtkNotebook *notebook;
+  GtkWidget *page_cat, *tab_cat;
   GtkWidget *illuminant, *temperature, *adaptation, *gamut, *clip;
   GtkWidget *illum_fluo, *illum_led, *illum_x, *illum_y, *approx_cct, *illum_color;
   GtkWidget *scale_red_R, *scale_red_G, *scale_red_B;
@@ -190,6 +192,8 @@ typedef struct dt_iop_channelmixer_rgb_gui_data_t
   dt_aligned_pixel_t spot_RGB;
   float last_daylight_temperature;
   float last_bb_temperature;
+  float last_wb_coeffs[4];
+  gboolean last_wb_valid;
 } dt_iop_channelmixer_rgb_gui_data_t;
 
 typedef struct dt_iop_channelmixer_rbg_data_t
@@ -386,26 +390,9 @@ int legacy_params(dt_iop_module_t *self,
 
 void init_presets(dt_iop_module_so_t *self)
 {
-  // auto-applied scene-referred default
-  self->pref_based_presets = TRUE;
-
-  const gboolean is_scene_referred = dt_is_scene_referred();
-
-  if(is_scene_referred)
-  {
-    dt_gui_presets_add_generic
-      (_("scene-referred default"), self->op, self->version(),
-       NULL, 0,
-       TRUE, DEVELOP_BLEND_CS_RGB_SCENE);
-
-    dt_gui_presets_update_format(BUILTIN_PRESET("scene-referred default"), self->op,
-                                 self->version(), FOR_MATRIX);
-
-    dt_gui_presets_update_autoapply(BUILTIN_PRESET("scene-referred default"),
-                                    self->op, self->version(), TRUE);
-  }
-
-  // others
+  // color calibration is no longer auto-applied: the hidden cat module owns
+  // chromatic adaptation, and this module is added manually when the user
+  // needs the channel mixer or color checker calibration.
 
   dt_iop_channelmixer_rgb_params_t p;
   memset(&p, 0, sizeof(p));
@@ -644,64 +631,6 @@ static gboolean _get_white_balance_coeff(const dt_iop_module_t *self,
 }
 
 
-DT_OMP_DECLARE_SIMD(aligned(input, output:16) uniform(compression, clip))
-static inline void _gamut_mapping(const dt_aligned_pixel_t input,
-                                  const float compression,
-                                  const gboolean clip,
-                                  dt_aligned_pixel_t output)
-{
-  // Get the sum XYZ
-  const float sum = input[0] + input[1] + input[2];
-  const float Y = input[1];
-
-  // use chromaticity coordinates of reference white for sum == 0
-  dt_aligned_pixel_t xyY = {  sum > 0.0f ? input[0] / sum : D50xyY.x,
-                              sum > 0.0f ? input[1] / sum : D50xyY.y,
-                              Y,
-                              0.0f };
-
-  // Convert to uvY
-  dt_aligned_pixel_t uvY;
-  dt_xyY_to_uvY(xyY, uvY);
-
-  // Get the chromaticity difference with white point uv
-  const float D50[2] DT_ALIGNED_PIXEL = { 0.20915914598542354f, 0.488075320769787f };
-  const float delta[2] DT_ALIGNED_PIXEL = { D50[0] - uvY[0], D50[1] - uvY[1] };
-  const float Delta = Y * (sqf(delta[0]) + sqf(delta[1]));
-
-  // Compress chromaticity (move toward white point)
-  const float correction = (compression == 0.0f) ? 0.f : powf(Delta, compression);
-  for(size_t c = 0; c < 2; c++)
-  {
-    // Ensure the correction does not bring our uyY vector the other side of D50
-    // that would switch to the opposite color, so we clip at D50
-    // correction * delta[c] + uvY[c]
-    const float tmp = DT_FMA(correction, delta[c], uvY[c]);
-    uvY[c] = (uvY[c] > D50[c])  ? fmaxf(tmp, D50[c])
-                                : fminf(tmp, D50[c]);
-  }
-
-  // Convert back to xyY
-  dt_uvY_to_xyY(uvY, xyY);
-
-  // Clip upon request
-  if(clip) for(size_t c = 0; c < 2; c++) xyY[c] = fmaxf(xyY[c], 0.0f);
-
-  // Check sanity of y
-  // since we later divide by y, it can't be zero
-  xyY[1] = fmaxf(xyY[1], NORM_MIN);
-
-  // Check sanity of x and y :
-  // since Z = Y (1 - x - y) / y, if x + y >= 1, Z will be negative
-  const float scale = xyY[0] + xyY[1];
-  const int sanitize = (scale >= 1.f);
-  for(size_t c = 0; c < 2; c++) xyY[c] = (sanitize) ? xyY[c] / scale : xyY[c];
-
-  // Convert back to XYZ
-  dt_xyY_to_XYZ(xyY, output);
-}
-
-
 DT_OMP_DECLARE_SIMD(aligned(input, output, saturation, lightness:16) uniform(saturation, lightness))
 static inline void _luma_chroma(const dt_aligned_pixel_t input,
                                 const dt_aligned_pixel_t saturation,
@@ -898,7 +827,7 @@ static inline void _loop_switch(const float *const restrict in,
     // for this
     if(clip)
       dt_vector_clipneg_nan(temp_one);
-    _gamut_mapping(temp_one, gamut, clip, temp_two);
+    dt_wb_gamut_mapping(temp_one, gamut, clip, temp_two);
 
     // convert to LMS, XYZ or pipeline RGB
     switch(kind)
@@ -2895,6 +2824,8 @@ static void _start_profiling_callback(GtkWidget *togglebutton, dt_iop_module_t *
 
   dt_iop_channelmixer_rgb_gui_data_t *g = self->gui_data;
   g->is_profiling_started = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->cs.toggle));
+  if(!g->is_profiling_started)
+    self->dev->chroma.calibrating = FALSE;
 
   // init bounding box
   dt_iop_gui_enter_critical_section(self);
@@ -2913,6 +2844,7 @@ static void _run_profile_callback(GtkWidget *widget,
   dt_iop_gui_enter_critical_section(self);
   g->run_profile = TRUE;
   dt_iop_gui_leave_critical_section(self);
+  self->dev->chroma.calibrating = TRUE;
 
   dt_dev_reprocess_preview(self->dev);
 }
@@ -2959,6 +2891,14 @@ static void _commit_profile_callback(GtkWidget *widget,
   p->blue[2] = g->mix[2][2];
 
   dt_iop_gui_leave_critical_section(self);
+
+  // When the white balance module drives chromatic adaptation, the chart
+  // calibration must publish its illuminant there instead of relying on the
+  // hidden color calibration CAT controls.
+  if(self->dev->chroma.cat_pipeline && self->dev->proxy.wb_set_illuminant)
+    self->dev->proxy.wb_set_illuminant(self->dev, p->x, p->y);
+
+  self->dev->chroma.calibrating = FALSE;
 
   DT_ENTER_GUI_UPDATE();
   dt_bauhaus_combobox_set(g->illuminant, p->illuminant);
@@ -3033,6 +2973,40 @@ static void _develop_ui_pipe_finished_callback(gpointer instance, dt_iop_module_
 }
 #endif
 
+static gboolean _wb_owns_cat(const dt_iop_module_t *self);
+static void _update_cat_controls_lock(dt_iop_module_t *self);
+static void _update_cat_controls_lock(dt_iop_module_t *self)
+{
+  dt_iop_channelmixer_rgb_gui_data_t *g = self->gui_data;
+  if(!g) return;
+
+  const gboolean locked = _wb_owns_cat(self);
+
+  // hide only the CAT tab, keep the channel mixer tabs and the color checker
+  // calibration section available
+  if(g->page_cat)
+  {
+    const int cat_page = gtk_notebook_page_num(g->notebook, g->page_cat);
+    if(locked && gtk_notebook_get_current_page(g->notebook) == cat_page)
+      gtk_notebook_set_current_page(g->notebook, 1);
+    gtk_widget_set_visible(g->page_cat, !locked);
+    if(g->tab_cat) gtk_widget_set_visible(g->tab_cat, !locked);
+  }
+
+  gtk_widget_set_sensitive(g->adaptation, !locked);
+  gtk_widget_set_sensitive(g->illuminant, !locked);
+  gtk_widget_set_sensitive(g->illum_fluo, !locked);
+  gtk_widget_set_sensitive(g->illum_led, !locked);
+  gtk_widget_set_sensitive(g->temperature, !locked);
+  gtk_widget_set_sensitive(g->illum_x, !locked);
+  gtk_widget_set_sensitive(g->illum_y, !locked);
+  gtk_widget_set_sensitive(g->color_picker, !locked);
+  gtk_widget_set_tooltip_text(g->illuminant,
+    locked
+      ? _("the illuminant and adaptation are controlled by the white balance module")
+      : _("set the illuminant of the scene"));
+}
+
 static void _preview_pipe_finished_callback(gpointer instance, dt_iop_module_t *self)
 {
   dt_iop_channelmixer_rgb_gui_data_t *g = self->gui_data;
@@ -3042,6 +3016,25 @@ static void _preview_pipe_finished_callback(gpointer instance, dt_iop_module_t *
   gtk_label_set_markup(GTK_LABEL(g->label_delta_E), g->delta_E_label_text);
   dt_iop_gui_leave_critical_section(self);
   _set_trouble_messages(self);
+  _update_cat_controls_lock(self);
+
+  // white balance may have changed since the previous preview: refresh the
+  // illuminant color and approximate CCT when the applied coefficients differ
+  const dt_dev_chroma_t *chr = &self->dev->chroma;
+  gboolean wb_changed = !g->last_wb_valid;
+  for_four_channels(k)
+  {
+    if(fabsf(chr->wb_coeffs[k] - g->last_wb_coeffs[k]) > 1e-6f)
+      wb_changed = TRUE;
+    g->last_wb_coeffs[k] = chr->wb_coeffs[k];
+  }
+  g->last_wb_valid = TRUE;
+
+  if(wb_changed)
+  {
+    _update_approx_cct(self);
+    _update_illuminant_color(self);
+  }
 }
 
 void commit_params(dt_iop_module_t *self,
@@ -3110,17 +3103,31 @@ void commit_params(dt_iop_module_t *self,
   // find x y coordinates of illuminant for CIE 1931 2° observer
   float x = p->x;
   float y = p->y;
-  dt_aligned_pixel_t custom_wb;
-  _get_white_balance_coeff(self, custom_wb);
-  illuminant_to_xy(p->illuminant, &(self->dev->image_storage),
-                   custom_wb, &x, &y, p->temperature, p->illum_fluo, p->illum_led);
 
-  // if illuminant is set as camera, x and y are set on-the-fly at
-  // commit time, so we need to set adaptation too
-  if(p->illuminant == DT_ILLUMINANT_CAMERA)
-    _check_if_close_to_daylight(x, y, NULL, NULL, &(d->adaptation));
+  const gboolean wb_active = pipe->wb.active;
 
-  d->illuminant_type = p->illuminant;
+  if(wb_active)
+  {
+    // white balance + the hidden cat module own the chromatic adaptation.
+    // keep this instance in the D50 working space but preserve the selected
+    // adaptation method as the channel-mixing space.
+    x = D50xyY.x;
+    y = D50xyY.y;
+  }
+  else
+  {
+    dt_aligned_pixel_t custom_wb;
+    _get_white_balance_coeff(self, custom_wb);
+    illuminant_to_xy(p->illuminant, &(self->dev->image_storage),
+                     custom_wb, &x, &y, p->temperature, p->illum_fluo, p->illum_led);
+
+    // if illuminant is set as camera, x and y are set on-the-fly at
+    // commit time, so we need to set adaptation too
+    if(p->illuminant == DT_ILLUMINANT_CAMERA)
+      _check_if_close_to_daylight(x, y, NULL, NULL, &(d->adaptation));
+  }
+
+  d->illuminant_type = wb_active ? DT_ILLUMINANT_PIPE : p->illuminant;
 
   // Convert illuminant from xyY to XYZ
   dt_aligned_pixel_t XYZ;
@@ -3262,6 +3269,7 @@ static void _update_illuminants(const dt_iop_module_t *self)
       break;
     }
     case DT_ILLUMINANT_CAMERA:
+    case DT_ILLUMINANT_FROM_WB:
     {
       gtk_widget_set_visible(g->adaptation, TRUE);
       gtk_widget_set_visible(g->temperature, FALSE);
@@ -3978,6 +3986,11 @@ static void _spot_settings_changed_callback(GtkWidget *slider,
 }
 
 
+static gboolean _wb_owns_cat(const dt_iop_module_t *self)
+{
+  return self->dev && self->dev->chroma.cat_pipeline;
+}
+
 void gui_changed(dt_iop_module_t *self,
                  GtkWidget *w,
                  void *previous)
@@ -4147,6 +4160,12 @@ void gui_changed(dt_iop_module_t *self,
   // If "as shot in camera" illuminant is used, CAT space is forced automatically
   // therefore, make the control insensitive
   gtk_widget_set_sensitive(g->adaptation, p->illuminant != DT_ILLUMINANT_CAMERA);
+
+  // The white balance module owns the scene illuminant and adaptation when
+  // its D65+CAT pipeline is active. Keep the CAT controls visible but
+  // read-only so that old edits and the chart calibration workflow remain
+  // available.
+  _update_cat_controls_lock(self);
 
   _declare_cat_on_pipe(self, FALSE);
 
@@ -4456,6 +4475,8 @@ void gui_init(dt_iop_module_t *self)
   // Page CAT
   self->widget = dt_ui_notebook_page(g->notebook, N_("CAT"),
                                      _("chromatic adaptation transform"));
+  g->page_cat = self->widget;
+  g->tab_cat = gtk_notebook_get_tab_label(g->notebook, g->page_cat);
 
   g->adaptation = dt_bauhaus_combobox_from_params(self, N_("adaptation"));
   gtk_widget_set_tooltip_text
@@ -4491,6 +4512,12 @@ void gui_init(dt_iop_module_t *self)
   dt_gui_box_add(self->widget, dt_gui_hbox(g->approx_cct, dt_gui_expand(g->illum_color), g->color_picker));
 
   g->illuminant = dt_bauhaus_combobox_from_params(self, N_("illuminant"));
+  {
+    // this source belongs to the white balance module now
+    const int from_wb_pos =
+      dt_bauhaus_combobox_get_from_value(g->illuminant, DT_ILLUMINANT_FROM_WB);
+    if(from_wb_pos >= 0) dt_bauhaus_combobox_remove_at(g->illuminant, from_wb_pos);
+  }
 
   g->illum_fluo = dt_bauhaus_combobox_from_params(self, "illum_fluo");
 
@@ -4750,6 +4777,7 @@ void gui_cleanup(dt_iop_module_t *self)
   if(self && self->dev)
   {
     dt_dev_chroma_t *chr = &self->dev->chroma;
+    chr->calibrating = FALSE;
     if(chr->adaptation == self)
       chr->adaptation = NULL;
   }

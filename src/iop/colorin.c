@@ -22,6 +22,7 @@
 #include "common/colormatrices.c"
 #include "common/colorspaces.h"
 #include "common/colorspaces_inline_conversions.h"
+#include "common/wb_correction.h"
 #include "common/image_cache.h"
 #include "common/opencl.h"
 #include "common/utility.h"
@@ -649,11 +650,10 @@ int process_cl(dt_iop_module_t *self,
   }
 
   const dt_dev_chroma_t *chr = &self->dev->chroma;
-  const gboolean corrected = chr->late_correction;
-  dt_aligned_pixel_t coeffs = { corrected ? chr->D65coeffs[0] / chr->as_shot[0] : 1.0f,
-                                corrected ? chr->D65coeffs[1] / chr->as_shot[1] : 1.0f,
-                                corrected ? chr->D65coeffs[2] / chr->as_shot[2] : 1.0f,
-                                corrected ? chr->D65coeffs[3] / chr->as_shot[3] : 1.0f };
+  const gboolean corrected = chr->late_correction && !pipe->wb.active;
+  dt_aligned_pixel_t coeffs = { 1.0f, 1.0f, 1.0f, 1.0f };
+  if(corrected)
+    dt_wb_get_rgb_correction(pipe->dsc.temperature.coeffs, chr->D65coeffs, coeffs);
   if(corrected)
   {
     for_four_channels(k)
@@ -1195,11 +1195,12 @@ void process(dt_iop_module_t *self,
 
   const dt_dev_chroma_t *chr = &self->dev->chroma;
   const dt_iop_colorin_data_t *const d = piece->data;
-  const gboolean corrected = chr->late_correction && d->type != DT_COLORSPACE_LAB;
-  const dt_aligned_pixel_t coeffs = { corrected ? chr->D65coeffs[0] / chr->as_shot[0] : 1.0f,
-                                      corrected ? chr->D65coeffs[1] / chr->as_shot[1] : 1.0f,
-                                      corrected ? chr->D65coeffs[2] / chr->as_shot[2] : 1.0f,
-                                      corrected ? chr->D65coeffs[3] / chr->as_shot[3] : 1.0f };
+  const gboolean corrected = chr->late_correction && !piece->pipe->wb.active
+                             && d->type != DT_COLORSPACE_LAB;
+  dt_aligned_pixel_t coeffs = { 1.0f, 1.0f, 1.0f, 1.0f };
+  if(corrected)
+    dt_wb_get_rgb_correction(piece->pipe->dsc.temperature.coeffs,
+                             chr->D65coeffs, coeffs);
   dt_dev_pixelpipe_t *pipe = piece->pipe;
   if(corrected)
   {

@@ -1590,18 +1590,9 @@ static void _preset_from_string(dt_lib_module_t *self, gchar *txt, gboolean edit
         AM("aces20/exposure (EV)");                                                                               \
         AM("aces20/gamut compression");                                                                           \
       }                                                                                                           \
-      AM("channelmixerrgb/temperature");                                                                          \
-      AM("channelmixerrgb/chroma");                                                                               \
-      AM("channelmixerrgb/hue");                                                                                  \
-      AM("channelmixerrgb/illuminant");                                                                           \
-      AM("channelmixerrgb/F source");                                                                             \
-      AM("channelmixerrgb/LED source");                                                                           \
     }                                                                                                             \
-    else                                                                                                          \
-    {                                                                                                             \
-      AM("temperature/temperature");                                                                              \
-      AM("temperature/tint");                                                                                     \
-    }                                                                                                             \
+    AM("temperature/temperature");                                                                                \
+    AM("temperature/tint");                                                                                       \
     AM("colorequal/page");                                                                                        \
     AM("colorequal/graph");                                                                                       \
     AM("colorequal/node placement");                                                                              \
