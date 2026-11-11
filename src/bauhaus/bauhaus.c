@@ -1086,6 +1086,23 @@ dt_action_t *dt_bauhaus_widget_set_label(GtkWidget *widget,
   return ac;
 }
 
+void dt_bauhaus_widget_set_label_text(GtkWidget *widget, const char *label)
+{
+  if(!DT_IS_BAUHAUS_WIDGET(widget)) return;
+
+  dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);
+  gchar *new_label = label ? g_strdup(Q_(label)) : NULL;
+  if(!g_strcmp0(w->label, new_label))
+  {
+    g_free(new_label);
+    return;
+  }
+
+  g_free(w->label);
+  w->label = new_label;
+  gtk_widget_queue_draw(widget);
+}
+
 const char* dt_bauhaus_widget_get_label(GtkWidget *widget)
 {
   const dt_bauhaus_widget_t *w = DT_BAUHAUS_WIDGET(widget);

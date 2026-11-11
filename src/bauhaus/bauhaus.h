@@ -170,6 +170,8 @@ dt_bauhaus_type_t dt_bauhaus_widget_get_type(GtkWidget *widget);
 dt_action_t *dt_bauhaus_widget_set_label(GtkWidget *widget,
                                          const char *section,
                                          const char *label);
+// change only the displayed label, leaving the action path untouched
+void dt_bauhaus_widget_set_label_text(GtkWidget *widget, const char *label);
 const char* dt_bauhaus_widget_get_label(GtkWidget *widget);
 void dt_bauhaus_widget_hide_label(GtkWidget *widget);
 void dt_bauhaus_widget_set_show_extended_label(GtkWidget *widget,

@@ -22742,6 +22742,31 @@ msgstr "Illuminant"
 msgid "temperature"
 msgstr "Température"
 
+msgid "temperature (daylight)"
+msgstr "Température (lumière du jour)"
+
+msgid "temperature (black body)"
+msgstr "Température (corps noir)"
+
+msgid ""
+"color temperature of the white balance settings (in Kelvin)"
+msgstr ""
+"Température de couleur des réglages de la balance des blancs (en Kelvin)"
+
+msgid ""
+"color temperature of the daylight (D) illuminant (in Kelvin);\n"
+"it can differ from the camera as-shot CCT"
+msgstr ""
+"Température de couleur de l’illuminant D (lumière du jour) (en Kelvin) ;\n"
+"elle peut différer de la CCT as-shot de l’appareil photo"
+
+msgid ""
+"color temperature of the Planckian (black body) illuminant (in Kelvin);\n"
+"it can differ from the camera as-shot CCT"
+msgstr ""
+"Température de couleur de l’illuminant de Planck (corps noir) (en Kelvin) ;\n"
+"elle peut différer de la CCT as-shot de l’appareil photo"
+
 #: ../src/iop/channelmixerrgb.c:4604
 msgid ""
 "define a target chromaticity (hue and chroma) for a particular region of the "

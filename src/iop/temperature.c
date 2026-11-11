@@ -109,6 +109,8 @@ typedef struct dt_iop_temperature_gui_data_t
   int preset_num[54];
   double mod_coeff[4];
   float mod_temp, mod_tint;
+  float last_daylight_temperature;
+  float last_bb_temperature;
   gboolean temp_tint_update;
   double XYZ_to_CAM[4][3], CAM_to_XYZ[3][4];
   gboolean colored_sliders;
@@ -386,6 +388,60 @@ static gboolean _is_usable_illuminant_xy(const float x, const float y)
   illuminant_xy_to_XYZ(x, y, XYZ);
   convert_XYZ_to_CAT16_LMS(XYZ, LMS);
   return LMS[0] > 0.f && LMS[1] > 0.f && LMS[2] > 0.f;
+}
+
+static gboolean _source_illuminant_xy(const dt_image_t *img,
+                                      const dt_iop_temperature_params_t *p,
+                                      const dt_illuminant_t source,
+                                      float *x, float *y)
+{
+  if(source == DT_ILLUMINANT_FROM_WB)
+  {
+    const dt_aligned_pixel_t M = { p->red, p->green, p->blue, p->various };
+    return _coeffs_to_illuminant_xy(img, M, x, y)
+           && _is_usable_illuminant_xy(*x, *y);
+  }
+  else if(source == DT_ILLUMINANT_CUSTOM)
+  {
+    *x = p->cat_x;
+    *y = p->cat_y;
+    return _is_usable_illuminant_xy(*x, *y);
+  }
+  else if((source == DT_ILLUMINANT_D || source == DT_ILLUMINANT_BB)
+          && p->cat_temperature <= 0.0f)
+  {
+    // v6 edits had no CAT temperature: keep their coefficient-derived source
+    const dt_aligned_pixel_t M = { p->red, p->green, p->blue, p->various };
+    return _coeffs_to_illuminant_xy(img, M, x, y)
+           && _is_usable_illuminant_xy(*x, *y);
+  }
+
+  float cx = p->cat_x;
+  float cy = p->cat_y;
+  const gboolean found =
+    illuminant_to_xy(source, img, NULL, &cx, &cy, p->cat_temperature,
+                     p->cat_illum_fluo, p->cat_illum_led)
+    && _is_usable_illuminant_xy(cx, cy);
+  if(found)
+  {
+    *x = cx;
+    *y = cy;
+  }
+  return found;
+}
+
+static float _cct_from_xy(const float x, const float y)
+{
+  float t = xy_to_CCT(x, y);
+  if(t < 3000.f && t > 1667.f)
+    t = CCT_reverse_lookup(x, y);
+
+  if(!isfinite(t) || t <= 0.0f)
+    return 0.0f;
+
+  if(t < DT_IOP_LOWEST_TEMPERATURE) t = DT_IOP_LOWEST_TEMPERATURE;
+  if(t > DT_IOP_HIGHEST_TEMPERATURE) t = DT_IOP_HIGHEST_TEMPERATURE;
+  return t;
 }
 
 static gboolean _ignore_missing_wb(dt_image_t *img)
@@ -906,60 +962,9 @@ void commit_params(dt_iop_module_t *self,
     if(chr->D65coeffs[0] > 0.0 && chr->D65coeffs[1] > 0.0 && chr->D65coeffs[2] > 0.0)
       for_four_channels(k) D65[k] = chr->D65coeffs[k];
 
-    const dt_aligned_pixel_t M =
-      { p->red, p->green, p->blue, p->various };
-
     float x = 0.3127f;
     float y = 0.3290f;
-    gboolean found = FALSE;
-
-    if(p->cat_illuminant == DT_ILLUMINANT_FROM_WB)
-    {
-      // the selected white balance coefficients define the scene illuminant
-      found = _coeffs_to_illuminant_xy(img, M, &x, &y)
-              && _is_usable_illuminant_xy(x, y);
-    }
-    else if(p->cat_illuminant == DT_ILLUMINANT_D
-            || p->cat_illuminant == DT_ILLUMINANT_BB)
-    {
-      if(p->cat_temperature > 0.0f)
-      {
-        // D and Planckian use their own CCT-to-chromaticity model, driven by
-        // the dedicated CAT temperature kept in sync with the temperature slider
-        float cx = p->cat_x;
-        float cy = p->cat_y;
-        found = illuminant_to_xy(p->cat_illuminant, img, NULL, &cx, &cy,
-                                 p->cat_temperature, p->cat_illum_fluo,
-                                 p->cat_illum_led)
-                && _is_usable_illuminant_xy(cx, cy);
-        if(found) { x = cx; y = cy; }
-      }
-      else
-      {
-        // v6 edits had no CAT temperature: preserve their coefficient-derived
-        // illuminant until the user moves the temperature slider
-        found = _coeffs_to_illuminant_xy(img, M, &x, &y)
-                && _is_usable_illuminant_xy(x, y);
-      }
-    }
-    else if(p->cat_illuminant == DT_ILLUMINANT_CUSTOM)
-    {
-      // illuminant_to_xy() leaves custom x/y untouched and returns FALSE, so
-      // use the stored custom chromaticity directly.
-      x = p->cat_x;
-      y = p->cat_y;
-      found = _is_usable_illuminant_xy(x, y);
-    }
-    else
-    {
-      float cx = p->cat_x;
-      float cy = p->cat_y;
-      found = illuminant_to_xy(p->cat_illuminant, img, NULL, &cx, &cy,
-                               6504.0f, p->cat_illum_fluo,
-                               p->cat_illum_led)
-              && _is_usable_illuminant_xy(cx, cy);
-      if(found) { x = cx; y = cy; }
-    }
+    const gboolean found = _source_illuminant_xy(img, p, p->cat_illuminant, &x, &y);
 
     if(!found)
     {
@@ -1472,6 +1477,9 @@ void gui_update(dt_iop_module_t *self)
   dt_iop_temperature_gui_data_t *g = self->gui_data;
   dt_iop_temperature_params_t *p = self->params;
   dt_iop_temperature_params_t *d = self->default_params;
+
+  g->last_daylight_temperature = 0.0f;
+  g->last_bb_temperature = 0.0f;
 
   d->preset = p->use_cat
               ? DT_IOP_TEMP_AS_SHOT
@@ -2039,9 +2047,16 @@ static void _temp_tint_callback(GtkWidget *slider, dt_iop_module_t *self)
   g->mod_temp = dt_bauhaus_slider_get(g->scale_k);
   g->mod_tint = dt_bauhaus_slider_get(g->scale_tint);
 
-  if(p->cat_illuminant == DT_ILLUMINANT_D
-     || p->cat_illuminant == DT_ILLUMINANT_BB)
+  if(p->cat_illuminant == DT_ILLUMINANT_D)
+  {
     p->cat_temperature = g->mod_temp;
+    g->last_daylight_temperature = g->mod_temp;
+  }
+  else if(p->cat_illuminant == DT_ILLUMINANT_BB)
+  {
+    p->cat_temperature = g->mod_temp;
+    g->last_bb_temperature = g->mod_temp;
+  }
 
   _temp2mul(self, g->mod_temp, g->mod_tint, g->mod_coeff);
 
@@ -2163,12 +2178,52 @@ static void _cat_set_source_from_wb(dt_iop_module_t *self)
   _cat_controls_update(self);
 }
 
+static void _update_temperature_label(dt_iop_module_t *self)
+{
+  dt_iop_temperature_gui_data_t *g = self->gui_data;
+  const dt_iop_temperature_params_t *p = self->params;
+
+  const char *label = N_("temperature");
+  const char *tip = _("color temperature (in Kelvin)");
+
+  if(p->use_cat)
+  {
+    if(p->cat_illuminant == DT_ILLUMINANT_D)
+    {
+      label = N_("temperature (daylight)");
+      tip = _("color temperature of the daylight (D) illuminant (in Kelvin);\n"
+              "it can differ from the camera as-shot CCT");
+    }
+    else if(p->cat_illuminant == DT_ILLUMINANT_BB)
+    {
+      label = N_("temperature (black body)");
+      tip = _("color temperature of the Planckian (black body) illuminant (in Kelvin);\n"
+              "it can differ from the camera as-shot CCT");
+    }
+    else if(p->cat_illuminant == DT_ILLUMINANT_FROM_WB)
+    {
+      label = N_("temperature");
+      tip = _("color temperature of the white balance settings (in Kelvin)");
+    }
+  }
+
+  dt_bauhaus_widget_set_label_text(g->scale_k, label);
+  gtk_widget_set_tooltip_text(g->scale_k, tip);
+}
+
 static void _cat_controls_update(dt_iop_module_t *self)
 {
   dt_iop_temperature_gui_data_t *g = self->gui_data;
   const dt_iop_temperature_params_t *p = self->params;
 
   if(!g) return;
+
+  _update_temperature_label(self);
+
+  if(p->cat_illuminant == DT_ILLUMINANT_D && p->cat_temperature > 0.0f)
+    g->last_daylight_temperature = p->cat_temperature;
+  else if(p->cat_illuminant == DT_ILLUMINANT_BB && p->cat_temperature > 0.0f)
+    g->last_bb_temperature = p->cat_temperature;
 
   const gboolean legacy = !p->use_cat;
 
@@ -2246,15 +2301,56 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
            || w == g->cat_illum_fluo || w == g->cat_illum_led
            || w == g->cat_adaptation || w == g->cat_x || w == g->cat_y))
   {
-    if(w == g->cat_illuminant
-       && (p->cat_illuminant == DT_ILLUMINANT_D
-           || p->cat_illuminant == DT_ILLUMINANT_BB))
+    if(w == g->cat_illuminant)
     {
-      // starting from a fixed D/BB source uses the temperature currently
-      // displayed by the classic white balance controls
-      float tempK, tint;
-      _mul2temp(self, p, &tempK, &tint);
-      p->cat_temperature = tempK;
+      const dt_illuminant_t new_source = p->cat_illuminant;
+      const dt_illuminant_t prev_source =
+        previous ? *(const dt_illuminant_t *)previous : new_source;
+
+      if(new_source == DT_ILLUMINANT_D || new_source == DT_ILLUMINANT_BB)
+      {
+        float cct = (new_source == DT_ILLUMINANT_D)
+                    ? g->last_daylight_temperature
+                    : g->last_bb_temperature;
+
+        if(cct <= 0.0f && prev_source != new_source)
+        {
+          float x, y;
+          if(_source_illuminant_xy(&self->dev->image_storage, p, prev_source,
+                                   &x, &y))
+            cct = _cct_from_xy(x, y);
+        }
+
+        if(cct <= 0.0f)
+          cct = p->cat_temperature > 0.0f
+                ? p->cat_temperature
+                : dt_bauhaus_slider_get(g->scale_k);
+
+        if(cct > 0.0f)
+        {
+          p->cat_temperature = cct;
+          g->mod_temp = cct;
+          if(new_source == DT_ILLUMINANT_D)
+            g->last_daylight_temperature = cct;
+          else
+            g->last_bb_temperature = cct;
+
+          DT_ENTER_GUI_UPDATE();
+          dt_bauhaus_slider_set(g->scale_k, cct);
+          DT_LEAVE_GUI_UPDATE();
+        }
+      }
+      else if(new_source == DT_ILLUMINANT_FROM_WB)
+      {
+        // restore the temperature of the classic white balance controls
+        float tempK, tint;
+        _mul2temp(self, p, &tempK, &tint);
+        g->mod_temp = tempK;
+
+        DT_ENTER_GUI_UPDATE();
+        dt_bauhaus_slider_set(g->scale_k, tempK);
+        DT_LEAVE_GUI_UPDATE();
+      }
     }
 
     _cat_controls_update(self);
@@ -2636,6 +2732,8 @@ void gui_init(dt_iop_module_t *self)
 {
   dt_iop_temperature_gui_data_t *g = IOP_GUI_ALLOC(temperature);
   g->temp_tint_update = FALSE;
+  g->last_daylight_temperature = 0.0f;
+  g->last_bb_temperature = 0.0f;
 
   const char *config =
     dt_conf_get_string_const("plugins/darkroom/temperature/colored_sliders");
