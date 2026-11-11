@@ -45,7 +45,7 @@
 #include "common/illuminants.h"
 #include "external/cie_colorimetric_tables.c"
 
-DT_MODULE_INTROSPECTION(6, dt_iop_temperature_params_t)
+DT_MODULE_INTROSPECTION(7, dt_iop_temperature_params_t)
 
 #define INITIALBLACKBODYTEMPERATURE 4000
 
@@ -70,7 +70,7 @@ DT_MODULE_INTROSPECTION(6, dt_iop_temperature_params_t)
 
 static void _gui_sliders_update(dt_iop_module_t *self);
 static void _cat_controls_update(dt_iop_module_t *self);
-static void _cat_xy_sliders_update(dt_iop_module_t *self);
+static void _cat_xy_sliders_update(dt_iop_module_t *self, const gboolean sync_values);
 
 typedef struct dt_iop_temperature_params_t
 {
@@ -89,6 +89,7 @@ typedef struct dt_iop_temperature_params_t
   dt_adaptation_t cat_adaptation;  // $DEFAULT: DT_ADAPTATION_CAT16 $DESCRIPTION: "adaptation"
   float cat_x;                     // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.3127 $DESCRIPTION: "x"
   float cat_y;                     // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.3290 $DESCRIPTION: "y"
+  float cat_temperature;           // $MIN: 0.0 $MAX: 25000.0 $DEFAULT: 6504.0
 } dt_iop_temperature_params_t;
 
 typedef struct dt_iop_temperature_gui_data_t
@@ -108,6 +109,7 @@ typedef struct dt_iop_temperature_gui_data_t
   int preset_num[54];
   double mod_coeff[4];
   float mod_temp, mod_tint;
+  gboolean temp_tint_update;
   double XYZ_to_CAM[4][3], CAM_to_XYZ[3][4];
   gboolean colored_sliders;
   gboolean blackbody_is_confusing;
@@ -267,7 +269,7 @@ int legacy_params(dt_iop_module_t *self,
   if(old_version == 5)
   {
     const dt_iop_temperature_params_v5_t *o = (dt_iop_temperature_params_v5_t *)old_params;
-    dt_iop_temperature_params_v6_t *n = malloc(sizeof(dt_iop_temperature_params_v6_t));
+    dt_iop_temperature_params_t *n = malloc(sizeof(dt_iop_temperature_params_t));
 
     n->red = o->red;
     n->green = o->green;
@@ -281,10 +283,38 @@ int legacy_params(dt_iop_module_t *self,
     n->cat_adaptation = o->cat_adaptation;
     n->cat_x = o->cat_x;
     n->cat_y = o->cat_y;
+    n->cat_temperature = o->cat_temperature;
 
     *new_params = n;
-    *new_params_size = sizeof(dt_iop_temperature_params_v6_t);
-    *new_version = 6;
+    *new_params_size = sizeof(dt_iop_temperature_params_t);
+    *new_version = 7;
+    return 0;
+  }
+
+  if(old_version == 6)
+  {
+    const dt_iop_temperature_params_v6_t *o = (dt_iop_temperature_params_v6_t *)old_params;
+    dt_iop_temperature_params_t *n = malloc(sizeof(dt_iop_temperature_params_t));
+
+    n->red = o->red;
+    n->green = o->green;
+    n->blue = o->blue;
+    n->various = o->various;
+    n->preset = o->preset;
+    n->use_cat = o->use_cat;
+    n->cat_illuminant = o->cat_illuminant;
+    n->cat_illum_fluo = o->cat_illum_fluo;
+    n->cat_illum_led = o->cat_illum_led;
+    n->cat_adaptation = o->cat_adaptation;
+    n->cat_x = o->cat_x;
+    n->cat_y = o->cat_y;
+    // no CAT temperature was stored in v6: keep the legacy coefficient-based
+    // derivation until the user touches the temperature slider
+    n->cat_temperature = 0.0f;
+
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_temperature_params_t);
+    *new_version = 7;
     return 0;
   }
   return 1;
@@ -883,15 +913,42 @@ void commit_params(dt_iop_module_t *self,
     float y = 0.3290f;
     gboolean found = FALSE;
 
-    if(p->cat_illuminant == DT_ILLUMINANT_FROM_WB
-       || p->cat_illuminant == DT_ILLUMINANT_D
-       || p->cat_illuminant == DT_ILLUMINANT_BB)
+    if(p->cat_illuminant == DT_ILLUMINANT_FROM_WB)
     {
-      // the selected white balance coefficients define the scene illuminant.
-      // in D/BB modes only the temp/tint controls are active, but the same
-      // derivation applies.
+      // the selected white balance coefficients define the scene illuminant
       found = _coeffs_to_illuminant_xy(img, M, &x, &y)
               && _is_usable_illuminant_xy(x, y);
+    }
+    else if(p->cat_illuminant == DT_ILLUMINANT_D
+            || p->cat_illuminant == DT_ILLUMINANT_BB)
+    {
+      if(p->cat_temperature > 0.0f)
+      {
+        // D and Planckian use their own CCT-to-chromaticity model, driven by
+        // the dedicated CAT temperature kept in sync with the temperature slider
+        float cx = p->cat_x;
+        float cy = p->cat_y;
+        found = illuminant_to_xy(p->cat_illuminant, img, NULL, &cx, &cy,
+                                 p->cat_temperature, p->cat_illum_fluo,
+                                 p->cat_illum_led)
+                && _is_usable_illuminant_xy(cx, cy);
+        if(found) { x = cx; y = cy; }
+      }
+      else
+      {
+        // v6 edits had no CAT temperature: preserve their coefficient-derived
+        // illuminant until the user moves the temperature slider
+        found = _coeffs_to_illuminant_xy(img, M, &x, &y)
+                && _is_usable_illuminant_xy(x, y);
+      }
+    }
+    else if(p->cat_illuminant == DT_ILLUMINANT_CUSTOM)
+    {
+      // illuminant_to_xy() leaves custom x/y untouched and returns FALSE, so
+      // use the stored custom chromaticity directly.
+      x = p->cat_x;
+      y = p->cat_y;
+      found = _is_usable_illuminant_xy(x, y);
     }
     else
     {
@@ -1773,6 +1830,7 @@ void reload_defaults(dt_iop_module_t *self)
   d->cat_adaptation = DT_ADAPTATION_CAT16;
   d->cat_x = 0.3127f;
   d->cat_y = 0.3290f;
+  d->cat_temperature = 6504.0f;
 
   const gboolean scene_referred = dt_is_scene_referred();
 
@@ -1974,11 +2032,16 @@ static void _temp_tint_callback(GtkWidget *slider, dt_iop_module_t *self)
   DT_GUARD_GUI_UPDATE();
 
   dt_iop_temperature_gui_data_t *g = self->gui_data;
+  dt_iop_temperature_params_t *p = self->params;
 
   dt_iop_color_picker_reset(self, TRUE);
 
   g->mod_temp = dt_bauhaus_slider_get(g->scale_k);
   g->mod_tint = dt_bauhaus_slider_get(g->scale_tint);
+
+  if(p->cat_illuminant == DT_ILLUMINANT_D
+     || p->cat_illuminant == DT_ILLUMINANT_BB)
+    p->cat_temperature = g->mod_temp;
 
   _temp2mul(self, g->mod_temp, g->mod_tint, g->mod_coeff);
 
@@ -1988,7 +2051,11 @@ static void _temp_tint_callback(GtkWidget *slider, dt_iop_module_t *self)
   g->mod_coeff[3] /= g->mod_coeff[1];
   g->mod_coeff[1] = 1.0;
 
+  // this is an internal preset update, not a request to make the CAT follow
+  // the white balance again
+  g->temp_tint_update = TRUE;
   dt_bauhaus_combobox_set(g->presets, DT_IOP_TEMP_USER);
+  g->temp_tint_update = FALSE;
   _update_preset(self, DT_IOP_TEMP_USER);
 }
 
@@ -2005,14 +2072,15 @@ static void _cat_hue_chroma_callback(GtkWidget *slider, dt_iop_module_t *self)
 
   dt_aligned_pixel_t xyY = { 0.0f };
   dt_Lch_to_xyY(Lch, xyY);
+  p->cat_illuminant = DT_ILLUMINANT_CUSTOM;
   p->cat_x = xyY[0];
   p->cat_y = xyY[1];
 
-  _cat_xy_sliders_update(self);
+  _cat_xy_sliders_update(self, FALSE);
   dt_dev_add_history_item(darktable.develop, self, TRUE);
 }
 
-static void _cat_xy_sliders_update(dt_iop_module_t *self)
+static void _cat_xy_sliders_update(dt_iop_module_t *self, const gboolean sync_values)
 {
   dt_iop_temperature_gui_data_t *g = self->gui_data;
   const dt_iop_temperature_params_t *p = self->params;
@@ -2022,18 +2090,24 @@ static void _cat_xy_sliders_update(dt_iop_module_t *self)
   dt_aligned_pixel_t Lch = { 0.0f };
   dt_xyY_to_Lch(xyY, Lch);
 
-  DT_ENTER_GUI_UPDATE();
-  dt_bauhaus_slider_set(g->cat_x, rad2degf(Lch[2]));
-  dt_bauhaus_slider_set(g->cat_y, Lch[1]);
-  DT_LEAVE_GUI_UPDATE();
+  if(sync_values)
+  {
+    DT_ENTER_GUI_UPDATE();
+    if(Lch[1] > 0.0f)
+      dt_bauhaus_slider_set(g->cat_x, rad2degf(Lch[2]));
+    dt_bauhaus_slider_set(g->cat_y, Lch[1]);
+    DT_LEAVE_GUI_UPDATE();
+  }
 
   dt_bauhaus_slider_clear_stops(g->cat_x);
   dt_bauhaus_slider_clear_stops(g->cat_y);
 
-  // the hue slider uses a hollow indicator when a gradient is shown, so that
-  // the reference color stays visible. Without a gradient it must use the
-  // regular filled indicator to follow the theme.
-  dt_bauhaus_slider_set_feedback(g->cat_x, !g->colored_sliders);
+  // both sliders show a gradient when colored sliders are enabled. Use the
+  // hollow theme indicator there so the reference color stays visible, and
+  // the regular filled indicator otherwise.
+  const int feedback = !g->colored_sliders;
+  dt_bauhaus_slider_set_feedback(g->cat_x, feedback);
+  dt_bauhaus_slider_set_feedback(g->cat_y, feedback);
 
   if(!g->colored_sliders) return;
 
@@ -2051,18 +2125,42 @@ static void _cat_xy_sliders_update(dt_iop_module_t *self)
   }
 
   // chroma reference: current hue, same as color calibration
-  const float hue = deg2radf(dt_bauhaus_slider_get(g->cat_x));
+  const dt_aligned_pixel_t xyY_hue = { p->cat_x, p->cat_y, 1.f, 0.f };
+  dt_aligned_pixel_t Lch_hue = { 0.0f };
+  dt_xyY_to_Lch(xyY_hue, Lch_hue);
   for(int i = 0; i < DT_BAUHAUS_SLIDER_MAX_STOPS; i++)
   {
     const float stop = i / (float)(DT_BAUHAUS_SLIDER_MAX_STOPS - 1);
     const float chroma = stop * DT_IOP_WB_CAT_CHROMA_MAX / 2.0f;
-    const dt_aligned_pixel_t Lch_c = { 75.f, chroma, hue };
+    dt_aligned_pixel_t Lch_c = { 75.f, chroma, Lch_hue[2] };
     dt_aligned_pixel_t xyY_c = { 0.0f };
     dt_Lch_to_xyY(Lch_c, xyY_c);
     dt_aligned_pixel_t RGB = { 0.0f };
     illuminant_xy_to_RGB(xyY_c[0], xyY_c[1], RGB);
     dt_bauhaus_slider_set_stop(g->cat_y, stop, RGB[0], RGB[1], RGB[2]);
   }
+
+  gtk_widget_queue_draw(g->cat_x);
+  gtk_widget_queue_draw(g->cat_y);
+}
+
+static void _cat_set_source_from_wb(dt_iop_module_t *self)
+{
+  dt_iop_temperature_gui_data_t *g = self->gui_data;
+  dt_iop_temperature_params_t *p = self->params;
+
+  if(!g || !p->use_cat || p->cat_illuminant == DT_ILLUMINANT_FROM_WB)
+    return;
+
+  // switching the classic white balance controls back on must not erase the
+  // last custom illuminant, so keep cat_x/cat_y untouched.
+  p->cat_illuminant = DT_ILLUMINANT_FROM_WB;
+
+  DT_ENTER_GUI_UPDATE();
+  dt_bauhaus_combobox_set_from_value(g->cat_illuminant, DT_ILLUMINANT_FROM_WB);
+  DT_LEAVE_GUI_UPDATE();
+
+  _cat_controls_update(self);
 }
 
 static void _cat_controls_update(dt_iop_module_t *self)
@@ -2102,18 +2200,21 @@ static void _cat_controls_update(dt_iop_module_t *self)
   const gboolean temp_only = p->cat_illuminant == DT_ILLUMINANT_D
                              || p->cat_illuminant == DT_ILLUMINANT_BB;
 
-  // the classic white balance controls are active only when the CAT follows
-  // them, or when only the temp/tint pair defines the source
-  gtk_widget_set_sensitive(GTK_WIDGET(g->buttonbar), from_wb);
-  gtk_widget_set_sensitive(GTK_WIDGET(g->presets), from_wb);
-  gtk_widget_set_sensitive(GTK_WIDGET(g->finetune), from_wb);
-  gtk_widget_set_sensitive(GTK_WIDGET(g->colorpicker), from_wb);
+  // preset selectors stay available so selecting a classic white balance
+  // setting can switch the CAT source back to from-white-balance. Manual
+  // sliders still require the CAT to follow the white balance settings.
+  gtk_widget_set_sensitive(GTK_WIDGET(g->buttonbar), TRUE);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->presets), TRUE);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->finetune), TRUE);
+  gtk_widget_set_sensitive(GTK_WIDGET(g->colorpicker), TRUE);
   gtk_widget_set_sensitive(GTK_WIDGET(g->scale_r), from_wb);
   gtk_widget_set_sensitive(GTK_WIDGET(g->scale_g), from_wb);
   gtk_widget_set_sensitive(GTK_WIDGET(g->scale_b), from_wb);
   gtk_widget_set_sensitive(GTK_WIDGET(g->scale_y), from_wb);
   gtk_widget_set_sensitive(GTK_WIDGET(g->scale_k), from_wb || temp_only);
-  gtk_widget_set_sensitive(GTK_WIDGET(g->scale_tint), from_wb || temp_only);
+  // D/BB are defined by their CCT only, like in color calibration; tint is
+  // a white-balance control and would not affect their chromaticity.
+  gtk_widget_set_sensitive(GTK_WIDGET(g->scale_tint), from_wb);
 
   // CAT controls: the source and adaptation are always available
   gtk_widget_set_sensitive(GTK_WIDGET(g->cat_illuminant), TRUE);
@@ -2133,7 +2234,7 @@ static void _cat_controls_update(dt_iop_module_t *self)
   gtk_widget_set_sensitive(GTK_WIDGET(g->cat_x), is_custom);
   gtk_widget_set_sensitive(GTK_WIDGET(g->cat_y), is_custom);
 
-  _cat_xy_sliders_update(self);
+  _cat_xy_sliders_update(self, TRUE);
 }
 
 void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
@@ -2145,6 +2246,17 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
            || w == g->cat_illum_fluo || w == g->cat_illum_led
            || w == g->cat_adaptation || w == g->cat_x || w == g->cat_y))
   {
+    if(w == g->cat_illuminant
+       && (p->cat_illuminant == DT_ILLUMINANT_D
+           || p->cat_illuminant == DT_ILLUMINANT_BB))
+    {
+      // starting from a fixed D/BB source uses the temperature currently
+      // displayed by the classic white balance controls
+      float tempK, tint;
+      _mul2temp(self, p, &tempK, &tint);
+      p->cat_temperature = tempK;
+    }
+
     _cat_controls_update(self);
     return;
   }
@@ -2153,7 +2265,10 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
 
   _mul2temp(self, p, &g->mod_temp, &g->mod_tint);
 
+  // changing another parameter must not redirect the CAT source
+  g->temp_tint_update = TRUE;
   dt_bauhaus_combobox_set(g->presets, DT_IOP_TEMP_USER);
+  g->temp_tint_update = FALSE;
   _update_preset(self, DT_IOP_TEMP_USER);
 }
 
@@ -2164,20 +2279,29 @@ static gboolean _btn_toggled(GtkWidget *togglebutton,
   DT_GUARD_GUI_UPDATE(TRUE);
 
   dt_iop_temperature_gui_data_t *g = (dt_iop_temperature_gui_data_t*)self->gui_data;
+  dt_iop_temperature_params_t *p = self->params;
 
   const int preset = togglebutton == g->btn_asshot ? DT_IOP_TEMP_AS_SHOT :
                      togglebutton == g->btn_d65 ? DT_IOP_TEMP_D65 :
                      togglebutton == g->btn_d65_late ? DT_IOP_TEMP_D65_LATE :
                      togglebutton == g->btn_user ? DT_IOP_TEMP_USER : 0;
 
+  // a classic white balance button must be able to bring the CAT source back
+  // to white balance, even when its preset is already selected
+  const gboolean needs_cat_sync =
+    p->use_cat && p->cat_illuminant != DT_ILLUMINANT_FROM_WB;
+
   if(!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(togglebutton)))
   {
-    if(dt_bauhaus_combobox_get(g->presets) != preset)
+    if(needs_cat_sync || dt_bauhaus_combobox_get(g->presets) != preset)
       dt_bauhaus_combobox_set(g->presets, preset);
   }
   else if(dt_bauhaus_combobox_get(g->presets) == preset)
   {
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(togglebutton), TRUE);
+    if(needs_cat_sync)
+      dt_bauhaus_combobox_set(g->presets, preset);
+    else
+      gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(togglebutton), TRUE);
   }
 
   _update_preset(self, dt_bauhaus_combobox_get(g->presets));
@@ -2218,10 +2342,17 @@ static void _preset_tune_callback(GtkWidget *widget, dt_iop_module_t *self)
 
   _update_preset(self, pos);
 
+  if(pos == DT_IOP_TEMP_UNKNOWN) // just un-setting.
+    return;
+
+  // any classic white balance setting chosen by the user takes precedence
+  // over a fixed CAT source, while keeping the last custom illuminant in
+  // params. Internal temp/tint or parameter updates must not redirect it.
+  if(!g->temp_tint_update)
+    _cat_set_source_from_wb(self);
+
   switch(pos)
   {
-    case DT_IOP_TEMP_UNKNOWN: // just un-setting.
-      return;
     case DT_IOP_TEMP_AS_SHOT: // as shot wb
       _temp_params_from_array(p, chr->as_shot);
       break;
@@ -2368,6 +2499,10 @@ void color_picker_apply(dt_iop_module_t *self, GtkWidget *picker,
 
   // capture gui color picked event.
   if(self->picked_color_max[0] < self->picked_color_min[0]) return;
+
+  // a picked white balance also restores the CAT source to white balance
+  _cat_set_source_from_wb(self);
+
   const float *grayrgb = self->picked_color;
 
   // normalize green:
@@ -2454,7 +2589,7 @@ static gboolean temp_label_click(GtkWidget *label,
   _color_temptint_sliders(self);
   _color_rgb_sliders(self);
   _color_finetuning_slider(self);
-  _cat_xy_sliders_update(self);
+  _cat_xy_sliders_update(self, FALSE);
   return TRUE;
 }
 
@@ -2472,7 +2607,7 @@ static void _preference_changed(gpointer instance, dt_iop_module_t *self)
   _color_temptint_sliders(self);
   _color_rgb_sliders(self);
   _color_finetuning_slider(self);
-  _cat_xy_sliders_update(self);
+  _cat_xy_sliders_update(self, FALSE);
   _cat_controls_update(self);
 }
 
@@ -2500,6 +2635,7 @@ static void _wb_set_custom_illuminant(dt_develop_t *dev, float x, float y)
 void gui_init(dt_iop_module_t *self)
 {
   dt_iop_temperature_gui_data_t *g = IOP_GUI_ALLOC(temperature);
+  g->temp_tint_update = FALSE;
 
   const char *config =
     dt_conf_get_string_const("plugins/darkroom/temperature/colored_sliders");

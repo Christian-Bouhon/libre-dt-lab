@@ -637,6 +637,23 @@ static void _dev_pixelpipe_synch(dt_dev_pixelpipe_t *pipe,
   }
 }
 
+static void _dev_pixelpipe_synch_hidden_cat(dt_dev_pixelpipe_t *pipe)
+{
+  // The hidden chromatic-adaptation module is not in history, but it depends
+  // on the final white balance state published by the temperature module.
+  // Commit it after any history pass so that enabling white balance or
+  // switching its adaptation back on cannot leave it disabled.
+  for(GList *nodes = pipe->nodes; nodes; nodes = g_list_next(nodes))
+  {
+    dt_dev_pixelpipe_iop_t *piece = nodes->data;
+    if(!dt_iop_module_is(piece->module, "cat")) continue;
+
+    piece->enabled = piece->module->default_enabled;
+    dt_iop_commit_params(piece->module, piece->module->default_params,
+                         piece->module->default_blendop_params, pipe, piece);
+  }
+}
+
 void dt_dev_pixelpipe_synch_all(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
 {
   dt_pthread_mutex_lock(&pipe->busy_mutex);
@@ -678,18 +695,7 @@ void dt_dev_pixelpipe_synch_all(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     history = g_list_next(history);
   }
 
-  // The hidden chromatic-adaptation module is not in history, but it depends
-  // on the final white balance state published during the history pass. Commit
-  // it again so that legacy edits keep it disabled and new edits enable it.
-  for(GList *nodes = pipe->nodes; nodes; nodes = g_list_next(nodes))
-  {
-    dt_dev_pixelpipe_iop_t *piece = nodes->data;
-    if(!dt_iop_module_is(piece->module, "cat")) continue;
-
-    piece->enabled = piece->module->default_enabled;
-    dt_iop_commit_params(piece->module, piece->module->default_params,
-                         piece->module->default_blendop_params, pipe, piece);
-  }
+  _dev_pixelpipe_synch_hidden_cat(pipe);
 
   dt_print_pipe(DT_DEBUG_PARAMS,
            "synch all modules done",
@@ -715,6 +721,7 @@ void dt_dev_pixelpipe_synch_top(dt_dev_pixelpipe_t *pipe, dt_develop_t *dev)
     dt_print_pipe(DT_DEBUG_PARAMS, "synch top history module missing!",
       pipe, NULL, DT_DEVICE_NONE, NULL, NULL);
   }
+  _dev_pixelpipe_synch_hidden_cat(pipe);
   dt_pthread_mutex_unlock(&pipe->busy_mutex);
 }
 
