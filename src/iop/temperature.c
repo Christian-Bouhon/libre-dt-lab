@@ -25,10 +25,12 @@
 #include "bauhaus/bauhaus.h"
 #include "common/colorspaces_inline_conversions.h"
 #include "common/darktable.h"
+#include "common/iop_order.h"
 #include "common/opencl.h"
 #include "common/wb_presets.h"
 #include "control/control.h"
 #include "control/conf.h"
+#include "develop/blend.h"
 #include "develop/develop.h"
 #include "develop/imageop_gui.h"
 #include "develop/imageop_math.h"
@@ -95,10 +97,13 @@ typedef struct dt_iop_temperature_params_t
 typedef struct dt_iop_temperature_gui_data_t
 {
   GtkWidget *scale_k, *scale_tint, *scale_r, *scale_g, *scale_b, *scale_y;
+  GtkWidget *temp_label_box;
   GtkWidget *presets;
   GtkWidget *finetune;
   GtkWidget *buttonbar;
   GtkWidget *colorpicker;
+  GtkWidget *legacy_pipeline;
+  gboolean legacy_update;
   GtkWidget *btn_asshot; //As Shot
   GtkWidget *btn_user;
   GtkWidget *btn_d65;
@@ -2218,6 +2223,13 @@ static void _cat_controls_update(dt_iop_module_t *self)
 
   if(!g) return;
 
+  if(g->legacy_pipeline)
+  {
+    g->legacy_update = TRUE;
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->legacy_pipeline), !p->use_cat);
+    g->legacy_update = FALSE;
+  }
+
   _update_temperature_label(self);
 
   if(p->cat_illuminant == DT_ILLUMINANT_D && p->cat_temperature > 0.0f)
@@ -2236,6 +2248,11 @@ static void _cat_controls_update(dt_iop_module_t *self)
   if(!p->use_cat)
   {
     gtk_widget_set_visible(GTK_WIDGET(g->cat_cs.expander), FALSE);
+    gtk_widget_set_visible(g->temp_label_box, TRUE);
+    gtk_widget_set_visible(g->scale_k, TRUE);
+    gtk_widget_set_visible(g->scale_tint, TRUE);
+    if(g->cs.expander)
+      gtk_widget_set_visible(GTK_WIDGET(g->cs.expander), TRUE);
     gtk_widget_set_sensitive(GTK_WIDGET(g->buttonbar), TRUE);
     gtk_widget_set_sensitive(GTK_WIDGET(g->presets), TRUE);
     gtk_widget_set_sensitive(GTK_WIDGET(g->finetune), TRUE);
@@ -2254,6 +2271,13 @@ static void _cat_controls_update(dt_iop_module_t *self)
   const gboolean from_wb = p->cat_illuminant == DT_ILLUMINANT_FROM_WB;
   const gboolean temp_only = p->cat_illuminant == DT_ILLUMINANT_D
                              || p->cat_illuminant == DT_ILLUMINANT_BB;
+  const gboolean show_temp = from_wb || temp_only;
+
+  gtk_widget_set_visible(g->temp_label_box, show_temp);
+  gtk_widget_set_visible(g->scale_k, show_temp);
+  gtk_widget_set_visible(g->scale_tint, from_wb);
+  if(g->cs.expander)
+    gtk_widget_set_visible(GTK_WIDGET(g->cs.expander), from_wb);
 
   // preset selectors stay available so selecting a classic white balance
   // setting can switch the CAT source back to from-white-balance. Manual
@@ -2728,10 +2752,115 @@ static void _wb_set_custom_illuminant(dt_develop_t *dev, float x, float y)
   }
 }
 
+static dt_iop_module_t *_find_channelmixerrgb(dt_iop_module_t *self)
+{
+  for(GList *modules = self->dev->iop; modules; modules = g_list_next(modules))
+  {
+    dt_iop_module_t *mod = modules->data;
+    if(dt_iop_module_is(mod, "channelmixerrgb")) return mod;
+  }
+  for(GList *modules = self->dev->alliop; modules; modules = g_list_next(modules))
+  {
+    dt_iop_module_t *mod = modules->data;
+    if(dt_iop_module_is(mod, "channelmixerrgb")) return mod;
+  }
+  return NULL;
+}
+
+static void _legacy_pipeline_callback(GtkWidget *widget, dt_iop_module_t *self)
+{
+  dt_iop_temperature_gui_data_t *g = self->gui_data;
+  dt_iop_temperature_params_t *p = self->params;
+
+  if(!g || g->legacy_update) return;
+
+  const gboolean legacy = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
+  if(legacy == !p->use_cat) return;
+
+  dt_iop_module_t *cc = _find_channelmixerrgb(self);
+  gboolean cc_changed = FALSE;
+  gboolean cc_disable = FALSE;
+
+  if(legacy)
+  {
+    // always reset the first color calibration instance to its legacy defaults
+    cc_changed = (cc != NULL);
+  }
+  else
+  {
+    // always disable the first color calibration instance when returning to
+    // the CAT pipeline, even if it was already enabled before this toggle
+    cc_disable = cc && cc->enabled;
+  }
+
+  DT_ENTER_GUI_UPDATE();
+  if(legacy)
+  {
+    p->use_cat = FALSE;
+    p->preset = DT_IOP_TEMP_D65_LATE;
+    _temp_params_from_array(p, self->dev->chroma.as_shot);
+    _update_preset(self, DT_IOP_TEMP_D65_LATE);
+  }
+  else
+  {
+    p->use_cat = TRUE;
+    p->preset = DT_IOP_TEMP_AS_SHOT;
+    p->cat_illuminant = DT_ILLUMINANT_FROM_WB;
+    _update_preset(self, DT_IOP_TEMP_AS_SHOT);
+  }
+  DT_LEAVE_GUI_UPDATE();
+
+  dt_iop_gui_update(self);
+
+  // commit white balance first so the chroma state reflects the legacy
+  // pipeline before color calibration computes its own legacy defaults
+  dt_dev_add_history_item_target(self->dev, self, TRUE, widget);
+
+  if(cc_changed)
+  {
+    // an unused color calibration lives in alliop until it is first enabled.
+    // move it into the active pipeline and build its GUI before resetting it.
+    if(!g_list_find(self->dev->iop, cc))
+    {
+      self->dev->alliop = g_list_remove(self->dev->alliop, cc);
+      self->dev->iop = g_list_insert_sorted(self->dev->iop, cc, dt_sort_iop_by_order);
+      dt_ioppr_insert_module_instance(self->dev, cc);
+      dt_ioppr_resync_modules_order(self->dev);
+
+      if(!dt_iop_is_hidden(cc) && !cc->gui_data)
+      {
+        DT_ENTER_GUI_UPDATE();
+        cc->gui_init(cc);
+        DT_LEAVE_GUI_UPDATE();
+      }
+
+      if(!dt_iop_is_hidden(cc))
+      {
+        dt_iop_gui_set_expander(cc);
+        dt_iop_gui_set_expanded(cc, TRUE, FALSE);
+        dt_iop_gui_update_blending(cc);
+      }
+    }
+
+    dt_iop_reload_defaults(cc);
+    dt_iop_gui_reset(cc);
+    cc->enabled = TRUE;
+    dt_iop_gui_update(cc);
+    dt_dev_add_history_item_target(self->dev, cc, TRUE, widget);
+  }
+  else if(cc_disable)
+  {
+    cc->enabled = FALSE;
+    dt_iop_gui_update(cc);
+    dt_dev_add_history_item_target(self->dev, cc, FALSE, widget);
+  }
+}
+
 void gui_init(dt_iop_module_t *self)
 {
   dt_iop_temperature_gui_data_t *g = IOP_GUI_ALLOC(temperature);
   g->temp_tint_update = FALSE;
+  g->legacy_update = FALSE;
   g->last_daylight_temperature = 0.0f;
   g->last_bb_temperature = 0.0f;
 
@@ -2810,12 +2939,12 @@ void gui_init(dt_iop_module_t *self)
   for_four_channels(k)
     g->mod_coeff[k] = 1.0;
 
-  GtkWidget *temp_label_box = gtk_event_box_new();
+  g->temp_label_box = gtk_event_box_new();
   g->temp_label = dt_ui_section_label_new(C_("section", "scene illuminant temp"));
   gtk_widget_set_tooltip_text(g->temp_label, _("click to cycle color mode on sliders"));
-  gtk_container_add(GTK_CONTAINER(temp_label_box), g->temp_label);
+  gtk_container_add(GTK_CONTAINER(g->temp_label_box), g->temp_label);
 
-  g_signal_connect(G_OBJECT(temp_label_box), "button-release-event",
+  g_signal_connect(G_OBJECT(g->temp_label_box), "button-release-event",
                    G_CALLBACK(temp_label_click), self);
 
   //Match UI order: temp first, then tint (like every other app ever)
@@ -2837,9 +2966,21 @@ void gui_init(dt_iop_module_t *self)
   GtkWidget *box_enabled = dt_gui_vbox(g->buttonbar,
                                        g->presets,
                                        g->finetune,
-                                       temp_label_box,
+                                       g->temp_label_box,
                                        g->scale_k,
                                        g->scale_tint);
+
+  g->legacy_pipeline =
+    gtk_check_button_new_with_label(_("advanced : white balance + color calibration"));
+  gtk_widget_set_tooltip_text
+    (g->legacy_pipeline,
+     _("when enabled, white balance uses 'as shot to reference';\n"
+       "the first color calibration instance is reset to its legacy defaults and enabled"));
+  gtk_widget_set_margin_top(g->legacy_pipeline, 10);
+  gtk_box_pack_end(GTK_BOX(box_enabled), g->legacy_pipeline, FALSE, FALSE, 0);
+  g_signal_connect(G_OBJECT(g->legacy_pipeline), "toggled",
+                   G_CALLBACK(_legacy_pipeline_callback), self);
+
   dt_gui_new_collapsible_section
     (&g->cs,
      "plugins/darkroom/temperature/expand_coefficients",
