@@ -70,9 +70,17 @@ DT_MODULE_INTROSPECTION(7, dt_iop_temperature_params_t)
 #define DT_IOP_TEMP_D65 3
 #define DT_IOP_TEMP_D65_LATE 4
 
+typedef enum dt_iop_temperature_advanced_mode_t
+{
+  DT_IOP_TEMP_ADVANCED_NONE = 0,
+  DT_IOP_TEMP_ADVANCED_WB_CC,
+  DT_IOP_TEMP_ADVANCED_WB_ONLY
+} dt_iop_temperature_advanced_mode_t;
+
 static void _gui_sliders_update(dt_iop_module_t *self);
 static void _cat_controls_update(dt_iop_module_t *self);
 static void _cat_xy_sliders_update(dt_iop_module_t *self, const gboolean sync_values);
+static dt_iop_module_t *_find_channelmixerrgb(dt_iop_module_t *self);
 
 typedef struct dt_iop_temperature_params_t
 {
@@ -102,8 +110,9 @@ typedef struct dt_iop_temperature_gui_data_t
   GtkWidget *finetune;
   GtkWidget *buttonbar;
   GtkWidget *colorpicker;
-  GtkWidget *legacy_pipeline;
-  gboolean legacy_update;
+  GtkWidget *advanced_wb_cc;
+  GtkWidget *advanced_wb_only;
+  gboolean advanced_update;
   GtkWidget *btn_asshot; //As Shot
   GtkWidget *btn_user;
   GtkWidget *btn_d65;
@@ -127,6 +136,7 @@ typedef struct dt_iop_temperature_gui_data_t
   GtkWidget *cat_illuminant, *cat_illum_fluo, *cat_illum_led;
   GtkWidget *cat_adaptation, *cat_x, *cat_y;
   dt_gui_collapsible_section_t cat_cs;
+  dt_gui_collapsible_section_t advanced_cs;
 } dt_iop_temperature_gui_data_t;
 
 typedef struct dt_iop_temperature_data_t
@@ -1691,6 +1701,7 @@ void gui_update(dt_iop_module_t *self)
 
   dt_gui_update_collapsible_section(&g->cs);
   dt_gui_update_collapsible_section(&g->cat_cs);
+  dt_gui_update_collapsible_section(&g->advanced_cs);
   _cat_controls_update(self);
 
   gtk_widget_queue_draw(self->widget);
@@ -2216,6 +2227,38 @@ static void _update_temperature_label(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->scale_k, tip);
 }
 
+static dt_iop_temperature_advanced_mode_t _advanced_mode(dt_iop_module_t *self)
+{
+  const dt_iop_temperature_params_t *p = self->params;
+  if(p->use_cat) return DT_IOP_TEMP_ADVANCED_NONE;
+
+  dt_iop_module_t *cc = _find_channelmixerrgb(self);
+  if(cc && g_list_find(self->dev->iop, cc) && cc->enabled)
+    return DT_IOP_TEMP_ADVANCED_WB_CC;
+
+  return DT_IOP_TEMP_ADVANCED_WB_ONLY;
+}
+
+static void _advanced_set_widgets(dt_iop_module_t *self,
+                                  const dt_iop_temperature_advanced_mode_t mode)
+{
+  dt_iop_temperature_gui_data_t *g = self->gui_data;
+  if(!g || !g->advanced_wb_cc || !g->advanced_wb_only) return;
+
+  g->advanced_update = TRUE;
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->advanced_wb_cc),
+                               mode == DT_IOP_TEMP_ADVANCED_WB_CC);
+  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->advanced_wb_only),
+                               mode == DT_IOP_TEMP_ADVANCED_WB_ONLY);
+  g->advanced_update = FALSE;
+}
+
+static void _advanced_controls_update(dt_iop_module_t *self)
+{
+  if(!self->gui_data) return;
+  _advanced_set_widgets(self, _advanced_mode(self));
+}
+
 static void _cat_controls_update(dt_iop_module_t *self)
 {
   dt_iop_temperature_gui_data_t *g = self->gui_data;
@@ -2223,12 +2266,7 @@ static void _cat_controls_update(dt_iop_module_t *self)
 
   if(!g) return;
 
-  if(g->legacy_pipeline)
-  {
-    g->legacy_update = TRUE;
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->legacy_pipeline), !p->use_cat);
-    g->legacy_update = FALSE;
-  }
+  _advanced_controls_update(self);
 
   _update_temperature_label(self);
 
@@ -2767,31 +2805,21 @@ static dt_iop_module_t *_find_channelmixerrgb(dt_iop_module_t *self)
   return NULL;
 }
 
-static void _legacy_pipeline_callback(GtkWidget *widget, dt_iop_module_t *self)
+static void _apply_advanced_mode(dt_iop_module_t *self,
+                                  const dt_iop_temperature_advanced_mode_t mode,
+                                  GtkWidget *target)
 {
   dt_iop_temperature_gui_data_t *g = self->gui_data;
   dt_iop_temperature_params_t *p = self->params;
 
-  if(!g || g->legacy_update) return;
+  if(!g) return;
 
-  const gboolean legacy = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
-  if(legacy == !p->use_cat) return;
-
+  const gboolean legacy = mode != DT_IOP_TEMP_ADVANCED_NONE;
   dt_iop_module_t *cc = _find_channelmixerrgb(self);
-  gboolean cc_changed = FALSE;
-  gboolean cc_disable = FALSE;
-
-  if(legacy)
-  {
-    // always reset the first color calibration instance to its legacy defaults
-    cc_changed = (cc != NULL);
-  }
-  else
-  {
-    // always disable the first color calibration instance when returning to
-    // the CAT pipeline, even if it was already enabled before this toggle
-    cc_disable = cc && cc->enabled;
-  }
+  const gboolean cc_reset = mode == DT_IOP_TEMP_ADVANCED_WB_CC && cc != NULL;
+  const gboolean cc_disable =
+    mode != DT_IOP_TEMP_ADVANCED_WB_CC && cc
+    && g_list_find(self->dev->iop, cc) && cc->enabled;
 
   DT_ENTER_GUI_UPDATE();
   if(legacy)
@@ -2814,9 +2842,9 @@ static void _legacy_pipeline_callback(GtkWidget *widget, dt_iop_module_t *self)
 
   // commit white balance first so the chroma state reflects the legacy
   // pipeline before color calibration computes its own legacy defaults
-  dt_dev_add_history_item_target(self->dev, self, TRUE, widget);
+  dt_dev_add_history_item_target(self->dev, self, TRUE, target);
 
-  if(cc_changed)
+  if(cc_reset)
   {
     // an unused color calibration lives in alliop until it is first enabled.
     // move it into the active pipeline and build its GUI before resetting it.
@@ -2827,15 +2855,12 @@ static void _legacy_pipeline_callback(GtkWidget *widget, dt_iop_module_t *self)
       dt_ioppr_insert_module_instance(self->dev, cc);
       dt_ioppr_resync_modules_order(self->dev);
 
-      if(!dt_iop_is_hidden(cc) && !cc->gui_data)
-      {
-        DT_ENTER_GUI_UPDATE();
-        cc->gui_init(cc);
-        DT_LEAVE_GUI_UPDATE();
-      }
-
       if(!dt_iop_is_hidden(cc))
       {
+        // the module may come from alliop after its GUI was destroyed: its
+        // widget/gui_data pointers are then stale while still non-NULL.
+        // dt_iop_gui_init() reinitializes gui_lock and rebuilds the GUI.
+        dt_iop_gui_init(cc);
         dt_iop_gui_set_expander(cc);
         dt_iop_gui_set_expanded(cc, TRUE, FALSE);
         dt_iop_gui_update_blending(cc);
@@ -2846,21 +2871,61 @@ static void _legacy_pipeline_callback(GtkWidget *widget, dt_iop_module_t *self)
     dt_iop_gui_reset(cc);
     cc->enabled = TRUE;
     dt_iop_gui_update(cc);
-    dt_dev_add_history_item_target(self->dev, cc, TRUE, widget);
+    dt_dev_add_history_item_target(self->dev, cc, TRUE, target);
   }
   else if(cc_disable)
   {
     cc->enabled = FALSE;
     dt_iop_gui_update(cc);
-    dt_dev_add_history_item_target(self->dev, cc, FALSE, widget);
+    dt_dev_add_history_item_target(self->dev, cc, FALSE, target);
   }
+
+  _advanced_controls_update(self);
+}
+
+static void _advanced_callback(GtkWidget *widget, dt_iop_module_t *self)
+{
+  dt_iop_temperature_gui_data_t *g = self->gui_data;
+  if(!g || g->advanced_update) return;
+
+  dt_iop_temperature_advanced_mode_t mode;
+  if(widget == g->advanced_wb_cc)
+  {
+    if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget)))
+      mode = DT_IOP_TEMP_ADVANCED_WB_CC;
+    else if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->advanced_wb_only)))
+      mode = DT_IOP_TEMP_ADVANCED_WB_ONLY;
+    else
+      mode = DT_IOP_TEMP_ADVANCED_NONE;
+  }
+  else
+  {
+    if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget)))
+      mode = DT_IOP_TEMP_ADVANCED_WB_ONLY;
+    else if(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->advanced_wb_cc)))
+      mode = DT_IOP_TEMP_ADVANCED_WB_CC;
+    else
+      mode = DT_IOP_TEMP_ADVANCED_NONE;
+  }
+
+  _advanced_set_widgets(self, mode);
+
+  if(mode == _advanced_mode(self)) return;
+
+  _apply_advanced_mode(self, mode, widget);
+}
+
+static void _history_changed_callback(gpointer instance, dt_iop_module_t *self)
+{
+  if(!self->gui_data) return;
+  _advanced_controls_update(self);
 }
 
 void gui_init(dt_iop_module_t *self)
 {
   dt_iop_temperature_gui_data_t *g = IOP_GUI_ALLOC(temperature);
   g->temp_tint_update = FALSE;
-  g->legacy_update = FALSE;
+  g->advanced_update = FALSE;
   g->last_daylight_temperature = 0.0f;
   g->last_bb_temperature = 0.0f;
 
@@ -2970,16 +3035,37 @@ void gui_init(dt_iop_module_t *self)
                                        g->scale_k,
                                        g->scale_tint);
 
-  g->legacy_pipeline =
-    gtk_check_button_new_with_label(_("advanced : white balance + color calibration"));
+  dt_gui_new_collapsible_section
+    (&g->advanced_cs,
+     "plugins/darkroom/temperature/expand_advanced",
+     _("advanced"),
+     GTK_BOX(box_enabled),
+     DT_ACTION(self));
+
+  self->widget = GTK_WIDGET(g->advanced_cs.container);
+
+  g->advanced_wb_cc =
+    gtk_check_button_new_with_label(_("white balance + color calibration"));
   gtk_widget_set_tooltip_text
-    (g->legacy_pipeline,
+    (g->advanced_wb_cc,
      _("when enabled, white balance uses 'as shot to reference';\n"
        "the first color calibration instance is reset to its legacy defaults and enabled"));
-  gtk_widget_set_margin_top(g->legacy_pipeline, 10);
-  gtk_box_pack_end(GTK_BOX(box_enabled), g->legacy_pipeline, FALSE, FALSE, 0);
-  g_signal_connect(G_OBJECT(g->legacy_pipeline), "toggled",
-                   G_CALLBACK(_legacy_pipeline_callback), self);
+  gtk_widget_set_margin_top(g->advanced_wb_cc, 10);
+
+  g->advanced_wb_only =
+    gtk_check_button_new_with_label(_("legacy : white balance only"));
+  gtk_widget_set_tooltip_text
+    (g->advanced_wb_only,
+     _("when enabled, white balance uses 'as shot to reference';\n"
+       "the first color calibration instance is disabled"));
+
+  dt_gui_box_add(g->advanced_cs.container,
+                 g->advanced_wb_cc, g->advanced_wb_only);
+
+  g_signal_connect(G_OBJECT(g->advanced_wb_cc), "toggled",
+                   G_CALLBACK(_advanced_callback), self);
+  g_signal_connect(G_OBJECT(g->advanced_wb_only), "toggled",
+                   G_CALLBACK(_advanced_callback), self);
 
   dt_gui_new_collapsible_section
     (&g->cs,
@@ -3083,6 +3169,8 @@ void gui_init(dt_iop_module_t *self)
 
   // update the gui when the preferences changed (i.e. colored sliders stuff)
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_PREFERENCES_CHANGE, _preference_changed);
+  DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_HISTORY_CHANGE,
+                           _history_changed_callback);
 
   // start building top level widget
   self->widget = gtk_stack_new();

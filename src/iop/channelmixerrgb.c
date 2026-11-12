@@ -53,6 +53,7 @@
 #include "common/dttypes.h"
 #include "develop/imageop_math.h"
 #include "develop/openmp_maths.h"
+#include "develop/pixelpipe_cache.h"
 #include "gui/accelerators.h"
 #include "gui/color_picker_proxy.h"
 #include "gui/gtk.h"
@@ -2813,6 +2814,21 @@ static void _safety_changed_callback(GtkWidget *widget, dt_iop_module_t *self)
 }
 
 
+static void _set_calibrating(dt_iop_module_t *self, const gboolean calibrating)
+{
+  dt_develop_t *dev = self->dev;
+  if(!dev || dev->chroma.calibrating == calibrating) return;
+
+  dev->chroma.calibrating = calibrating;
+
+  // the CAT module bypasses chromatic adaptation while calibrating, but this
+  // transient state is not part of any module params/hash. Flush the cached
+  // outputs so a non-adapted result cannot be reused once calibration stops.
+  if(dev->full.pipe) dt_dev_pixelpipe_cache_flush(dev->full.pipe);
+  if(dev->preview_pipe) dt_dev_pixelpipe_cache_flush(dev->preview_pipe);
+  if(dev->preview2.pipe) dt_dev_pixelpipe_cache_flush(dev->preview2.pipe);
+}
+
 static void _start_profiling_callback(GtkWidget *togglebutton, dt_iop_module_t *self)
 {
   DT_GUARD_GUI_UPDATE();
@@ -2825,7 +2841,14 @@ static void _start_profiling_callback(GtkWidget *togglebutton, dt_iop_module_t *
   dt_iop_channelmixer_rgb_gui_data_t *g = self->gui_data;
   g->is_profiling_started = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(g->cs.toggle));
   if(!g->is_profiling_started)
-    self->dev->chroma.calibrating = FALSE;
+  {
+    const gboolean was_calibrating = self->dev->chroma.calibrating;
+    dt_iop_gui_enter_critical_section(self);
+    g->run_profile = FALSE;
+    dt_iop_gui_leave_critical_section(self);
+    _set_calibrating(self, FALSE);
+    if(was_calibrating) dt_dev_reprocess_preview(self->dev);
+  }
 
   // init bounding box
   dt_iop_gui_enter_critical_section(self);
@@ -2844,7 +2867,7 @@ static void _run_profile_callback(GtkWidget *widget,
   dt_iop_gui_enter_critical_section(self);
   g->run_profile = TRUE;
   dt_iop_gui_leave_critical_section(self);
-  self->dev->chroma.calibrating = TRUE;
+  _set_calibrating(self, TRUE);
 
   dt_dev_reprocess_preview(self->dev);
 }
@@ -2866,10 +2889,20 @@ static void _commit_profile_callback(GtkWidget *widget,
                                      dt_iop_module_t *self)
 {
   DT_GUARD_GUI_UPDATE();
-  const dt_iop_channelmixer_rgb_gui_data_t *g = self->gui_data;
+  dt_iop_channelmixer_rgb_gui_data_t *g = self->gui_data;
   dt_iop_channelmixer_rgb_params_t *p = self->params;
 
-  if(!g->profile_ready) return;
+  if(!g->profile_ready)
+  {
+    // cannot commit yet: cancel any pending profile and restore normal CAT
+    const gboolean was_calibrating = self->dev->chroma.calibrating;
+    dt_iop_gui_enter_critical_section(self);
+    g->run_profile = FALSE;
+    dt_iop_gui_leave_critical_section(self);
+    _set_calibrating(self, FALSE);
+    if(was_calibrating) dt_dev_reprocess_preview(self->dev);
+    return;
+  }
 
   dt_iop_gui_enter_critical_section(self);
 
@@ -2898,7 +2931,7 @@ static void _commit_profile_callback(GtkWidget *widget,
   if(self->dev->chroma.cat_pipeline && self->dev->proxy.wb_set_illuminant)
     self->dev->proxy.wb_set_illuminant(self->dev, p->x, p->y);
 
-  self->dev->chroma.calibrating = FALSE;
+  _set_calibrating(self, FALSE);
 
   DT_ENTER_GUI_UPDATE();
   dt_bauhaus_combobox_set(g->illuminant, p->illuminant);

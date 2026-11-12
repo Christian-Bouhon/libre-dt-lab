@@ -4096,6 +4096,13 @@
     <longdescription>remember whether the chromatic adaptation section of the white balance module is expanded</longdescription>
   </dtconfig>
   <dtconfig>
+    <name>plugins/darkroom/temperature/expand_advanced</name>
+    <type>bool</type>
+    <default>false</default>
+    <shortdescription>whether to show advanced white balance modes</shortdescription>
+    <longdescription>remember whether the advanced section of the white balance module is expanded</longdescription>
+  </dtconfig>
+  <dtconfig>
     <name>plugins/darkroom/temperature/button_bar</name>
     <type>bool</type>
     <default>true</default>

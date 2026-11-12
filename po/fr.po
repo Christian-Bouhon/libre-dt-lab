@@ -29888,17 +29888,29 @@ msgstr ""
 msgid "choose white balance setting"
 msgstr "Choisir un paramètre de balance des blancs"
 
-#: ../src/iop/temperature.c:2916
-msgid "advanced : white balance + color calibration"
-msgstr "Avancé : Balance des blancs + Calibration des couleurs"
+#: ../src/iop/temperature.c:3046
+msgid "white balance + color calibration"
+msgstr "Balance des blancs + calibration des couleurs"
 
-#: ../src/iop/temperature.c:2918
+#: ../src/iop/temperature.c:3049
 msgid ""
 "when enabled, white balance uses 'as shot to reference';\n"
 "the first color calibration instance is reset to its legacy defaults and enabled"
 msgstr ""
 "si activé, la balance des blancs utilise « as shot to reference » ;\n"
 "la première instance de calibration des couleurs est réinitialisée avec ses valeurs par défaut historiques puis activée"
+
+#: ../src/iop/temperature.c:3054
+msgid "legacy : white balance only"
+msgstr "Legacy : Balance des blancs seule"
+
+#: ../src/iop/temperature.c:3057
+msgid ""
+"when enabled, white balance uses 'as shot to reference';\n"
+"the first color calibration instance is disabled"
+msgstr ""
+"si activé, la balance des blancs utilise « as shot to reference » ;\n"
+"la première instance de calibration des couleurs est désactivée"
 
 #: ../src/iop/temperature.c:2476
 msgid "finetune"
