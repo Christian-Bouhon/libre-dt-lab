@@ -34,12 +34,48 @@ void dt_print_ext(const char *msg, ...)
   fputc('\n', stderr);
 }
 
+void dt_control_log(const char *msg, ...)
+{
+  va_list ap;
+  va_start(ap, msg);
+  vfprintf(stderr, msg, ap);
+  va_end(ap);
+  fputc('\n', stderr);
+}
+
+/* Mirror the real config defaults: the AI subsystem must be enabled and
+   the preferred provider is CPU, every other key is unset/empty. */
 gchar *dt_conf_get_string(const char *name)
 {
-  return g_strdup("cpu");
+  if(name && strcmp(name, "plugins/ai/provider") == 0)
+    return g_strdup("cpu");
+  return g_strdup("");
+}
+
+int dt_conf_get_int(const char *name)
+{
+  (void)name;
+  return 0;
+}
+
+gboolean dt_conf_get_bool(const char *name)
+{
+  return name && strcmp(name, "plugins/ai/enabled") == 0;
+}
+
+gboolean dt_conf_key_exists(const char *key)
+{
+  (void)key;
+  return FALSE;
 }
 
 void dt_loc_get_user_config_dir(char *configdir, size_t bufsize)
 {
   if(configdir && bufsize > 0) configdir[0] = '\0';
+}
+
+void dt_loc_get_user_cache_dir(char *cachedir, size_t bufsize)
+{
+  if(cachedir && bufsize > 0)
+    g_strlcpy(cachedir, g_get_tmp_dir(), bufsize);
 }
