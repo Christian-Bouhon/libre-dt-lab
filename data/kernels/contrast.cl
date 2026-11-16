@@ -49,6 +49,34 @@ __kernel void contrast_luminance(read_only image2d_t in,
   luminance[mad24(y, width, x)] = fmax(l, CONTRAST_MIN_FLOAT);
 }
 
+
+/* Sampled linear-luma histogram for the optional percentile contrast pivot.
+ * The host uses the same stride, bin range and percentile formula as the CPU
+ * implementation in contrast.c. */
+__kernel void contrast_histogram(read_only image2d_t in,
+                                 global float *hist,
+                                 const int width,
+                                 const int height,
+                                 const int stride,
+                                 const float luma_r,
+                                 const float luma_g,
+                                 const float luma_b,
+                                 const float min_ev,
+                                 const float inv_bin,
+                                 const int bins)
+{
+  const int x = get_global_id(0) * stride;
+  const int y = get_global_id(1) * stride;
+  if(x >= width || y >= height) return;
+
+  const float4 px = read_imagef(in, sampleri, (int2)(x, y));
+  const float l = fmax(luma_r * px.x + luma_g * px.y + luma_b * px.z, CONTRAST_MIN_FLOAT);
+  const float ev = log2(l / 0.1845f);
+  int bin = (int)((ev - min_ev) * inv_bin + 0.5f);
+  bin = clamp(bin, 0, bins - 1);
+  atomic_add_f(hist + bin, 1.0f);
+}
+
 /* Apply the multi-scale contrast. Inactive scales are fed the lum_pixel buffer
  * as a harmless placeholder by the host: log2(lum_pixel/lum_pixel) = 0, and the
  * (gain-1) factor is 0 too, so they contribute exactly nothing (same result as
@@ -78,7 +106,8 @@ __kernel void contrast_apply(read_only image2d_t in,
                              const float colorful_contrast,
                              const float green_compensation,
                              const float slope_highlights,
-                             const float slope_shadows)
+                             const float slope_shadows,
+                             const float pivot_log)
 {
   const int x = get_global_id(0);
   const int y = get_global_id(1);
@@ -110,7 +139,7 @@ __kernel void contrast_apply(read_only image2d_t in,
   }
 
   // Global contrast with CSF weighting, centred on middle gray (0.1845)
-  const float log_lum = log2(lp / 0.1845f);
+  const float log_lum = log2(lp / 0.1845f) - pivot_log;
   const float csf_weight = exp(-(log_lum * log_lum) / 12.5f);
   const float effective_csf_weight = (1.0f - csf_adaptation) + csf_adaptation * csf_weight;
   const float global_term = (gain_global - 1.0f) * effective_csf_weight * log_lum * w_global;
@@ -121,7 +150,7 @@ __kernel void contrast_apply(read_only image2d_t in,
   // preserved. Must stay in lockstep with the CPU path in contrast.c --
   // same formula, same operand order.
   const float lb = fmax(lum_base[k], CONTRAST_MIN_FLOAT);
-  const float log_lum_base = log2(lb / 0.1845f);
+  const float log_lum_base = log2(lb / 0.1845f) - pivot_log;
   const float csf_weight_base = exp(-(log_lum_base * log_lum_base) / 12.5f);
   const float effective_csf_weight_base = (1.0f - csf_adaptation) + csf_adaptation * csf_weight_base;
   const float slope_sh = (log_lum_base < 0.0f) ? slope_shadows : slope_highlights;

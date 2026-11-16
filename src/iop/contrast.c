@@ -99,7 +99,15 @@ actual luminance contribution removes that artifact at the source.
 #include <omp.h>
 #endif
 
-DT_MODULE_INTROSPECTION(2, dt_iop_contrast_params_t)
+DT_MODULE_INTROSPECTION(3, dt_iop_contrast_params_t)
+
+// Optional percentile pivot: sampled log2-luma histogram used by the global
+// contrast and the Highlights/Shadows split. CPU and OpenCL share the same
+// stride, bins and percentile formula.
+#define PIVOT_HIST_BINS 512
+#define PIVOT_MIN_EV (-16.0f)
+#define PIVOT_MAX_EV (8.0f)
+#define PIVOT_SAMPLE_STRIDE 16
 
 
 typedef struct dt_iop_contrast_params_t
@@ -143,6 +151,12 @@ typedef struct dt_iop_contrast_params_t
   // name), so they still appear right after global_scale in gui_init().
   float gain_highlights;    // $MIN: -5.0 $MAX: 5.0 $DEFAULT: 0.0 $DESCRIPTION: "highlights"
   float gain_shadows;       // $MIN: -5.0 $MAX: 5.0 $DEFAULT: 0.0 $DESCRIPTION: "shadows"
+
+  // Optional percentile pivot for global contrast and the Highlights/Shadows
+  // split. 18% = fixed middle gray (historical/off), 50% = image median,
+  // 60% = 60th percentile. Between 18 and 50 the pivot is blended smoothly
+  // from middle gray to the requested percentile.
+  float pivot_percentile;   // $MIN: 18.0 $MAX: 60.0 $DEFAULT: 18.0 $DESCRIPTION: "pivot percentile"
 } dt_iop_contrast_params_t;
 
 typedef struct dt_iop_contrast_data_t
@@ -177,6 +191,10 @@ typedef struct dt_iop_contrast_data_t
   // spatial-contrast sliders so the tone term never feeds back on them.
   int base_radius;
   float base_feathering;
+
+  // Optional percentile pivot (18..60). 18 reproduces the historical fixed
+  // middle gray; 50 is the image median; 60 is the 60th percentile.
+  float pivot_percentile;
 } dt_iop_contrast_data_t;
 
 
@@ -226,13 +244,21 @@ typedef struct dt_iop_contrast_gui_data_t
   gboolean base_valid_full;
   gboolean base_valid_thumb;
 
+  // Optional percentile pivot, shared between the preview and full pipes.
+  // The preview pipe covers the whole preview image, so its histogram is a
+  // stable global statistic; the full/export pipe reuses it instead of
+  // recomputing from a zoomed/cropped ROI. The histogram is independent of the
+  // selected percentile, so moving the slider does not require a rescan.
+  gboolean pivot_hist_valid;
+  float pivot_hist[PIVOT_HIST_BINS];
+
   // GTK widgets
   GtkWidget *coarse_scale, *broad_scale, *local_scale, *fine_scale, *micro_scale, *global_scale;
   GtkWidget *gain_highlights, *gain_shadows;
   GtkWidget *blending;
   GtkWidget *feathering;
   GtkWidget *noise_threshold;
-  GtkWidget *csf_adaptation, *color_balance, *colorful_contrast, *contrast_balance;
+  GtkWidget *csf_adaptation, *pivot_percentile, *color_balance, *colorful_contrast, *contrast_balance;
   dt_gui_collapsible_section_t advanced_expander;
   dt_gui_collapsible_section_t masking_expander;
   GtkWidget *f_mult_micro, *f_mult_fine, *f_mult_local, *f_mult_broad, *f_mult_coarse;
@@ -316,17 +342,58 @@ int legacy_params(dt_iop_module_t *self,
     const dt_iop_contrast_params_v1_t *o = (dt_iop_contrast_params_v1_t *)old_params;
     dt_iop_contrast_params_t *n = malloc(sizeof(dt_iop_contrast_params_t));
 
-    // v1 and v2 share the same layout for every field up to colorful_contrast:
-    // a single memcpy of the common prefix, then default the two new fields.
+    // v1 shares the same layout up to colorful_contrast.
     memcpy(n, o, sizeof(dt_iop_contrast_params_v1_t));
     n->gain_highlights = 0.0f;
     n->gain_shadows = 0.0f;
+    n->pivot_percentile = 18.0f;
 
     *new_params = n;
     *new_params_size = sizeof(dt_iop_contrast_params_t);
-    *new_version = 2;
+    *new_version = 3;
     return 0;
   }
+
+  if(old_version == 2)
+  {
+    typedef struct dt_iop_contrast_params_v2_t
+    {
+      float micro_scale;
+      float fine_scale;
+      float local_scale;
+      float broad_scale;
+      float coarse_scale;
+      float global_scale;
+      float blending;
+      float feathering;
+      float f_mult_micro;
+      float f_mult_fine;
+      float f_mult_local;
+      float f_mult_broad;
+      float f_mult_coarse;
+      int reserved0;
+      int reserved1;
+      int iterations;
+      float noise_threshold;
+      float csf_adaptation;
+      float color_balance;
+      float contrast_balance;
+      float colorful_contrast;
+      float gain_highlights;
+      float gain_shadows;
+    } dt_iop_contrast_params_v2_t;
+
+    const dt_iop_contrast_params_v2_t *o = (dt_iop_contrast_params_v2_t *)old_params;
+    dt_iop_contrast_params_t *n = malloc(sizeof(dt_iop_contrast_params_t));
+    memcpy(n, o, sizeof(dt_iop_contrast_params_v2_t));
+    n->pivot_percentile = 18.0f;
+
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_contrast_params_t);
+    *new_version = 3;
+    return 0;
+  }
+
   return 1;
 }
 
@@ -348,6 +415,7 @@ static void invalidate_luminance_cache(dt_iop_module_t *const self)
   g->luminance_valid = FALSE;
   g->base_valid_full = FALSE;
   g->base_valid_thumb = FALSE;
+  g->pivot_hist_valid = FALSE;
   g->thumb_preview_hash = DT_INVALID_HASH;
   g->ui_preview_hash = DT_INVALID_HASH;
   dt_iop_gui_leave_critical_section(self);
@@ -443,6 +511,70 @@ static inline void compute_smoothed_base_luminance(const float *const restrict i
 }
 
 
+static inline float percentile_log_from_histogram(const float *const restrict hist,
+                                                   const int bins,
+                                                   const float min_ev,
+                                                   const float inv_bin,
+                                                   const float percentile)
+{
+  float total = 0.0f;
+  for(int i = 0; i < bins; i++) total += hist[i];
+  if(total <= 0.0f) return 0.0f;
+
+  const float target = total * CLAMP(percentile, 0.0f, 100.0f) / 100.0f;
+  float acc = 0.0f;
+  for(int i = 0; i < bins; i++)
+  {
+    acc += hist[i];
+    if(acc >= target) return min_ev + ((float)i + 0.5f) / inv_bin;
+  }
+  return min_ev + ((float)(bins - 1) + 0.5f) / inv_bin;
+}
+
+static inline float smoothstep01(float t)
+{
+  t = CLAMP(t, 0.0f, 1.0f);
+  return t * t * (3.0f - 2.0f * t);
+}
+
+static inline float pivot_log_for_percentile(const float *const restrict hist,
+                                             const float percentile)
+{
+  if(percentile <= 18.0f) return 0.0f;
+
+  const float inv_bin = (float)(PIVOT_HIST_BINS - 1) / (PIVOT_MAX_EV - PIVOT_MIN_EV);
+  const float pct_log = percentile_log_from_histogram(hist, PIVOT_HIST_BINS,
+                                                      PIVOT_MIN_EV, inv_bin, percentile);
+  if(percentile <= 50.0f)
+  {
+    const float t = smoothstep01((percentile - 18.0f) / (50.0f - 18.0f));
+    return t * pct_log;
+  }
+  return pct_log;
+}
+
+__DT_CLONE_TARGETS__
+static inline void compute_pivot_histogram_from_luma(const float *const restrict lum,
+                                                     const size_t width,
+                                                     const size_t height,
+                                                     float *const restrict hist)
+{
+  memset(hist, 0, sizeof(float) * PIVOT_HIST_BINS);
+  const float inv_bin = (float)(PIVOT_HIST_BINS - 1) / (PIVOT_MAX_EV - PIVOT_MIN_EV);
+
+  for(size_t y = 0; y < height; y += PIVOT_SAMPLE_STRIDE)
+  {
+    for(size_t x = 0; x < width; x += PIVOT_SAMPLE_STRIDE)
+    {
+      const float l = fmaxf(lum[y * width + x], MIN_FLOAT);
+      const float ev = log2f(l / 0.1845f);
+      int bin = (int)((ev - PIVOT_MIN_EV) * inv_bin + 0.5f);
+      bin = CLAMP(bin, 0, PIVOT_HIST_BINS - 1);
+      hist[bin] += 1.0f;
+    }
+  }
+}
+
 // Apply local contrast enhancement
 // The detail (local contrast) is the log-space difference between pixel luminance
 // and smoothed luminance. Boosting this difference amplifies local details.
@@ -459,6 +591,7 @@ static inline void apply_local_contrast(const float *const restrict in,
                                         float *const restrict out,
                                         const dt_iop_roi_t *const roi_in,
                                         const dt_iop_roi_t *const roi_out,
+                                        const float pivot_log,
                                         const dt_iop_contrast_data_t *const d)
 {
   const size_t npixels = (size_t)roi_in->width * roi_in->height;
@@ -539,7 +672,7 @@ static inline void apply_local_contrast(const float *const restrict in,
     // Global contrast with protection
     // We apply the global tone curve effect, attenuated by protection
     // (lum_pixel / 0.1845)^(gain_global - 1) becomes exp2f( (gain_global - 1) * csf_adaptation * protection * weight * log2(...) )
-    const float log_lum = log2f(lum_pixel / 0.1845f);
+    const float log_lum = log2f(lum_pixel / 0.1845f) - pivot_log;
     // Gaussian weighting centered on middle gray (0.0 in log2 space)
     // sigma ~= 2.5 EV provides a good physiological range
     const float csf_weight = expf(-powf(log_lum, 2.0f) / 12.5f);
@@ -558,7 +691,7 @@ static inline void apply_local_contrast(const float *const restrict in,
     float sh_term = 0.0f;
     if(luminance_base)
     {
-      const float log_lum_base = log2f(fmaxf(luminance_base[k], MIN_FLOAT) / 0.1845f);
+      const float log_lum_base = log2f(fmaxf(luminance_base[k], MIN_FLOAT) / 0.1845f) - pivot_log;
       const float csf_weight_base = expf(-(log_lum_base * log_lum_base) / 12.5f);
       const float effective_csf_weight_base =
           (1.0f - d->csf_adaptation) + d->csf_adaptation * csf_weight_base;
@@ -948,6 +1081,45 @@ static void spatial_contrast_process(dt_iop_module_t *self,
   }
   else
   {
+    float pivot_log = 0.0f;
+    const float pivot_pct = d->pivot_percentile;
+    if(pivot_pct > 18.0f)
+    {
+      float hist[PIVOT_HIST_BINS];
+      gboolean have_hist = FALSE;
+
+      if(g)
+      {
+        dt_iop_gui_enter_critical_section(self);
+        have_hist = g->pivot_hist_valid;
+        if(have_hist) memcpy(hist, g->pivot_hist, sizeof(hist));
+        dt_iop_gui_leave_critical_section(self);
+      }
+
+      if(!have_hist)
+      {
+        const gboolean is_preview = (piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW) != 0;
+        // The preview pipe covers the whole preview image, so it is the
+        // authoritative source for the global histogram. Export/headless has no
+        // GUI and processes the full image, so it can compute directly.
+        if(is_preview || !g)
+        {
+          compute_pivot_histogram_from_luma(luminance_pixel, width, height, hist);
+          have_hist = TRUE;
+          if(g && is_preview)
+          {
+            dt_iop_gui_enter_critical_section(self);
+            memcpy(g->pivot_hist, hist, sizeof(hist));
+            g->pivot_hist_valid = TRUE;
+            dt_iop_gui_leave_critical_section(self);
+          }
+        }
+        // Full pipe with a GUI but no preview histogram yet: keep 0.0 rather
+        // than deriving a pivot from a possibly zoomed/cropped ROI.
+      }
+
+      if(have_hist) pivot_log = pivot_log_for_percentile(hist, pivot_pct);
+    }
     apply_local_contrast(in, luminance_pixel,
                          tone_active ? luminance_base : NULL,
                          d->local_scale != 1.0f ? luminance_smoothed : NULL,
@@ -955,7 +1127,7 @@ static void spatial_contrast_process(dt_iop_module_t *self,
                          d->broad_scale != 1.0f ? luminance_smoothed_broad : NULL,
                          d->fine_scale != 1.0f ? luminance_smoothed_fine : NULL,
                          d->micro_scale != 1.0f ? luminance_smoothed_micro : NULL,
-                         out, roi_in, roi_out, d);
+                         out, roi_in, roi_out, pivot_log, d);
   }
 
   if(!cached)
@@ -975,6 +1147,7 @@ typedef struct dt_iop_contrast_global_data_t
 {
   dt_eigf_cl_t eigf;       // shared EIGF kernels (eigf.cl, program 43)
   int kernel_luminance;    // contrast.cl (program 44)
+  int kernel_histogram;    // optional percentile-pivot histogram
   int kernel_apply;
 } dt_iop_contrast_global_data_t;
 #endif
@@ -992,6 +1165,7 @@ void init_global(dt_iop_module_so_t *self)
   gd->eigf.finish_variance = dt_opencl_create_kernel(program_eigf, "eigf_finish_variance");
   gd->eigf.blending        = dt_opencl_create_kernel(program_eigf, "eigf_blending_no_mask");
   gd->kernel_luminance     = dt_opencl_create_kernel(program_contrast, "contrast_luminance");
+  gd->kernel_histogram     = dt_opencl_create_kernel(program_contrast, "contrast_histogram");
   gd->kernel_apply         = dt_opencl_create_kernel(program_contrast, "contrast_apply");
 #else
   self->data = NULL;
@@ -1010,6 +1184,7 @@ void cleanup_global(dt_iop_module_so_t *self)
     dt_opencl_free_kernel(gd->eigf.finish_variance);
     dt_opencl_free_kernel(gd->eigf.blending);
     dt_opencl_free_kernel(gd->kernel_luminance);
+    dt_opencl_free_kernel(gd->kernel_histogram);
     dt_opencl_free_kernel(gd->kernel_apply);
     free(self->data);
   }
@@ -1049,6 +1224,7 @@ int process_cl(dt_iop_module_t *self,
   cl_mem dev_lum    = dt_opencl_alloc_device_buffer(devid, bsize);
   cl_mem dev_coarse = NULL, dev_broad = NULL, dev_local = NULL, dev_fine = NULL, dev_micro = NULL;
   cl_mem dev_base   = NULL; // low-frequency base for the shadows/highlights term
+  cl_mem dev_hist   = NULL; // optional percentile-pivot histogram
 
   if(!dev_lum) { err = CL_MEM_OBJECT_ALLOCATION_FAILURE; goto cleanup; }
 
@@ -1061,6 +1237,65 @@ int process_cl(dt_iop_module_t *self,
   if(err != CL_SUCCESS) goto cleanup;
 
   const float base_eps = d->feathering * d->feathering;
+
+  // Optional percentile pivot: sample the input on the GPU into a small
+  // histogram, read it back and compute the requested percentile. The
+  // histogram is shared with the CPU path and cached per preview pipe.
+  float pivot_log = 0.0f;
+  const float pivot_pct = d->pivot_percentile;
+  if(pivot_pct > 18.0f)
+  {
+    float hist[PIVOT_HIST_BINS];
+    gboolean have_hist = FALSE;
+
+    if(g)
+    {
+      dt_iop_gui_enter_critical_section(self);
+      have_hist = g->pivot_hist_valid;
+      if(have_hist) memcpy(hist, g->pivot_hist, sizeof(hist));
+      dt_iop_gui_leave_critical_section(self);
+    }
+
+    if(!have_hist)
+    {
+      const gboolean is_preview = (piece->pipe->type & DT_DEV_PIXELPIPE_PREVIEW) != 0;
+      // The preview pipe covers the whole preview image. Export/headless has
+      // no GUI and processes the full image, so it can compute directly.
+      if(is_preview || !g)
+      {
+        float zero_hist[PIVOT_HIST_BINS] = { 0.0f };
+        dev_hist = dt_opencl_alloc_device_buffer(devid, sizeof(zero_hist));
+        if(!dev_hist) { err = CL_MEM_OBJECT_ALLOCATION_FAILURE; goto cleanup; }
+        err = dt_opencl_write_buffer_to_device(devid, zero_hist, dev_hist, 0, sizeof(zero_hist), CL_TRUE);
+        if(err != CL_SUCCESS) goto cleanup;
+
+        const float inv_bin = (float)(PIVOT_HIST_BINS - 1) / (PIVOT_MAX_EV - PIVOT_MIN_EV);
+        const float pivot_min_ev = PIVOT_MIN_EV;
+        const size_t hist_w = ((size_t)width + PIVOT_SAMPLE_STRIDE - 1) / PIVOT_SAMPLE_STRIDE;
+        const size_t hist_h = ((size_t)height + PIVOT_SAMPLE_STRIDE - 1) / PIVOT_SAMPLE_STRIDE;
+        err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_histogram, hist_w, hist_h,
+          CLARG(dev_in), CLARG(dev_hist), CLARG(width), CLARG(height),
+          CLARGINT(PIVOT_SAMPLE_STRIDE),
+          CLARG(d->luma_r), CLARG(d->luma_g), CLARG(d->luma_b),
+          CLARG(pivot_min_ev), CLARG(inv_bin), CLARGINT(PIVOT_HIST_BINS));
+        if(err != CL_SUCCESS) goto cleanup;
+
+        err = dt_opencl_read_buffer_from_device(devid, hist, dev_hist, 0, sizeof(hist), CL_TRUE);
+        if(err != CL_SUCCESS) goto cleanup;
+        have_hist = TRUE;
+
+        if(g && is_preview)
+        {
+          dt_iop_gui_enter_critical_section(self);
+          memcpy(g->pivot_hist, hist, sizeof(hist));
+          g->pivot_hist_valid = TRUE;
+          dt_iop_gui_leave_critical_section(self);
+        }
+      }
+    }
+
+    if(have_hist) pivot_log = pivot_log_for_percentile(hist, pivot_pct);
+  }
 
   // 2. one edge-aware EIGF blur per active scale (mirrors the CPU guards).
   //    Helper: allocate, copy the guide in, blur in place.
@@ -1128,7 +1363,7 @@ int process_cl(dt_iop_module_t *self,
           CLARG(d->noise_threshold), CLARG(d->csf_adaptation),
           CLARG(d->color_balance), CLARG(d->colorful_contrast),
           CLARG(d->green_compensation),
-          CLARG(d->slope_highlights), CLARG(d->slope_shadows));
+          CLARG(d->slope_highlights), CLARG(d->slope_shadows), CLARG(pivot_log));
 
 cleanup:
   dt_opencl_release_mem_object(dev_lum);
@@ -1138,6 +1373,7 @@ cleanup:
   dt_opencl_release_mem_object(dev_fine);
   dt_opencl_release_mem_object(dev_micro);
   dt_opencl_release_mem_object(dev_base);
+  dt_opencl_release_mem_object(dev_hist);
   return err;
 }
 #endif // HAVE_OPENCL
@@ -1147,8 +1383,14 @@ void tiling_callback(dt_iop_module_t *self,
                      const dt_iop_roi_t *roi_in, const dt_iop_roi_t *roi_out,
                      dt_develop_tiling_t *tiling)
 {
+  const dt_iop_contrast_data_t *const d = piece->data;
+
   tiling->factor = 2.0f;
-  tiling->factor_cl = 9.0f;
+  // The optional percentile pivot is a global image statistic. Keep the whole
+  // image in one ROI so every tile would not compute a different pivot.
+  // factor_cl < 2.2 makes darktable's OpenCL tiling fall back to a single
+  // full-size pass; the CPU path already uses factor 2.0.
+  tiling->factor_cl = (d && d->pivot_percentile > 18.0f) ? 2.0f : 9.0f;
   tiling->maxbuf = 1.0f;
   tiling->maxbuf_cl = 1.0f;
   tiling->overhead = 0;
@@ -1224,6 +1466,13 @@ void commit_params(dt_iop_module_t *self,
   // slider always brightens that end of the tonal range.
   d->slope_highlights = powf(2.0f, p->gain_highlights);
   d->slope_shadows = powf(2.0f, -p->gain_shadows);
+  // Keep the module version at 3 for this development branch: the old v3
+  // boolean lived in the same 4-byte slot, so map legacy 0/1 values to the
+  // new percentage domain before clamping.
+  float pivot_pct = p->pivot_percentile;
+  if(pivot_pct <= 1.0f)
+    pivot_pct = (pivot_pct > 0.5f) ? 50.0f : 18.0f;
+  d->pivot_percentile = CLAMP(pivot_pct, 18.0f, 60.0f);
 
   d->noise_threshold = p->noise_threshold;
   d->csf_adaptation = p->csf_adaptation;
@@ -1464,7 +1713,7 @@ void gui_changed(dt_iop_module_t *self,
                  GtkWidget *w,
                  void *previous)
 {
-  const dt_iop_contrast_gui_data_t *g = self->gui_data;
+  dt_iop_contrast_gui_data_t *g = self->gui_data;
   const dt_iop_contrast_params_t *p = (dt_iop_contrast_params_t *)self->params;
 
   if(w == g->blending || w == g->feathering
@@ -1481,6 +1730,7 @@ void gui_changed(dt_iop_module_t *self,
                                    || fabsf(p->gain_shadows) > 1e-5f;
     gtk_widget_set_sensitive(g->csf_adaptation, any_tone_active);
   }
+
 }
 
 void gui_update(dt_iop_module_t *self)
@@ -1605,6 +1855,17 @@ void gui_init(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->csf_adaptation, _("weight the enhancement according to the Human Contrast Sensitivity Function (CSF).\n"
                                                   "high values focus on details the eye is most sensitive to.\n"
                                                   "applies to global contrast and to the highlights/shadows sliders above."));
+
+  g->pivot_percentile = dt_bauhaus_slider_from_params(self, "pivot_percentile");
+  dt_bauhaus_slider_set_soft_range(g->pivot_percentile, 18.0f, 60.0f);
+  dt_bauhaus_slider_set_digits(g->pivot_percentile, 0);
+  dt_bauhaus_slider_set_format(g->pivot_percentile, " %");
+  dt_bauhaus_slider_set_factor(g->pivot_percentile, 1.0f);
+  gtk_widget_set_tooltip_text(g->pivot_percentile,
+    _("pivot global contrast and the highlights/shadows split on an image percentile.\n"
+      "18% = fixed 18% middle gray (historical/off), 50% = image median,\n"
+      "60% = 60th percentile. Between 18 and 50 the pivot blends smoothly from\n"
+      "middle gray to the requested percentile."));
 
   // --- Section 2: color contrast ---
   GtkWidget *color_label = dt_ui_section_label_new(C_("section", "color contrast"));
