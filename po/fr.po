@@ -36904,6 +36904,22 @@ msgstr "Créer une fenêtre flottante persistante"
 msgid "mouse actions"
 msgstr "Actions de la souris"
 
+#: ../build/lib/libre-dt-lab/plugins/introspection_contrast.c:307
+#: ../build/lib/libre-dt-lab/plugins/introspection_contrast.c:442
+msgid "pivot percentile"
+msgstr "Pivot centile"
+
+#: ../src/iop/contrast.c:1866
+msgid ""
+"pivot global contrast and the highlights/shadows split on an image percentile.\n"
+"18% = fixed 18% middle gray (historical/off), 50% = image median,\n"
+"60% = 60th percentile. Between 18 and 50 the pivot blends smoothly from\n"
+"middle gray to the requested percentile."
+msgstr ""
+"Le pivot du contraste global est la répartition entre les hautes lumières et les ombres sur un centile de l'image.\n"
+"18 % = gris moyen fixe à 18 % (historique/désactivé), 50 % = médiane de l'image,\n"
+"60 % = 60e centile. Entre 18 et 50, le pivot effectue une transition en douceur du gris moyen vers le centile demandé."
+
 #, c-format
 #~ msgid ""
 #~ "<b>size</b>: scroll, <b>hardness</b>: shift+scroll\n"

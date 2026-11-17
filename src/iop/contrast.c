@@ -258,7 +258,7 @@ typedef struct dt_iop_contrast_gui_data_t
   GtkWidget *blending;
   GtkWidget *feathering;
   GtkWidget *noise_threshold;
-  GtkWidget *csf_adaptation, *pivot_percentile, *color_balance, *colorful_contrast, *contrast_balance;
+  GtkWidget *pivot_percentile, *csf_adaptation, *color_balance, *colorful_contrast, *contrast_balance;
   dt_gui_collapsible_section_t advanced_expander;
   dt_gui_collapsible_section_t masking_expander;
   GtkWidget *f_mult_micro, *f_mult_fine, *f_mult_local, *f_mult_broad, *f_mult_coarse;
@@ -1728,6 +1728,7 @@ void gui_changed(dt_iop_module_t *self,
     const gboolean any_tone_active = fabsf(p->global_scale - 1.0f) > 1e-5f
                                    || fabsf(p->gain_highlights) > 1e-5f
                                    || fabsf(p->gain_shadows) > 1e-5f;
+    gtk_widget_set_sensitive(g->pivot_percentile, any_tone_active);
     gtk_widget_set_sensitive(g->csf_adaptation, any_tone_active);
   }
 
@@ -1847,15 +1848,6 @@ void gui_init(dt_iop_module_t *self)
       "is preserved. shares the global contrast's CSF-weighted protection near\n"
       "middle gray: the effect tapers off instead of growing without bound at the extremes."));
 
-  g->csf_adaptation = dt_bauhaus_slider_from_params(self, "csf_adaptation");
-  dt_bauhaus_slider_set_soft_range(g->csf_adaptation, 0.0, 1.0);
-  dt_bauhaus_slider_set_digits(g->csf_adaptation, 2);
-  dt_bauhaus_slider_set_format(g->csf_adaptation, "%");
-  dt_bauhaus_slider_set_factor(g->csf_adaptation, 100.0);
-  gtk_widget_set_tooltip_text(g->csf_adaptation, _("weight the enhancement according to the Human Contrast Sensitivity Function (CSF).\n"
-                                                  "high values focus on details the eye is most sensitive to.\n"
-                                                  "applies to global contrast and to the highlights/shadows sliders above."));
-
   g->pivot_percentile = dt_bauhaus_slider_from_params(self, "pivot_percentile");
   dt_bauhaus_slider_set_soft_range(g->pivot_percentile, 18.0f, 60.0f);
   dt_bauhaus_slider_set_digits(g->pivot_percentile, 0);
@@ -1866,6 +1858,15 @@ void gui_init(dt_iop_module_t *self)
       "18% = fixed 18% middle gray (historical/off), 50% = image median,\n"
       "60% = 60th percentile. Between 18 and 50 the pivot blends smoothly from\n"
       "middle gray to the requested percentile."));
+
+  g->csf_adaptation = dt_bauhaus_slider_from_params(self, "csf_adaptation");
+  dt_bauhaus_slider_set_soft_range(g->csf_adaptation, 0.0, 1.0);
+  dt_bauhaus_slider_set_digits(g->csf_adaptation, 2);
+  dt_bauhaus_slider_set_format(g->csf_adaptation, "%");
+  dt_bauhaus_slider_set_factor(g->csf_adaptation, 100.0);
+  gtk_widget_set_tooltip_text(g->csf_adaptation, _("weight the enhancement according to the Human Contrast Sensitivity Function (CSF).\n"
+                                                  "high values focus on details the eye is most sensitive to.\n"
+                                                  "applies to global contrast and to the highlights/shadows sliders above."));
 
   // --- Section 2: color contrast ---
   GtkWidget *color_label = dt_ui_section_label_new(C_("section", "color contrast"));
