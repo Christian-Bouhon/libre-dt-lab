@@ -3,6 +3,10 @@ add_cmocka_mock_test(test_filmicrgb
                      LINK_LIBRARIES lib_darktable cmocka
                      MOCKS dt_iop_color_picker_reset)
 
+add_cmocka_test(test_rcd_debias
+                SOURCES test_rcd_debias.c
+                LINK_LIBRARIES lib_darktable cmocka)
+
 # Windows: libs have to be copied next to the executable
 if(WIN32)
     _copy_required_library(test_filmicrgb lib_darktable)

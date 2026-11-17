@@ -155,6 +155,68 @@ __kernel void rcd_step_3(global float *lpf, global float *cfa, global float *rgb
   rgb1[idx] = mix(V_Est, H_Est, clipf(VH_Disc));
 }
 
+// Green debiasing, see src/iop/demosaicing/rcd_debias.h. The idea comes from
+// the RCD debiasing step described for RapidRAW v1.7 ("Furka"), independently
+// reimplemented for darktable.
+#define RCD_DEBIAS_RADIUS 3
+#define RCD_DEBIAS_SAFE 7
+#define RCD_DEBIAS_NORM (1.0f / 64.0f)
+#define RCD_DEBIAS_LIMIT 0.04f
+
+constant float rcd_debias_weights[7] = { 1.0f, 6.0f, 15.0f, 20.0f, 15.0f, 6.0f, 1.0f };
+
+// Step 3.1: Horizontal debias pass. Store normalised modulated/level averages.
+__kernel void rcd_debias_h(global float *rgb1, global float *mod, global float *level,
+                           const int w, const int height, const unsigned int filters)
+{
+  const int col = get_global_id(0);
+  const int row = get_global_id(1);
+  if(col < RCD_DEBIAS_SAFE || col >= w - RCD_DEBIAS_SAFE || row < 4 || row >= height - 4) return;
+
+  const int idx = mad24(row, w, col);
+  float m = 0.0f;
+  float l = 0.0f;
+  for(int k = 0; k < 7; k++)
+  {
+    const int x = col + k - RCD_DEBIAS_RADIUS;
+    const float g = rgb1[mad24(row, w, x)];
+    const float signed_g = (FC(row, x, filters) == GREEN) ? -g : g;
+    m += rcd_debias_weights[k] * signed_g;
+    l += rcd_debias_weights[k] * g;
+  }
+  mod[idx] = m * RCD_DEBIAS_NORM;
+  level[idx] = l * RCD_DEBIAS_NORM;
+}
+
+// Step 3.2: Vertical debias pass. Only non-green CFA sites are corrected.
+__kernel void rcd_debias_v(global float *rgb1, global float *mod, global float *level,
+                           const int w, const int height, const unsigned int filters)
+{
+  const int col = get_global_id(0);
+  const int row = get_global_id(1);
+  if(col < RCD_DEBIAS_SAFE || col >= w - RCD_DEBIAS_SAFE
+     || row < RCD_DEBIAS_SAFE || row >= height - RCD_DEBIAS_SAFE) return;
+  if(FC(row, col, filters) == GREEN) return;
+
+  const int idx = mad24(row, w, col);
+  float m = 0.0f;
+  float l = 0.0f;
+  for(int k = 0; k < 7; k++)
+  {
+    const int y = row + k - RCD_DEBIAS_RADIUS;
+    m += rcd_debias_weights[k] * mod[mad24(y, w, col)];
+    l += rcd_debias_weights[k] * level[mad24(y, w, col)];
+  }
+
+  const float limit = RCD_DEBIAS_LIMIT * fmax(0.0f, l) * RCD_DEBIAS_NORM;
+  rgb1[idx] -= clamp(2.0f * m * RCD_DEBIAS_NORM, -limit, limit);
+}
+
+#undef RCD_DEBIAS_RADIUS
+#undef RCD_DEBIAS_SAFE
+#undef RCD_DEBIAS_NORM
+#undef RCD_DEBIAS_LIMIT
+
 // Step 4.0: Calculate the square of the P/Q diagonals color difference high pass filter
 __kernel void rcd_step_4_0(global float *cfa, global float *p_diff, global float *q_diff, const int w, const int height, const unsigned int filters)
 {

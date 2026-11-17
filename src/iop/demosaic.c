@@ -47,7 +47,7 @@
 #include <string.h>
 #include <time.h>
 
-DT_MODULE_INTROSPECTION(6, dt_iop_demosaic_params_t)
+DT_MODULE_INTROSPECTION(7, dt_iop_demosaic_params_t)
 
 #define DT_DEMOSAIC_XTRANS 1024 // masks for non-Bayer demosaic ops
 #define DT_DEMOSAIC_DUAL 2048   // masks for dual demosaicing methods
@@ -154,6 +154,7 @@ typedef struct dt_iop_demosaic_params_t
   int cs_iter;                                  // $MIN: 1 $MAX: 25 $DEFAULT: 8 $DESCRIPTION: "iterations"
   float cs_center;                              // $MIN: 0.0 $MAX: 1.0 $DEFAULT: 0.0 $DESCRIPTION: "sharp center"
   gboolean cs_enabled;                          // $DEFAULT: FALSE $DESCRIPTION: "capture sharpen"
+  gboolean rcd_residual_rb;                     // $DEFAULT: FALSE $DESCRIPTION: "RCD residual R/B"
 } dt_iop_demosaic_params_t;
 
 typedef struct dt_iop_demosaic_gui_data_t
@@ -173,6 +174,7 @@ typedef struct dt_iop_demosaic_gui_data_t
   GtkWidget *cs_iter;
   GtkWidget *cs_center;
   GtkWidget *cs_enabled;
+  GtkWidget *rcd_residual_rb;
   dt_gui_collapsible_section_t capture;
   gboolean cs_mask;
   gboolean dual_mask;
@@ -225,6 +227,8 @@ typedef struct dt_iop_demosaic_global_data_t
   int kernel_rcd_step_1;
   int kernel_rcd_step_2;
   int kernel_rcd_step_3;
+  int kernel_rcd_debias_h;
+  int kernel_rcd_debias_v;
   int kernel_rcd_step_4_0;
   int kernel_rcd_step_4_1;
   int kernel_rcd_step_4_2;
@@ -257,6 +261,7 @@ typedef struct dt_iop_demosaic_data_t
   int cs_iter;
   float cs_center;
   gboolean cs_enabled;
+  gboolean rcd_residual_rb;
 } dt_iop_demosaic_data_t;
 
 static gboolean _get_thumb_quality(const int width, const int height)
@@ -302,6 +307,7 @@ void amaze_demosaic(const float *const in,
 #include "iop/demosaicing/passthrough.c"
 #include "iop/demosaicing/ppg.c"
 #include "iop/demosaicing/rcd.c"
+#include "iop/demosaicing/rcd_residual.c"
 #include "iop/demosaicing/lmmse.c"
 #include "iop/demosaicing/capture.c"
 #include "iop/demosaicing/dual.c"
@@ -344,6 +350,23 @@ int legacy_params(dt_iop_module_t *self,
                   int32_t *new_params_size,
                   int *new_version)
 {
+  typedef struct dt_iop_demosaic_params_v7_t
+  {
+    dt_iop_demosaic_greeneq_t green_eq;
+    float median_thrs;
+    dt_iop_demosaic_smooth_t color_smoothing;
+    dt_iop_demosaic_method_t demosaicing_method;
+    dt_iop_demosaic_lmmse_t lmmse_refine;
+    float dual_thrs;
+    float cs_radius;
+    float cs_thrs;
+    float cs_boost;
+    int cs_iter;
+    float cs_center;
+    gboolean cs_enabled;
+    gboolean rcd_residual_rb;
+  } dt_iop_demosaic_params_v7_t;
+
   typedef struct dt_iop_demosaic_params_v6_t
   {
     dt_iop_demosaic_greeneq_t green_eq;
@@ -462,6 +485,19 @@ int legacy_params(dt_iop_module_t *self,
    return 0;
   }
 
+  if(old_version == 6)
+  {
+    const dt_iop_demosaic_params_v6_t *o = (dt_iop_demosaic_params_v6_t *)old_params;
+    dt_iop_demosaic_params_v7_t *n = malloc(sizeof(dt_iop_demosaic_params_v7_t));
+    memcpy(n, o, sizeof *o);
+    n->rcd_residual_rb = FALSE;
+
+    *new_params = n;
+    *new_params_size = sizeof(dt_iop_demosaic_params_v7_t);
+    *new_version = 7;
+    return 0;
+  }
+
   return 1;
 }
 
@@ -570,7 +606,8 @@ static gboolean _tiling_requirements(dt_iop_module_t *self,
       break;
     case DT_IOP_DEMOSAIC_RCD:
       perpix = gpu ? 10 : 2;
-      border = 10;
+      // 14 keeps step 4 and the green debias inside the exact green area
+      border = RCD_DEBIAS_ENABLE ? 14 : 10;
       break;
     case DT_IOP_DEMOSAIC_LMMSE:
       perpix = 2;
@@ -886,6 +923,12 @@ void process(dt_iop_module_t *self,
     }
   }
 
+  const gboolean rcd_residual = (method == DT_IOP_DEMOSAIC_RCD) && d->rcd_residual_rb
+                             && !dual && !demosaic_mask && !passthru
+                             && !dt_pipe_is_thumb(pipe);
+  if(rcd_residual)
+    _rcd_residual_rb(out, width, height, filters);
+
   if(tiling) dt_free_align(t_out);
   dt_free_align(green_in);
 
@@ -1028,6 +1071,15 @@ int process_cl(dt_iop_module_t *self,
   {
     dt_print(DT_DEBUG_PIPE | DT_DEBUG_OPENCL, "demosaic couldn't allocate greens buffer");
     err = CL_MEM_OBJECT_ALLOCATION_FAILURE;
+    goto finish;
+  }
+
+  if(d->rcd_residual_rb && method == DT_IOP_DEMOSAIC_RCD
+     && !dual && !demosaic_mask && !dt_pipe_is_thumb(pipe))
+  {
+    dt_print(DT_DEBUG_PIPE | DT_DEBUG_OPENCL,
+             "demosaic: RCD residual R/B is CPU only, falling back from OpenCL");
+    err = DT_OPENCL_PROCESS_CL;
     goto finish;
   }
 
@@ -1270,6 +1322,8 @@ void init_global(dt_iop_module_so_t *self)
   gd->kernel_rcd_step_1 = dt_opencl_create_kernel(rcd, "rcd_step_1");
   gd->kernel_rcd_step_2 = dt_opencl_create_kernel(rcd, "rcd_step_2");
   gd->kernel_rcd_step_3 = dt_opencl_create_kernel(rcd, "rcd_step_3");
+  gd->kernel_rcd_debias_h = dt_opencl_create_kernel(rcd, "rcd_debias_h");
+  gd->kernel_rcd_debias_v = dt_opencl_create_kernel(rcd, "rcd_debias_v");
   gd->kernel_rcd_step_4_0 = dt_opencl_create_kernel(rcd, "rcd_step_4_0");
   gd->kernel_rcd_step_4_1 = dt_opencl_create_kernel(rcd, "rcd_step_4_1");
   gd->kernel_rcd_step_4_2 = dt_opencl_create_kernel(rcd, "rcd_step_4_2");
@@ -1334,6 +1388,8 @@ void cleanup_global(dt_iop_module_so_t *self)
   dt_opencl_free_kernel(gd->kernel_rcd_step_1);
   dt_opencl_free_kernel(gd->kernel_rcd_step_2);
   dt_opencl_free_kernel(gd->kernel_rcd_step_3);
+  dt_opencl_free_kernel(gd->kernel_rcd_debias_h);
+  dt_opencl_free_kernel(gd->kernel_rcd_debias_v);
   dt_opencl_free_kernel(gd->kernel_rcd_step_4_0);
   dt_opencl_free_kernel(gd->kernel_rcd_step_4_1);
   dt_opencl_free_kernel(gd->kernel_rcd_step_4_2);
@@ -1376,6 +1432,7 @@ void commit_params(dt_iop_module_t *self,
   d->cs_boost = p->cs_boost;
   d->cs_center = p->cs_center;
   d->cs_enabled = p->cs_enabled;
+  d->rcd_residual_rb = p->rcd_residual_rb;
   // magic function to have CS iterations with fine granularity for values <= 11 and then rising up to 50
   d->cs_iter = p->cs_iter + (int)(0.000065f * powf((float)p->cs_iter, 4.0f));
   const gboolean xmethod = use_method & DT_DEMOSAIC_XTRANS;
@@ -1541,6 +1598,7 @@ void gui_changed(dt_iop_module_t *self, GtkWidget *w, void *previous)
   gtk_widget_set_visible(g->demosaic_method_bayerfour, bayer4);
   gtk_widget_set_visible(g->demosaic_method_xtrans, xtrans);
   gtk_widget_set_visible(g->demosaic_method_mono, true_monochrome);
+  gtk_widget_set_visible(g->rcd_residual_rb, bayer && use_method == DT_IOP_DEMOSAIC_RCD);
 
   gtk_widget_set_visible(g->cs_radius, do_capture);
   gtk_widget_set_visible(g->cs_thrs, do_capture);
@@ -1778,6 +1836,11 @@ void gui_init(dt_iop_module_t *self)
 
   g->greeneq = dt_bauhaus_combobox_from_params(self, "green_eq");
   gtk_widget_set_tooltip_text(g->greeneq, _("green channels matching method. only applies for some old sensors"));
+
+  g->rcd_residual_rb = dt_bauhaus_toggle_from_params(self, "rcd_residual_rb");
+  gtk_widget_set_tooltip_text(g->rcd_residual_rb,
+      _("experimental: refine red/blue interpolation with a green-guided residual pass.\n"
+        "only available for RCD; CPU only and disabled by default"));
 
   g->cs_enabled = dt_bauhaus_toggle_from_params(self, "cs_enabled");
   gtk_widget_set_tooltip_text(g->cs_enabled, _("capture sharpen recovers details lost due to in-camera blurring\n"

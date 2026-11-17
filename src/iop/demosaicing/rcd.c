@@ -39,6 +39,8 @@
 
 /* Some notes about the algorithm
 * 1. The calculated data at the tiling borders RCD_BORDER must be 10 to be stable.
+*    With green debiasing enabled we use 14 so that step 4 and the debias only
+*    read green from the exact interior of each tile.
 * 2. For the outermost tiles we only have to discard a 7 pixel border region interpolated otherwise.
 * 3. The tilesize has a significant influence on performance, the default is a good guess for modern
 *    x86/64 machines, tested on Xeon E-2288G, i5-8250U.
@@ -65,8 +67,17 @@
   #pragma GCC optimize ("fp-contract=fast", "finite-math-only", "no-math-errno")
 #endif
 
+#ifndef RCD_DEBIAS_ENABLE
+#define RCD_DEBIAS_ENABLE 1
+#endif
+
+#if RCD_DEBIAS_ENABLE
+#define RCD_BORDER 14         // debias reads green within +/-3 of step4's +/-3
+#define RCD_MARGIN 9          // keep the original outermost border
+#else
 #define RCD_BORDER 10         // avoid tile-overlap errors
 #define RCD_MARGIN 9          // for the outermost tiles we can have a smaller outer border
+#endif
 #define RCD_TILEVALID (DT_RCD_TILESIZE - 2 * RCD_BORDER)
 #define w1 DT_RCD_TILESIZE
 #define w2 (2 * DT_RCD_TILESIZE)
@@ -75,6 +86,8 @@
 
 #define eps 1e-5f              // Tolerance to avoid dividing by zero
 #define epssq 1e-10f
+
+#include "iop/demosaicing/rcd_debias.h"
 
 // We might have negative data in input and also want to normalise
 static inline float _safe_in(float a, float scale)
@@ -142,6 +155,8 @@ static void rcd_demosaic(float *const restrict out,
     float *const Q_CDiff_Hpf = dt_alloc_align_float((size_t) DT_RCD_TILESIZE * DT_RCD_TILESIZE / 2);
 
     float (*const rgb)[DT_RCD_TILESIZE * DT_RCD_TILESIZE] = (void *)dt_alloc_align_float((size_t)3 * DT_RCD_TILESIZE * DT_RCD_TILESIZE);
+    float *const debias_mod = dt_calloc_align_float((size_t)DT_RCD_TILESIZE * DT_RCD_TILESIZE);
+    float *const debias_level = dt_calloc_align_float((size_t)DT_RCD_TILESIZE * DT_RCD_TILESIZE);
 
     // No overlapping use so re-use same buffer
     float *const lpf = PQ_Dir;
@@ -264,6 +279,13 @@ static void rcd_demosaic(float *const restrict out,
           }
         }
 
+#if RCD_DEBIAS_ENABLE
+        // Remove the residual high-frequency bias of the interpolated green
+        // before it is used to guide the red/blue interpolation.
+        rcd_debias_apply(rgb[1], debias_mod, debias_level, tileRows, tileCols,
+                         DT_RCD_TILESIZE, rowStart, colStart, filters);
+#endif
+
         // STEP 4: Populate the red and blue channels
 
         // Step 4.0: Calculate the square of the P/Q diagonals color difference high pass filter
@@ -384,6 +406,8 @@ static void rcd_demosaic(float *const restrict out,
     }
     dt_free_align(cfa);
     dt_free_align(rgb);
+    dt_free_align(debias_mod);
+    dt_free_align(debias_level);
     dt_free_align(VH_Dir);
     dt_free_align(PQ_Dir);
     dt_free_align(P_CDiff_Hpf);
@@ -512,6 +536,18 @@ static cl_int process_rcd_cl(dt_iop_module_t *self,
   err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_rcd_step_3, width / 2, height,
       CLARG(PQ_dir), CLARG(cfa), CLARG(rgb1), CLARG(VH_dir), CLARG(width), CLARG(height), CLARG(filters));
   if(err != CL_SUCCESS) goto error;
+
+#if RCD_DEBIAS_ENABLE
+  // Debias the interpolated green before it guides the red/blue interpolation.
+  // VP_diff and HQ_diff are not used before step 4.0 and can be reused as scratch.
+  err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_rcd_debias_h, width, height,
+      CLARG(rgb1), CLARG(VP_diff), CLARG(HQ_diff), CLARG(width), CLARG(height), CLARG(filters));
+  if(err != CL_SUCCESS) goto error;
+
+  err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_rcd_debias_v, width, height,
+      CLARG(rgb1), CLARG(VP_diff), CLARG(HQ_diff), CLARG(width), CLARG(height), CLARG(filters));
+  if(err != CL_SUCCESS) goto error;
+#endif
 
   // Step 4.0: Calculate a squared P/Q diagonals high pass filter on color differences
   err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_rcd_step_4_0, width / 2, height,
