@@ -18,8 +18,11 @@
 #
 # Cache variables that influence behaviour:
 #
-#   ONNXRUNTIME_VERSION          - version to download (default 1.23.2)
-#   ONNXRUNTIME_DIRECTML_VERSION - DirectML NuGet version for Windows (default 1.23.0)
+#   ONNXRUNTIME_VERSION          - version to download (default 1.24.4)
+#   ONNXRUNTIME_DIRECTML_VERSION - DirectML NuGet version for Windows (default 1.24.4)
+#   ONNXRUNTIME_USE_NUGET        - use NuGet packages on Linux (default ON)
+#   ONNXRUNTIME_NUGET_SHA512     - SHA512 for a custom NuGet package version
+#   ONNXRUNTIME_ROOT             - manual ONNX Runtime installation root
 #   ONNXRUNTIME_OFFLINE          - if TRUE, never attempt a download (default OFF)
 
 # Skip if already found (avoid re-entry issues with cached variables)
@@ -32,6 +35,9 @@ endif()
 # ---------------------------------------------------------------------------
 set(ONNXRUNTIME_VERSION "1.24.4" CACHE STRING "ONNX Runtime version to download")
 set(ONNXRUNTIME_DIRECTML_VERSION "1.24.4" CACHE STRING "DirectML NuGet package version for Windows")
+option(ONNXRUNTIME_USE_NUGET "Use NuGet packages for ONNX Runtime downloads" ON)
+set(ONNXRUNTIME_NUGET_SHA512 "" CACHE STRING "SHA512 for a custom ONNX Runtime NuGet package")
+set(ONNXRUNTIME_ROOT "" CACHE PATH "Manual ONNX Runtime installation root")
 option(ONNXRUNTIME_OFFLINE "Disable automatic download of ONNX Runtime" OFF)
 
 set(_ORT_SRC_ROOT "${CMAKE_SOURCE_DIR}/src/external/onnxruntime")
@@ -81,8 +87,17 @@ macro(_ort_find_at ROOT)
   endif()
 endmacro()
 
+# Try explicit manual installation first
+if(ONNXRUNTIME_ROOT)
+  _ort_find_at("${ONNXRUNTIME_ROOT}")
+endif()
+
 # Try source tree (manually pre-installed)
-_ort_find_at("${_ORT_SRC_ROOT}")
+if(NOT _ORT_HEADER OR NOT _ORT_LIBRARY)
+  unset(_ORT_HEADER CACHE)
+  unset(_ORT_LIBRARY CACHE)
+  _ort_find_at("${_ORT_SRC_ROOT}")
+endif()
 
 # Try build tree (populated by prior auto-download)
 if(NOT _ORT_HEADER OR NOT _ORT_LIBRARY)
@@ -117,6 +132,10 @@ if(NOT _ORT_HEADER OR NOT _ORT_LIBRARY)
   else()
   # -- Determine package name for current platform --
   set(_ORT_VER "${ONNXRUNTIME_VERSION}")
+  set(_ORT_NUGET FALSE)
+  set(_ORT_NUGET_ID "")
+  set(_ORT_NUGET_RID "")
+  set(_ORT_NUGET_PINNED_HASH "")
 
   if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     if(CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
@@ -128,17 +147,36 @@ if(NOT _ORT_HEADER OR NOT _ORT_LIBRARY)
     endif()
   elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
-      set(_ORT_PACKAGE "onnxruntime-linux-x64-${_ORT_VER}.tgz")
+      set(_ORT_NUGET_RID "linux-x64")
+      set(_ORT_GITHUB_ARCH "x64")
     elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-      set(_ORT_PACKAGE "onnxruntime-linux-aarch64-${_ORT_VER}.tgz")
+      set(_ORT_NUGET_RID "linux-arm64")
+      set(_ORT_GITHUB_ARCH "aarch64")
     else()
       message(FATAL_ERROR "Unsupported Linux architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+    endif()
+
+    if(ONNXRUNTIME_USE_NUGET)
+      # The ONNX Runtime GitHub releases have become unreliable; prefer the
+      # self-contained NuGet package, which ships headers and native libs.
+      set(_ORT_NUGET TRUE)
+      set(_ORT_NUGET_ID "microsoft.ml.onnxruntime")
+      set(_ORT_PACKAGE "${_ORT_NUGET_ID}.${_ORT_VER}.nupkg")
+      if(_ORT_VER STREQUAL "1.24.4")
+        set(_ORT_NUGET_PINNED_HASH
+          "f5dd415dfcafcb3a7461f10a08f0337ea22c1ba8f8af81316daabf7496075add181aecb0de3cabebebdb9f5da3afbe507480aaf34b76e1189409088ccc5c2eac")
+      elseif(ONNXRUNTIME_NUGET_SHA512)
+        set(_ORT_NUGET_PINNED_HASH "${ONNXRUNTIME_NUGET_SHA512}")
+      endif()
+    else()
+      set(_ORT_PACKAGE "onnxruntime-linux-${_ORT_GITHUB_ARCH}-${_ORT_VER}.tgz")
     endif()
   elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     # On Windows, download the DirectML NuGet package for GPU support
     # (AMD/Intel/NVIDIA via DirectX 12). NuGet packages are just ZIP files.
     set(_ORT_VER "${ONNXRUNTIME_DIRECTML_VERSION}")
-    set(_ORT_PACKAGE "microsoft.ml.onnxruntime.directml.${_ORT_VER}.nupkg")
+    set(_ORT_NUGET_ID "microsoft.ml.onnxruntime.directml")
+    set(_ORT_PACKAGE "${_ORT_NUGET_ID}.${_ORT_VER}.nupkg")
     set(_ORT_NUGET TRUE)
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "AMD64|x86_64")
       set(_ORT_NUGET_RID "win-x64")
@@ -152,7 +190,12 @@ if(NOT _ORT_HEADER OR NOT _ORT_LIBRARY)
   endif()
 
   if(_ORT_NUGET)
-    set(_ORT_URL "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/${_ORT_VER}")
+    if(_ORT_NUGET_ID STREQUAL "microsoft.ml.onnxruntime")
+      set(_ORT_URL
+        "https://api.nuget.org/v3-flatcontainer/${_ORT_NUGET_ID}/${_ORT_VER}/${_ORT_NUGET_ID}.${_ORT_VER}.nupkg")
+    else()
+      set(_ORT_URL "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/${_ORT_VER}")
+    endif()
   else()
     set(_ORT_URL "https://github.com/microsoft/onnxruntime/releases/download/v${_ORT_VER}/${_ORT_PACKAGE}")
   endif()
@@ -167,9 +210,13 @@ if(NOT _ORT_HEADER OR NOT _ORT_LIBRARY)
   file(MAKE_DIRECTORY "${_ORT_DOWNLOAD_DIR}")
 
   if(_ORT_NUGET)
+    if(_ORT_NUGET_PINNED_HASH)
+      set(_ORT_HASH "${_ORT_NUGET_PINNED_HASH}")
+      set(_ORT_HASH_ALGO "SHA512")
+      message(STATUS "Using pinned SHA512 for ${_ORT_PACKAGE}")
+    elseif(WIN32 AND _ORT_NUGET_ID STREQUAL "microsoft.ml.onnxruntime.directml")
     # NuGet: fetch SHA512 from the catalog API (base64-encoded).
     # Step 1: registration entry → catalog URL
-    set(_ORT_NUGET_ID "microsoft.ml.onnxruntime.directml")
     set(_ORT_REG_JSON "${_ORT_DOWNLOAD_DIR}/nuget-reg-${_ORT_VER}.json")
     set(_ORT_REG_URL "https://api.nuget.org/v3/registration5-semver1/${_ORT_NUGET_ID}/${_ORT_VER}.json")
     if(NOT EXISTS "${_ORT_REG_JSON}")
@@ -217,6 +264,11 @@ if(NOT _ORT_HEADER OR NOT _ORT_LIBRARY)
           endif()
         endif()
       endif()
+    endif()
+    else()
+      message(WARNING
+        "No pinned NuGet SHA512 for ${_ORT_PACKAGE}. "
+        "Set -DONNXRUNTIME_NUGET_SHA512=<sha512> or install ONNX Runtime manually.")
     endif()
   else()
     # GitHub: fetch SHA256 from the Releases API (hex-encoded digest field).
