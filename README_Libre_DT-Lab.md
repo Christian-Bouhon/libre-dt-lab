@@ -168,6 +168,8 @@ GNU General Public License v3.0, see [LICENSE](LICENSE) for details.
 ## Credits
 
 - [darktable project](https://www.darktable.org/) and all its contributors
+- [RapidRAW](https://github.com/CyberTimon/RapidRAW) by Timon Käch, inspiration for the RCD green debias (independent GPL reimplementation)
+- Hanno Schwalm, darktable RCD cardinal-eps, Markesteijn precision and CPU/OpenCL parity fixes
 - [WileCoyote, original local contrast proof-of-concept](https://discuss.pixls.us/t/experiments-with-a-scene-referred-local-contrast-module-proof-of-concept/55402)
 - [XYZ sigmoid curve (GIMP 3 plug-in), inspiration for the 3DCF X/Z chroma contrast](https://discuss.pixls.us/t/python-plug-in-for-gimp3-xyz-sigmoid-curve/60096)
 - Christian Bouhon, Libre DT-Lab fork, Tone & Texture module, basecurve enhancements

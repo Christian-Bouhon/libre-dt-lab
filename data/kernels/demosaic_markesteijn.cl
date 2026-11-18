@@ -18,6 +18,10 @@
 
 #include "common.h"
 
+// Markesteijn stability/precision fixes backported from darktable PRs
+// #22736 and #22839 by Hanno Schwalm.
+#define HOMOGENITY_EPS 1e-10f
+
 // directions along the both axes and both diagonals
 constant const char2 dir[4] = { (char2)(1, 0), (char2)(0, 1), (char2)(1, 1), (char2)(-1, 1) };
 
@@ -116,7 +120,7 @@ markesteijn_green_minmax(global float *rgb, global float *gminmax, const int wid
 
   // get min/max of *this* pixel
   float gmin = FLT_MAX;
-  float gmax = FLT_MIN;
+  float gmax = 0.0f;
   global const char2 *const hex = allhex[y % 3][x % 3];
   for(int c = 0; c < 6; c++)
   {
@@ -384,7 +388,7 @@ markesteijn_recalculate_green(global float *rgb_0, global float *rgb_1, global f
                        - 2.0f * (rfx + hexidx4(hex[d], width))[f]
                        + 3.0f * (rfx)[f];
 
-    rfx[1] = clamp(val / 3.0f, gmin, gmax);
+    rfx[1] = clamp(fp32_div(val, 3.0f), gmin, gmax);
   }
 }
 
@@ -718,7 +722,7 @@ markesteijn_homo_set(global float *drv, global float *thresh, global uchar *homo
 
   const int glidx = mad24(y, width, x);
 
-  const float tr = 8.0f * thresh[glidx];
+  const float tr = fmax(8.0f * thresh[glidx], HOMOGENITY_EPS);
 
   uchar accu = 0;
   for(int v = -1; v <= 1; v++)

@@ -1,6 +1,9 @@
 /*
     This file is part of darktable,
     Copyright (C) 2026 darktable developers.
+    Libre DT-lab Edition (C) 2026, Designed and developed by Christian Bouhon,
+    with the assistance of artificial intelligence tools for code optimization 
+    and OpenCL porting.
 
     darktable is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -21,7 +24,7 @@
  *
  * The idea of measuring the residual high-frequency bias of the interpolated
  * green with an alternating binomial filter comes from the description of the
- * RCD debiasing step introduced by RapidRAW v1.7 ("Furka"). This is an
+ * RCD debiasing step introduced by RapidRAW v1.7 (Timon Käch). This is an
  * independent GPL reimplementation written for darktable, no AGPL code was
  * copied.
  *

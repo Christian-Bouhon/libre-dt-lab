@@ -117,6 +117,22 @@ static inline float scharr_gradient(global float *in, const int k, const int w)
   return dt_fast_hypot(gx, gy);
 }
 
+static inline float fp32_div(const float a, const float b)
+{
+  /** OpenCL accepts an error of ~2.5 ulp for a default division; full IEEE
+      precision can be enforced with a global compiler flag but that is not
+      supported on all drivers/platforms. Use a Newton-Raphson refinement of
+      the quotient instead. Backported from darktable to keep CPU and OpenCL
+      results comparable.
+  */
+  float y = native_recip(b);
+  float e = fma(-b, y, 1.0f);
+  y = fma(y, e, y);
+  float q = a * y;
+  float r = fma(-b, q, a);
+  return fma(r, y, q);
+}
+
 static inline int
 FC(const int row, const int col, const unsigned int filters)
 {

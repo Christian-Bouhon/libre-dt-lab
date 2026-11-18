@@ -24,6 +24,10 @@
 #define PAD_G_INTERP 3
 #define PAD_G_RECALC 6
 
+// Markesteijn stability/precision fixes backported from darktable PRs
+// #22736 and #22839 by Hanno Schwalm.
+#define HOMOGENITY_EPS 1e-10f
+
 /** Lookup for allhex[], making sure that row/col aren't negative **/
 static inline const short *_hexmap(const int row,
                                    const int col,
@@ -380,7 +384,7 @@ static void xtrans_markesteijn_interpolate(float *out,
                   {
                     const float g = 3.f * rfx[0][1] - 2.f * rfx[hex[d]][1] - rfx[hex[d + 1]][1];
                     for(int c = 0; c < 4; c += 2)
-                      rfx[0][c] = (g + 2.f * rfx[hex[d]][c] + rfx[hex[d + 1]][c]) / 3.f;
+                      rfx[0][c] = (g + 2.f * rfx[hex[d]][c] + rfx[hex[d + 1]][c]) * (1.0f / 3.0f);
                   }
                   else
                   {
@@ -449,7 +453,7 @@ static void xtrans_markesteijn_interpolate(float *out,
           float tr = FLT_MAX;
           for(unsigned d = 0; d < ndir; ++d)
             if(tr > drv[d][row][col]) tr = drv[d][row][col];
-          tr *= 8;
+          tr = fmaxf(8.0f * tr, HOMOGENITY_EPS);
           for(unsigned d = 0; d < ndir; ++d)
             for(int v = -1; v <= 1; v++)
               for(int h = -1; h <= 1; h++)
@@ -1367,7 +1371,7 @@ static void xtrans_fdc_interpolate(float *out,
                   float g = 3.f * rfx[0][1] - 2.f * rfx[hex[d]][1] - rfx[hex[d + 1]][1];
                   for(int c = 0; c < 4; c += 2)
                   {
-                    rfx[0][c] = (g + 2.f * rfx[hex[d]][c] + rfx[hex[d + 1]][c]) / 3.f;
+                    rfx[0][c] = (g + 2.f * rfx[hex[d]][c] + rfx[hex[d + 1]][c]) * (1.0f / 3.0f);
                     redblue[d][c] = rfx[0][c];
                   }
                 }
@@ -1442,7 +1446,7 @@ static void xtrans_fdc_interpolate(float *out,
           float tr = FLT_MAX;
           for(int d = 0; d < ndir; d++)
             if(tr > drv[d][row][col]) tr = drv[d][row][col];
-          tr *= 8;
+          tr = fmaxf(8.0f * tr, HOMOGENITY_EPS);
           for(int d = 0; d < ndir; d++)
             for(int v = -1; v <= 1; v++)
               for(int h = -1; h <= 1; h++) homo[d][row][col] += ((drv[d][row + v][col + h] <= tr) ? 1 : 0);

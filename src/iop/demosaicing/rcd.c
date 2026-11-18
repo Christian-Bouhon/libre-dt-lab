@@ -128,13 +128,37 @@ static void demosaic_box3(float *const restrict out,
   }
 }
 
+/** The green estimation at R/B photosites did not have any eps in the cardinal
+    estimates, thus the calculated green was smaller than correctly estimated
+    from surrounding sites, most notably in flat gray areas. This added a bit
+    of chroma noise and strengthened the maze-like output.
+
+    Simply adding eps to the cardinal estimates fully corrects green at flat
+    areas but also leads to stronger overshoots/chroma noise at edges. Thus we
+    modify the used eps based on the strongest gradient.
+
+    Backported from darktable PR #23190 by Hanno Schwalm.
+*/
+static inline float _cardinal_eps(const float grad)
+{
+  // Full correction below this. Raise it to retain the correction on more noisy flat pixels
+  const float flat_end = eps + 1e-4f;
+  // No correction at or above this. Lower it to preserve the original RCD result at weaker edges
+  const float edge_start = eps + 1e-3f;
+
+  const float t = (grad - flat_end) / (edge_start - flat_end);
+  const float u = t < 0.0f ? 0.0f : t > 1.0f ? 1.0f : t;
+  return eps * (1.0f - u * u * (3.0f - 2.0f * u));
+}
+
 DT_OMP_DECLARE_SIMD(aligned(in, out : 64))
 static void rcd_demosaic(float *const restrict out,
                          const float *const restrict in,
                          const int width,
                          const int height,
                          const uint32_t filters,
-                         const float scaler)
+                         const float scaler,
+                         const gboolean debias)
 {
   demosaic_ppg(out, in, width, height, filters, 0.0f, RCD_BORDER);
   if(width < 2*RCD_BORDER || height < 2*RCD_BORDER)
@@ -258,12 +282,13 @@ static void rcd_demosaic(float *const restrict out,
             const float W_Grad = eps + fabsf(cfa[indx -  1] - cfa[indx +  1]) + fabsf(cfai - cfa[indx -  2]) + fabsf(cfa[indx -  1] - cfa[indx -  3]) + fabsf(cfa[indx -  2] - cfa[indx -  4]);
             const float E_Grad = eps + fabsf(cfa[indx +  1] - cfa[indx -  1]) + fabsf(cfai - cfa[indx +  2]) + fabsf(cfa[indx +  1] - cfa[indx +  3]) + fabsf(cfa[indx +  2] - cfa[indx +  4]);
 
+            const float cardinal_eps = _cardinal_eps(MAX(MAX(MAX(N_Grad, S_Grad), W_Grad), E_Grad));
             // Cardinal pixel estimations
             const float lpfi = lpf[lpindx];
-            const float N_Est = cfa[indx - w1] * (lpfi + lpfi) / (eps + lpfi + lpf[lpindx - w1]);
-            const float S_Est = cfa[indx + w1] * (lpfi + lpfi) / (eps + lpfi + lpf[lpindx + w1]);
-            const float W_Est = cfa[indx -  1] * (lpfi + lpfi) / (eps + lpfi + lpf[lpindx -  1]);
-            const float E_Est = cfa[indx +  1] * (lpfi + lpfi) / (eps + lpfi + lpf[lpindx +  1]);
+            const float N_Est = cfa[indx - w1] * (lpfi + lpfi + cardinal_eps) / (eps + lpfi + lpf[lpindx - w1]);
+            const float S_Est = cfa[indx + w1] * (lpfi + lpfi + cardinal_eps) / (eps + lpfi + lpf[lpindx + w1]);
+            const float W_Est = cfa[indx -  1] * (lpfi + lpfi + cardinal_eps) / (eps + lpfi + lpf[lpindx -  1]);
+            const float E_Est = cfa[indx +  1] * (lpfi + lpfi + cardinal_eps) / (eps + lpfi + lpf[lpindx +  1]);
 
             // Vertical and horizontal estimations
             const float V_Est = (S_Grad * N_Est + N_Grad * S_Est) / (N_Grad + S_Grad);
@@ -282,8 +307,9 @@ static void rcd_demosaic(float *const restrict out,
 #if RCD_DEBIAS_ENABLE
         // Remove the residual high-frequency bias of the interpolated green
         // before it is used to guide the red/blue interpolation.
-        rcd_debias_apply(rgb[1], debias_mod, debias_level, tileRows, tileCols,
-                         DT_RCD_TILESIZE, rowStart, colStart, filters);
+        if(debias)
+          rcd_debias_apply(rgb[1], debias_mod, debias_level, tileRows, tileCols,
+                           DT_RCD_TILESIZE, rowStart, colStart, filters);
 #endif
 
         // STEP 4: Populate the red and blue channels
@@ -427,7 +453,8 @@ static cl_int process_rcd_cl(dt_iop_module_t *self,
                              cl_mem dev_out,
                              const int width,
                              const int height,
-                             const uint32_t filters)
+                             const uint32_t filters,
+                             const gboolean debias)
 {
   const dt_iop_demosaic_global_data_t *gd = self->global_data;
 
@@ -538,15 +565,18 @@ static cl_int process_rcd_cl(dt_iop_module_t *self,
   if(err != CL_SUCCESS) goto error;
 
 #if RCD_DEBIAS_ENABLE
-  // Debias the interpolated green before it guides the red/blue interpolation.
-  // VP_diff and HQ_diff are not used before step 4.0 and can be reused as scratch.
-  err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_rcd_debias_h, width, height,
-      CLARG(rgb1), CLARG(VP_diff), CLARG(HQ_diff), CLARG(width), CLARG(height), CLARG(filters));
-  if(err != CL_SUCCESS) goto error;
+  if(debias)
+  {
+    // Debias the interpolated green before it guides the red/blue interpolation.
+    // VP_diff and HQ_diff are not used before step 4.0 and can be reused as scratch.
+    err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_rcd_debias_h, width, height,
+        CLARG(rgb1), CLARG(VP_diff), CLARG(HQ_diff), CLARG(width), CLARG(height), CLARG(filters));
+    if(err != CL_SUCCESS) goto error;
 
-  err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_rcd_debias_v, width, height,
-      CLARG(rgb1), CLARG(VP_diff), CLARG(HQ_diff), CLARG(width), CLARG(height), CLARG(filters));
-  if(err != CL_SUCCESS) goto error;
+    err = dt_opencl_enqueue_kernel_2d_args(devid, gd->kernel_rcd_debias_v, width, height,
+        CLARG(rgb1), CLARG(VP_diff), CLARG(HQ_diff), CLARG(width), CLARG(height), CLARG(filters));
+    if(err != CL_SUCCESS) goto error;
+  }
 #endif
 
   // Step 4.0: Calculate a squared P/Q diagonals high pass filter on color differences

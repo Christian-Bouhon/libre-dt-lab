@@ -116,6 +116,16 @@ __kernel void rcd_step_2(global float *lpf, global float *cfa, const int w, cons
     + 0.25f * (cfa[idx - w - 1] + cfa[idx - w + 1] + cfa[idx + w - 1] + cfa[idx + w + 1]);
 }
 
+// See comments in the CPU code. Backported from darktable PR #23190.
+static inline float _cardinal_eps(const float grad)
+{
+  const float flat_end = eps + 1e-4f;
+  const float edge_start = eps + 1e-3f;
+  const float t = fp32_div(grad - flat_end, edge_start - flat_end);
+  const float u = t < 0.0f ? 0.0f : t > 1.0f ? 1.0f : t;
+  return eps * (1.0f - u * u * (3.0f - 2.0f * u));
+}
+
 // Step 3: Populate the green channel at blue and red CFA positions
 __kernel void rcd_step_3(global float *lpf, global float *cfa, global float *rgb1, global float *VH_Dir, const int w, const int height, const unsigned int filters)
 {
@@ -140,12 +150,13 @@ __kernel void rcd_step_3(global float *lpf, global float *cfa, global float *rgb
   const float W_Grad = eps + fabs(cfa[idx - 1] - cfa[idx + 1]) + fabs(cfai - cfa[idx -  2]) + fabs(cfa[idx - 1] - cfa[idx -  3]) + fabs(cfa[idx -  2] - cfa[idx -  4]);
   const float E_Grad = eps + fabs(cfa[idx + 1] - cfa[idx - 1]) + fabs(cfai - cfa[idx +  2]) + fabs(cfa[idx + 1] - cfa[idx +  3]) + fabs(cfa[idx +  2] - cfa[idx +  4]);
 
+  const float cardinal_eps = _cardinal_eps(fmax(fmax(fmax(N_Grad, S_Grad), W_Grad), E_Grad));
   const float lfpi = lpf[lidx];
   // Cardinal pixel estimations
-  const float N_Est = cfa[idx - w] * (lfpi + lfpi) / (eps + lfpi + lpf[lidx - w]);
-  const float S_Est = cfa[idx + w] * (lfpi + lfpi) / (eps + lfpi + lpf[lidx + w]);
-  const float W_Est = cfa[idx - 1] * (lfpi + lfpi) / (eps + lfpi + lpf[lidx - 1]);
-  const float E_Est = cfa[idx + 1] * (lfpi + lfpi) / (eps + lfpi + lpf[lidx + 1]);
+  const float N_Est = fp32_div(cfa[idx - w] * (lfpi + lfpi + cardinal_eps), eps + lfpi + lpf[lidx - w]);
+  const float S_Est = fp32_div(cfa[idx + w] * (lfpi + lfpi + cardinal_eps), eps + lfpi + lpf[lidx + w]);
+  const float W_Est = fp32_div(cfa[idx - 1] * (lfpi + lfpi + cardinal_eps), eps + lfpi + lpf[lidx - 1]);
+  const float E_Est = fp32_div(cfa[idx + 1] * (lfpi + lfpi + cardinal_eps), eps + lfpi + lpf[lidx + 1]);
 
   // Vertical and horizontal estimations
   const float V_Est = (S_Grad * N_Est + N_Grad * S_Est) / (N_Grad + S_Grad);
@@ -156,8 +167,8 @@ __kernel void rcd_step_3(global float *lpf, global float *cfa, global float *rgb
 }
 
 // Green debiasing, see src/iop/demosaicing/rcd_debias.h. The idea comes from
-// the RCD debiasing step described for RapidRAW v1.7 ("Furka"), independently
-// reimplemented for darktable.
+// the RCD debiasing step described for RapidRAW v1.7 by Timon Käch,
+// independently reimplemented for darktable.
 #define RCD_DEBIAS_RADIUS 3
 #define RCD_DEBIAS_SAFE 7
 #define RCD_DEBIAS_NORM (1.0f / 64.0f)
