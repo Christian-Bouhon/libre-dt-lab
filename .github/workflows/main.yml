@@ -41,6 +41,8 @@ jobs:
       TARGET: ${{ matrix.target }}
       BRANCH: ${{ matrix.branch.code }}
       BUILD_NAME: ${{ matrix.branch.label }}
+      DEBIAN_FRONTEND: noninteractive
+      NEEDRESTART_SUSPEND: "1"
     steps:
       - name: Install compiler ${{ matrix.compiler.compiler }}
         run: |
@@ -48,6 +50,7 @@ jobs:
           sudo apt-get -y install \
             ${{ matrix.compiler.packages }}
       - name: Install Base Dependencies
+        timeout-minutes: 15
         run: |
           sudo apt-get -y install \
             build-essential \
@@ -109,6 +112,7 @@ jobs:
           sudo add-apt-repository -y ppa:savoury1/display
           sudo apt-get update
       - name: Install extra dependencies
+        timeout-minutes: 15
         run: |
           sudo apt-get -y install \
             aom-tools \
