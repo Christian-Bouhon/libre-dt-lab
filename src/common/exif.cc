@@ -2319,8 +2319,56 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
 
       if((spp == 1) && (phi == 34892)) is_monochrome = TRUE;
 
-      if((spp == 3) && (phi == 34892) && !dng_has_d65_matrix)
-        img->flags |= DT_IMAGE_LINEAR_DNG_NO_D65;
+      if((spp == 3) && (phi == 34892))
+      {
+        img->flags |= DT_IMAGE_LINEAR_DNG;
+        if(!dng_has_d65_matrix)
+          img->flags |= DT_IMAGE_LINEAR_DNG_NO_D65;
+
+        gboolean has_bw = FALSE;
+        Exiv2::ExifData::const_iterator bw_pos;
+        if(FIND_EXIF_TAG("Exif.Image.BlackLevel"))
+          bw_pos = pos;
+        else if(FIND_EXIF_TAG("Exif.SubImage1.BlackLevel"))
+          bw_pos = pos;
+        else
+          bw_pos = exifData.end();
+
+        if(bw_pos != exifData.end() && bw_pos->count() > 0)
+        {
+          const int count = bw_pos->count();
+          for(int i = 0; i < 4; i++)
+          {
+            if(count == 1)
+              img->raw_black_level_separate[i] = (uint16_t)roundf(bw_pos->toFloat(0));
+            else if(i < count)
+              img->raw_black_level_separate[i] = (uint16_t)roundf(bw_pos->toFloat(i));
+            else
+              img->raw_black_level_separate[i] = 0;
+          }
+          float black = 0.0f;
+          for(int i = 0; i < 4; i++) black += img->raw_black_level_separate[i];
+          img->raw_black_level = (uint16_t)roundf(black / 4.0f);
+          has_bw = TRUE;
+        }
+
+        Exiv2::ExifData::const_iterator wl_pos;
+        if(FIND_EXIF_TAG("Exif.Image.WhiteLevel"))
+          wl_pos = pos;
+        else if(FIND_EXIF_TAG("Exif.SubImage1.WhiteLevel"))
+          wl_pos = pos;
+        else
+          wl_pos = exifData.end();
+
+        if(wl_pos != exifData.end() && wl_pos->count() > 0)
+        {
+          img->raw_white_point = CLAMP(wl_pos->toLong(0), 0, UINT16_MAX);
+          has_bw = TRUE;
+        }
+
+        if(has_bw)
+          img->flags |= DT_IMAGE_LINEAR_DNG_EXIF_BW;
+      }
     }
 
     if(is_hdr)

@@ -103,6 +103,10 @@ typedef enum
   DT_IMAGE_MONOCHROME_WORKFLOW = 1 << 20,
   // linear DNG without a usable D65-calibrated color matrix
   DT_IMAGE_LINEAR_DNG_NO_D65 = 1 << 21,
+  // linear DNG (PhotometricInterpretation = LinearRaw, 3 channels)
+  DT_IMAGE_LINEAR_DNG = 1 << 22,
+  // linear DNG with BlackLevel/WhiteLevel read from its EXIF tags
+  DT_IMAGE_LINEAR_DNG_EXIF_BW = 1 << 23,
 } dt_image_flags_t;
 
 typedef enum dt_image_colorspace_t

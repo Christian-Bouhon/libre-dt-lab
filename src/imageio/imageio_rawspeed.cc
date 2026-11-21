@@ -178,6 +178,17 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
   if(!img->exif_inited)
     (void)dt_exif_read(img, filename);
 
+  uint16_t exif_black[4] = { 0 };
+  uint16_t exif_white = 0;
+  const gboolean restore_exif_bw =
+    (img->flags & DT_IMAGE_LINEAR_DNG_EXIF_BW) != 0;
+  if(restore_exif_bw)
+  {
+    for(uint8_t i = 0; i < 4; i++)
+      exif_black[i] = img->raw_black_level_separate[i];
+    exif_white = img->raw_white_point;
+  }
+
   char filen[PATH_MAX] = { 0 };
   snprintf(filen, sizeof(filen), "%s", filename);
   FileReader f(filen);
@@ -241,6 +252,19 @@ dt_imageio_retval_t dt_imageio_open_rawspeed(dt_image_t *img,
       black /= 4.0f;
 
       img->raw_black_level = CLAMP(roundf(black), 0, UINT16_MAX);
+    }
+
+    // rawspeed does not decode BlackLevel for non-CFA DNGs (cpp != 1).
+    // restore the DNG BlackLevel/WhiteLevel values read from EXIF for
+    // linear DNG so rawprepare can apply them correctly.
+    if(restore_exif_bw)
+    {
+      for(uint8_t i = 0; i < 4; i++)
+        img->raw_black_level_separate[i] = exif_black[i];
+      img->raw_white_point = exif_white;
+      float black = 0.0f;
+      for(uint8_t i = 0; i < 4; i++) black += exif_black[i];
+      img->raw_black_level = CLAMP(roundf(black / 4.0f), 0, UINT16_MAX);
     }
 
     /*
