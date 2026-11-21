@@ -29912,6 +29912,10 @@ msgstr ""
 "si activé, la balance des blancs utilise « as shot to reference » ;\n"
 "la première instance de calibration des couleurs est désactivée"
 
+#: ../src/iop/temperature.c:2250
+msgid "not supported for linear DNG images without a D65 color matrix; use white balance only"
+msgstr "non pris en charge pour les DNG linéaires sans matrice couleur D65 ; utilisez uniquement la balance des blancs"
+
 #: ../src/iop/temperature.c:2476
 msgid "finetune"
 msgstr "Ajustement"

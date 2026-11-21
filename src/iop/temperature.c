@@ -1871,6 +1871,12 @@ void reload_defaults(dt_iop_module_t *self)
   const gboolean true_monochrome =
     dt_image_monochrome_flags(&self->dev->image_storage) & DT_IMAGE_MONOCHROME;
 
+  if(self->dev->image_storage.flags & DT_IMAGE_LINEAR_DNG_NO_D65)
+  {
+    d->use_cat = FALSE;
+    d->preset = DT_IOP_TEMP_AS_SHOT;
+  }
+
   gboolean another_cat_defined = FALSE;
 
   if(!scene_referred)
@@ -2227,6 +2233,12 @@ static void _update_temperature_label(dt_iop_module_t *self)
   gtk_widget_set_tooltip_text(g->scale_k, tip);
 }
 
+static gboolean _linear_dng_no_d65(const dt_iop_module_t *self)
+{
+  return self->dev
+    && (self->dev->image_storage.flags & DT_IMAGE_LINEAR_DNG_NO_D65);
+}
+
 static dt_iop_temperature_advanced_mode_t _advanced_mode(dt_iop_module_t *self)
 {
   const dt_iop_temperature_params_t *p = self->params;
@@ -2244,6 +2256,15 @@ static void _advanced_set_widgets(dt_iop_module_t *self,
 {
   dt_iop_temperature_gui_data_t *g = self->gui_data;
   if(!g || !g->advanced_wb_cc || !g->advanced_wb_only) return;
+
+  const gboolean no_d65 = _linear_dng_no_d65(self);
+  gtk_widget_set_sensitive(g->advanced_wb_cc, !no_d65);
+  gtk_widget_set_tooltip_text
+    (g->advanced_wb_cc,
+     no_d65
+       ? _("not supported for linear DNG images without a D65 color matrix; use white balance only")
+       : _("when enabled, white balance uses 'as shot to reference';\n"
+           "the first color calibration instance is reset to its legacy defaults and enabled"));
 
   g->advanced_update = TRUE;
   gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(g->advanced_wb_cc),
@@ -2806,7 +2827,7 @@ static dt_iop_module_t *_find_channelmixerrgb(dt_iop_module_t *self)
 }
 
 static void _apply_advanced_mode(dt_iop_module_t *self,
-                                  const dt_iop_temperature_advanced_mode_t mode,
+                                  dt_iop_temperature_advanced_mode_t mode,
                                   GtkWidget *target)
 {
   dt_iop_temperature_gui_data_t *g = self->gui_data;
@@ -2814,7 +2835,12 @@ static void _apply_advanced_mode(dt_iop_module_t *self,
 
   if(!g) return;
 
+  if(_linear_dng_no_d65(self) && mode != DT_IOP_TEMP_ADVANCED_WB_ONLY)
+    mode = DT_IOP_TEMP_ADVANCED_WB_ONLY;
+
   const gboolean legacy = mode != DT_IOP_TEMP_ADVANCED_NONE;
+  const int preset = mode == DT_IOP_TEMP_ADVANCED_WB_CC
+                     ? DT_IOP_TEMP_D65_LATE : DT_IOP_TEMP_AS_SHOT;
   dt_iop_module_t *cc = _find_channelmixerrgb(self);
   const gboolean cc_reset = mode == DT_IOP_TEMP_ADVANCED_WB_CC && cc != NULL;
   const gboolean cc_disable =
@@ -2825,9 +2851,9 @@ static void _apply_advanced_mode(dt_iop_module_t *self,
   if(legacy)
   {
     p->use_cat = FALSE;
-    p->preset = DT_IOP_TEMP_D65_LATE;
+    p->preset = preset;
     _temp_params_from_array(p, self->dev->chroma.as_shot);
-    _update_preset(self, DT_IOP_TEMP_D65_LATE);
+    _update_preset(self, preset);
   }
   else
   {
@@ -3198,10 +3224,14 @@ void gui_reset(dt_iop_module_t *self)
   dt_iop_temperature_params_t *d = self->default_params;
 
   const dt_iop_temperature_params_t *p = self->params;
+  const gboolean no_d65 =
+    self->dev->image_storage.flags & DT_IMAGE_LINEAR_DNG_NO_D65;
   const int preset = d->preset = p->use_cat
                                  ? DT_IOP_TEMP_AS_SHOT
-                                 : (dt_is_scene_referred() ? DT_IOP_TEMP_D65_LATE
-                                                           : DT_IOP_TEMP_AS_SHOT);
+                                 : (no_d65 ? DT_IOP_TEMP_AS_SHOT
+                                           : (dt_is_scene_referred()
+                                              ? DT_IOP_TEMP_D65_LATE
+                                              : DT_IOP_TEMP_AS_SHOT));
 
   dt_iop_color_picker_reset(self, TRUE);
 

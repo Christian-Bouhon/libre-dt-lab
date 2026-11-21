@@ -101,6 +101,8 @@ typedef enum
   DT_IMAGE_MONOCHROME_BAYER = 1 << 19,
   // image has a flag set to use the monochrome workflow in the modules supporting it
   DT_IMAGE_MONOCHROME_WORKFLOW = 1 << 20,
+  // linear DNG without a usable D65-calibrated color matrix
+  DT_IMAGE_LINEAR_DNG_NO_D65 = 1 << 21,
 } dt_image_flags_t;
 
 typedef enum dt_image_colorspace_t

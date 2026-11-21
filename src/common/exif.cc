@@ -2024,6 +2024,7 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
     }
 
     // Read embedded color matrix and DNG related tags.
+    gboolean dng_has_d65_matrix = FALSE;
     if(FIND_EXIF_TAG("Exif.Image.DNGVersion"))
     {
       gboolean missing_sample = FALSE;
@@ -2190,6 +2191,10 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
         if(has_FM[k]) _print_matrix_data("has ForwardMatrix", k+1, FM[k]);
       }
 
+      for(int k = 0; k < 3; k++)
+        if(illu[k] == DT_LS_D65 && (has_CM[k] || has_FM[k]))
+          dng_has_d65_matrix = TRUE;
+
       // Find the best illuminant
       // Prepare checks for required interpolation
       // FIXME interpolate the matrixes
@@ -2313,6 +2318,9 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
       if((format == 3) && (bps >= 16) && ((phi == 32803) || (phi == 34892))) is_hdr = TRUE;
 
       if((spp == 1) && (phi == 34892)) is_monochrome = TRUE;
+
+      if((spp == 3) && (phi == 34892) && !dng_has_d65_matrix)
+        img->flags |= DT_IMAGE_LINEAR_DNG_NO_D65;
     }
 
     if(is_hdr)
