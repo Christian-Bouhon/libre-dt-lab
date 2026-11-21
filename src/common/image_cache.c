@@ -120,6 +120,13 @@ static void _image_cache_allocate(void *data,
     img->version = sqlite3_column_int(stmt, 24);
     img->raw_black_level = sqlite3_column_int(stmt, 25);
     for(uint8_t i = 0; i < 4; i++) img->raw_black_level_separate[i] = 0;
+    if((img->flags & DT_IMAGE_LINEAR_DNG_EXIF_BW)
+       && (img->flags & DT_IMAGE_LINEAR_DNG_UNIFORM_BLACK)
+       && img->raw_black_level > 0)
+    {
+      for(uint8_t i = 0; i < 4; i++)
+        img->raw_black_level_separate[i] = img->raw_black_level;
+    }
     img->raw_white_point = sqlite3_column_int(stmt, 26);
     if(sqlite3_column_type(stmt, 27) == SQLITE_FLOAT)
       img->aspect_ratio = sqlite3_column_double(stmt, 27);

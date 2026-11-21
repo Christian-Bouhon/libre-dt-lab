@@ -2346,9 +2346,20 @@ static bool _exif_decode_exif_data(dt_image_t *img, Exiv2::ExifData &exifData)
             else
               img->raw_black_level_separate[i] = 0;
           }
+
+          const int channels = MIN(count, spp);
+          gboolean uniform = TRUE;
+          for(int i = 1; i < channels; i++)
+            if(img->raw_black_level_separate[i] != img->raw_black_level_separate[0])
+              uniform = FALSE;
+
           float black = 0.0f;
-          for(int i = 0; i < 4; i++) black += img->raw_black_level_separate[i];
-          img->raw_black_level = (uint16_t)roundf(black / 4.0f);
+          for(int i = 0; i < channels; i++) black += img->raw_black_level_separate[i];
+          img->raw_black_level = (uint16_t)roundf(black / channels);
+
+          if(uniform)
+            img->flags |= DT_IMAGE_LINEAR_DNG_UNIFORM_BLACK;
+
           has_bw = TRUE;
         }
 

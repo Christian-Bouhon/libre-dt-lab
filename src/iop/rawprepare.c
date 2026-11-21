@@ -758,14 +758,28 @@ void reload_defaults(dt_iop_module_t *self)
   // if there are embedded GainMaps, they should be applied by default to avoid uneven color cast
   const gboolean has_gainmaps = _check_gain_maps(self, NULL);
 
+  uint16_t black_separate[4];
+  for(int i = 0; i < 4; i++)
+    black_separate[i] = image->raw_black_level_separate[i];
+  if((image->flags & DT_IMAGE_LINEAR_DNG_EXIF_BW)
+     && (image->flags & DT_IMAGE_LINEAR_DNG_UNIFORM_BLACK)
+     && image->raw_black_level > 0)
+  {
+    gboolean all_zero = TRUE;
+    for(int i = 0; i < 4; i++)
+      if(black_separate[i] != 0) all_zero = FALSE;
+    if(all_zero)
+      for(int i = 0; i < 4; i++) black_separate[i] = image->raw_black_level;
+  }
+
   *d = (dt_iop_rawprepare_params_t){.left = image->crop_x,
                                     .top = image->crop_y,
                                     .right = image->crop_right,
                                     .bottom = image->crop_bottom,
-                                    .raw_black_level_separate[0] = image->raw_black_level_separate[0],
-                                    .raw_black_level_separate[1] = image->raw_black_level_separate[1],
-                                    .raw_black_level_separate[2] = image->raw_black_level_separate[2],
-                                    .raw_black_level_separate[3] = image->raw_black_level_separate[3],
+                                    .raw_black_level_separate[0] = black_separate[0],
+                                    .raw_black_level_separate[1] = black_separate[1],
+                                    .raw_black_level_separate[2] = black_separate[2],
+                                    .raw_black_level_separate[3] = black_separate[3],
                                     .raw_white_point = image->raw_white_point,
                                     .flat_field = has_gainmaps ? FLAT_FIELD_EMBEDDED : FLAT_FIELD_OFF };
 

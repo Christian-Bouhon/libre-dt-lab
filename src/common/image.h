@@ -107,6 +107,8 @@ typedef enum
   DT_IMAGE_LINEAR_DNG = 1 << 22,
   // linear DNG with BlackLevel/WhiteLevel read from its EXIF tags
   DT_IMAGE_LINEAR_DNG_EXIF_BW = 1 << 23,
+  // linear DNG with the same black level on every used channel
+  DT_IMAGE_LINEAR_DNG_UNIFORM_BLACK = 1 << 24,
 } dt_image_flags_t;
 
 typedef enum dt_image_colorspace_t
