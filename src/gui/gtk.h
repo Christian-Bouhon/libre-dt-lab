@@ -119,6 +119,11 @@ typedef struct dt_gui_gtk_t
 
   cairo_surface_t *surface;  // cached prior image when config var ui/loading_screen is FALSE
   gboolean drawing_snapshot;
+  // the last button press was on the side-by-side snapshot widget, not the
+  // main center one
+  gboolean press_in_snapshot;
+  // the pointer is over the side-by-side snapshot widget, not the center one
+  gboolean pointer_in_snapshot;
 
   char *last_preset;
 

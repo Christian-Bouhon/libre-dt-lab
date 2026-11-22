@@ -57,16 +57,34 @@ typedef struct dt_lib_history_t
   GtkWidget *create_button;
   GtkWidget *compress_button;
   GtkWidget *remove_disabled_button;
+  // how a compared step is shown, usable while comparing
+  GtkWidget *mode_button, *rotate_button;
+  // the compare toggles are being set from code, not clicked
+  gboolean syncing_compare;
+  // the history up to the compared step as it was when the comparison began,
+  // to tell when an edit has discarded or replaced that step
+  GList *compare_keys;
+  int compare_keys_end;
+  // the selected item when the list was last built, to tell an edit that
+  // replaced the compared step from one that changed it in place
+  int shown_history_end;
   gboolean record_undo;
   int record_history_level; // set to +1 in signal DT_SIGNAL_DEVELOP_HISTORY_WILL_CHANGE
                             // and back to -1 in DT_SIGNAL_DEVELOP_HISTORY_CHANGE. We want
                             // to avoid multiple will-change before a change cb.
 } dt_lib_history_t;
 
-/* 3 widgets in each history line */
+/* widgets in each history line, before the compare toggle */
 #define HIST_WIDGET_NUMBER 0
 #define HIST_WIDGET_MODULE 1
-#define HIST_WIDGET_STATUS 2
+
+static void _lib_history_compare_changed(gpointer user_data);
+static GList *_history_prefix(const int count);
+static void _history_key_free(gpointer data);
+static gboolean _history_prefix_same(const GList *keys, const gboolean exact_last);
+
+static void _lib_history_layout_clicked_callback(GtkWidget *widget,
+                                                 dt_lib_module_t *self);
 
 /* compress history stack */
 static void _lib_history_compress_clicked_callback(GtkButton *widget,
@@ -171,12 +189,32 @@ void gui_init(dt_lib_module_t *self)
                    N_("remove disabled modules from history"),
                    d->remove_disabled_button, &dt_action_def_button);
 
+  d->mode_button = dtgtk_button_new(dtgtk_cairo_paint_compare_mode, CPF_NONE, NULL);
+  g_signal_connect(G_OBJECT(d->mode_button), "clicked",
+                   G_CALLBACK(_lib_history_layout_clicked_callback), self);
+  gtk_widget_set_name(d->mode_button, "non-flat");
+  gtk_widget_set_tooltip_text(d->mode_button,
+                              _("switch the compared step between side by side\n"
+                                "and an overlay with a split line"));
+  d->rotate_button = dtgtk_button_new(dtgtk_cairo_paint_refresh, CPF_NONE, NULL);
+  g_signal_connect(G_OBJECT(d->rotate_button), "clicked",
+                   G_CALLBACK(_lib_history_layout_clicked_callback), self);
+  gtk_widget_set_name(d->rotate_button, "non-flat");
+  gtk_widget_set_tooltip_text(d->rotate_button,
+                              _("turn the split between left/right and top/bottom"));
+  // usable while a step is compared, see _lib_history_compare_changed()
+  gtk_widget_set_sensitive(d->mode_button, FALSE);
+  gtk_widget_set_sensitive(d->rotate_button, FALSE);
+
   self->widget = dt_gui_vbox
     (dt_ui_resize_wrap(d->history_box, 1, "plugins/darkroom/history/windowheight"),
      dt_gui_hbox(dt_gui_expand(d->compress_button), d->remove_disabled_button,
-                 d->create_button));
+                 d->create_button, d->mode_button, d->rotate_button));
   gtk_widget_set_name(self->widget, "history-ui");
   gtk_widget_show_all(self->widget);
+
+  darktable.lib->proxy.snapshots.compare_changed = _lib_history_compare_changed;
+  darktable.lib->proxy.snapshots.compare_user_data = self;
 
   /* connect to history change signal for updating the history view */
   DT_CONTROL_SIGNAL_HANDLE(DT_SIGNAL_DEVELOP_HISTORY_WILL_CHANGE, _lib_history_will_change_callback);
@@ -186,8 +224,95 @@ void gui_init(dt_lib_module_t *self)
 
 void gui_cleanup(dt_lib_module_t *self)
 {
+
+  darktable.lib->proxy.snapshots.compare_changed = NULL;
+  darktable.lib->proxy.snapshots.compare_user_data = NULL;
+
+  dt_lib_history_t *d = self->data;
+  g_list_free_full(d->compare_keys, _history_key_free);
   g_free(self->data);
   self->data = NULL;
+}
+
+static void _lib_history_compare_clicked_callback(GtkWidget *widget,
+                                                  dt_lib_module_t *self)
+{
+  dt_lib_history_t *d = self->data;
+  if(d->syncing_compare || !darktable.lib->proxy.snapshots.compare_history) return;
+
+  // the history number is one more than the item, 0 for the original
+  const int history_end = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "history-number"));
+  darktable.lib->proxy.snapshots.compare_history(darktable.lib->proxy.snapshots.module,
+                                                 history_end);
+
+  // only one row is on, and a refused comparison leaves the toggle off
+  _lib_history_compare_changed(self);
+}
+
+static void _lib_history_layout_clicked_callback(GtkWidget *widget,
+                                                 dt_lib_module_t *self)
+{
+  dt_lib_history_t *d = self->data;
+  dt_lib_t *lib = darktable.lib;
+  dt_lib_module_t *snapshots = lib->proxy.snapshots.module;
+  if(!snapshots) return;
+
+  if(widget == d->rotate_button)
+  {
+    if(lib->proxy.snapshots.rotate_layout) lib->proxy.snapshots.rotate_layout(snapshots);
+  }
+  else if(lib->proxy.snapshots.set_sidebyside && lib->proxy.snapshots.get_sidebyside)
+    lib->proxy.snapshots.set_sidebyside(snapshots, !lib->proxy.snapshots.get_sidebyside(snapshots));
+}
+
+// light the compare icon of the entry being compared, if any
+static void _lib_history_compare_changed(gpointer user_data)
+{
+  dt_lib_module_t *self = user_data;
+  dt_lib_history_t *d = self->data;
+  if(!d) return;
+
+  const int shown = darktable.lib->proxy.snapshots.compared_history_end
+    ? darktable.lib->proxy.snapshots.compared_history_end(darktable.lib->proxy.snapshots.module)
+    : -1;
+
+  const gboolean sidebyside = darktable.lib->proxy.snapshots.get_sidebyside
+                              && darktable.lib->proxy.snapshots.get_sidebyside
+                                   (darktable.lib->proxy.snapshots.module);
+
+  // remember what the compared step stands on, from when it is first shown
+  if(shown <= 0 || d->compare_keys_end != shown)
+  {
+    g_list_free_full(d->compare_keys, _history_key_free);
+    d->compare_keys = NULL;
+    d->compare_keys_end = 0;
+  }
+  if(shown > 0 && !d->compare_keys)
+  {
+    d->compare_keys = _history_prefix(shown);
+    d->compare_keys_end = shown;
+  }
+
+  // setting a toggle emits "clicked" too, which would start or end a
+  // comparison from here, and recurse
+  d->syncing_compare = TRUE;
+  GList *children = gtk_container_get_children(GTK_CONTAINER(d->history_box));
+  for(const GList *l = children; l; l = g_list_next(l))
+  {
+    GtkWidget *button = g_object_get_data(G_OBJECT(l->data), "compare");
+    if(!button) continue;
+    const int num = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "history-number"));
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(button), num == shown);
+  }
+  d->syncing_compare = FALSE;
+  g_list_free(children);
+
+  // for any snapshot that is shown, not only a compared step
+  const gboolean overlay = darktable.lib->proxy.snapshots.enabled;
+  gtk_widget_set_sensitive(d->mode_button, overlay);
+  gtk_widget_set_sensitive(d->rotate_button, overlay);
+  dtgtk_button_set_active(DTGTK_BUTTON(d->mode_button), sidebyside);
+  gtk_widget_queue_draw(d->mode_button);
 }
 
 static GtkWidget *_lib_history_create_button(dt_lib_module_t *self,
@@ -264,6 +389,17 @@ static GtkWidget *_lib_history_create_button(dt_lib_module_t *self,
   gtk_box_pack_start(GTK_BOX(hbox), numwidget, FALSE, FALSE, 0);
   gtk_box_pack_start(GTK_BOX(hbox), widget, TRUE, TRUE, 0);
   gtk_box_pack_end(GTK_BOX(hbox), onoff, FALSE, FALSE, 0);
+
+  GtkWidget *compare = dtgtk_togglebutton_new(dtgtk_cairo_paint_compare, CPF_NONE, NULL);
+  gtk_widget_set_name(compare, "history-compare");
+  gtk_widget_set_tooltip_text(compare,
+                              _("compare the live edit with the image as it was at this step"));
+  g_signal_connect(G_OBJECT(compare), "clicked",
+                   G_CALLBACK(_lib_history_compare_clicked_callback), self);
+  g_object_set_data(G_OBJECT(compare), "history-number", GINT_TO_POINTER(num + 1));
+  // found by name rather than by position in the box
+  g_object_set_data(G_OBJECT(hbox), "compare", compare);
+  gtk_box_pack_end(GTK_BOX(hbox), compare, FALSE, FALSE, 0);
 
   return hbox;
 }
@@ -1130,6 +1266,7 @@ static gchar *_lib_history_button_label(const dt_dev_history_item_t *item)
                                       item->multi_name,
                                       TRUE,
                                       item->multi_name_hand_edited);
+
   return label;
 }
 
@@ -1191,6 +1328,7 @@ void gui_update(dt_lib_module_t *self)
 
   /* show all widgets */
   gtk_widget_show_all(d->history_box);
+  _lib_history_compare_changed(self);
   dt_gui_widget_reallocate_now(d->history_box);
 
   if(num == darktable.develop->history_end)
@@ -1202,12 +1340,161 @@ void gui_update(dt_lib_module_t *self)
   }
 
   dt_pthread_mutex_unlock(&darktable.develop->history_mutex);
+
+  // an edit from an earlier step drops the steps above it: end a comparison
+  // whose step went with them, or it would have no row to switch it off
+  dt_lib_t *lib = darktable.lib;
+  if(d->compare_keys && lib->proxy.snapshots.compare_history
+     && lib->proxy.snapshots.compared_history_end
+     && lib->proxy.snapshots.compared_history_end(lib->proxy.snapshots.module)
+        == d->compare_keys_end)
+  {
+    dt_pthread_mutex_lock(&darktable.develop->history_mutex);
+    const gboolean same =
+      g_list_length(d->compare_keys) <= g_list_length(darktable.develop->history)
+      // an edit made from before the compared step replaces it, whereas one
+      // made with it on top changes it in place
+      && _history_prefix_same(d->compare_keys, d->shown_history_end < d->compare_keys_end);
+    dt_pthread_mutex_unlock(&darktable.develop->history_mutex);
+    if(!same)
+      lib->proxy.snapshots.compare_history(lib->proxy.snapshots.module, d->compare_keys_end);
+  }
+  d->shown_history_end = darktable.develop->history_end;
+}
+
+// what a history item contributes to the image, to tell if a step is the same
+// before and after the history is rewritten
+typedef struct _history_key_t
+{
+  char op_name[20];
+  int multi_priority;
+  gboolean enabled;
+  size_t params_size;
+  gpointer params;
+  dt_develop_blend_params_t blend_params;
+  dt_hash_t forms_hash; // the drawn masks, whose shapes are not in the params
+} _history_key_t;
+
+static dt_hash_t _masks_group_hash_ext(dt_hash_t hash,
+                                       dt_masks_form_t *form,
+                                       GList *forms,
+                                       const int depth)
+{
+  if(!form || depth > 64) return hash;
+
+  hash = dt_hash(hash, &form->type, sizeof(dt_masks_type_t));
+  hash = dt_hash(hash, &form->formid, sizeof(dt_mask_id_t));
+  hash = dt_hash(hash, &form->version, sizeof(int));
+  hash = dt_hash(hash, &form->source, sizeof(float) * 3);
+
+  for(const GList *points = form->points; points; points = g_list_next(points))
+  {
+    if(form->type & DT_MASKS_GROUP)
+    {
+      const dt_masks_point_group_t *grpt = points->data;
+      dt_masks_form_t *f = dt_masks_get_from_id_ext(forms, grpt->formid);
+      if(f)
+      {
+        hash = dt_hash(hash, &grpt->state, sizeof(int));
+        hash = dt_hash(hash, &grpt->opacity, sizeof(float));
+        hash = _masks_group_hash_ext(hash, f, forms, depth + 1);
+      }
+    }
+    else if(form->functions)
+    {
+      hash = dt_hash(hash, points->data, form->functions->point_struct_size);
+    }
+  }
+  return hash;
+}
+
+static dt_hash_t _history_forms_hash(const dt_dev_history_item_t *item)
+{
+  dt_hash_t hash = DT_INITHASH;
+  for(GList *l = item->forms; l; l = g_list_next(l))
+    hash = _masks_group_hash_ext(hash, l->data, item->forms, 0);
+  return hash;
+}
+
+static void _history_key_free(gpointer data)
+{
+  _history_key_t *key = data;
+  g_free(key->params);
+  g_free(key);
+}
+
+// the first count items of the history
+static GList *_history_prefix(const int count)
+{
+  GList *keys = NULL;
+  int n = 0;
+  for(const GList *l = darktable.develop->history; l && n < count; l = g_list_next(l), n++)
+  {
+    const dt_dev_history_item_t *item = l->data;
+    _history_key_t *key = g_malloc0(sizeof(_history_key_t));
+    g_strlcpy(key->op_name, item->op_name, sizeof(key->op_name));
+    key->multi_priority = item->multi_priority;
+    key->enabled = item->enabled;
+    key->params_size = item->module ? item->module->params_size : 0;
+    if(key->params_size)
+    {
+      key->params = g_malloc(key->params_size);
+      memcpy(key->params, item->params, key->params_size);
+    }
+    if(item->blend_params) key->blend_params = *item->blend_params;
+    key->forms_hash = _history_forms_hash(item);
+    keys = g_list_prepend(keys, key);
+  }
+  return g_list_reverse(keys);
+}
+
+// exact_last FALSE accepts the last item with other parameters: editing the
+// top item of a comparison changes it in place, which is the use of comparing
+static gboolean _history_prefix_same(const GList *keys, const gboolean exact_last)
+{
+  for(const GList *l = darktable.develop->history; keys; keys = g_list_next(keys), l = g_list_next(l))
+  {
+    if(!l) return FALSE;
+    const dt_dev_history_item_t *item = l->data;
+    const _history_key_t *key = keys->data;
+    if(!exact_last && !g_list_next(keys))
+    {
+      if(strcmp(key->op_name, item->op_name) || key->multi_priority != item->multi_priority)
+        return FALSE;
+      continue;
+    }
+    if(strcmp(key->op_name, item->op_name)
+       || key->multi_priority != item->multi_priority
+       || key->enabled != item->enabled
+       || key->forms_hash != _history_forms_hash(item)
+       || !item->module
+       || key->params_size != item->module->params_size
+       || (key->params_size && memcmp(key->params, item->params, key->params_size))
+       || (item->blend_params
+           && memcmp(&key->blend_params, item->blend_params, sizeof(dt_develop_blend_params_t))))
+      return FALSE;
+  }
+  return TRUE;
 }
 
 static void _lib_history_truncate(const gboolean compress)
 {
+  dt_lib_t *lib = darktable.lib;
+  dt_lib_module_t *snapshots = lib->proxy.snapshots.module;
+  const int shown = snapshots && lib->proxy.snapshots.compared_history_end
+    ? lib->proxy.snapshots.compared_history_end(snapshots)
+    : -1;
+
+  // the compared step is the history up to its item: keep the comparison only
+  // if that part is the same afterwards, as the row it is on is then too
+  GList *before = shown > 0 ? _history_prefix(shown) : NULL;
+
   const dt_imgid_t imgid = darktable.develop->image_storage.id;
-  if(!dt_is_valid_imgid(imgid)) return;
+  if(!dt_is_valid_imgid(imgid))
+  {
+    g_list_free_full(before, _history_key_free);
+    return;
+  }
 
   dt_dev_undo_start_record(darktable.develop);
 
@@ -1251,6 +1538,12 @@ static void _lib_history_truncate(const gboolean compress)
   dt_dev_modulegroups_set(darktable.develop, dt_dev_modulegroups_get(darktable.develop));
 
   DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_DEVELOP_HISTORY_INVALIDATED);
+
+  if(shown > 0
+     && (g_list_length(before) < (guint)shown || !_history_prefix_same(before, TRUE)))
+    lib->proxy.snapshots.compare_history(snapshots, shown);
+
+  g_list_free_full(before, _history_key_free);
 }
 
 

@@ -1247,6 +1247,7 @@ static gboolean _button_pressed(GtkWidget *w,
   {
     gdk_event_get_axis((GdkEvent *)event, GDK_AXIS_PRESSURE, &pressure);
   }
+  darktable.gui->press_in_snapshot = (w == dt_ui_snapshot(darktable.gui->ui));
   dt_control_button_pressed(event->x, event->y, pressure,
                             event->button, event->type, event->state & 0xf);
   gtk_widget_grab_focus(w);
@@ -1275,6 +1276,7 @@ static gboolean _mouse_moved(GtkWidget *w,
     gdk_event_get_axis((GdkEvent *)event, GDK_AXIS_PRESSURE, &pressure);
     gui->have_pen_pressure = pressure != 1.0;
   }
+  darktable.gui->pointer_in_snapshot = (w == dt_ui_snapshot(darktable.gui->ui));
   dt_control_mouse_moved(event->x, event->y, pressure, event->state & 0xf);
   return FALSE;
 }
