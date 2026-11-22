@@ -176,8 +176,6 @@ static const char *_labels[] = {
 };
 
 
-static gboolean _dndactive = FALSE;
-
 const char *name(dt_lib_module_t *self)
 {
   return _("image information");
@@ -1444,14 +1442,6 @@ static void _select_toggled_callback(GtkCellRendererToggle *cell_renderer,
   gtk_tree_path_free(path);
 }
 
-static void _drag_data_inserted(GtkTreeModel *tree_model,
-                                GtkTreePath *path,
-                                GtkTreeIter *iter,
-                                gpointer user_data)
-{
-  _dndactive = TRUE;
-}
-
 void _menuitem_preferences(GtkMenuItem *menuitem,
                            dt_lib_module_t *self)
 {
@@ -1507,7 +1497,6 @@ void _menuitem_preferences(GtkMenuItem *menuitem,
 
   // drag & drop
   gtk_tree_view_set_reorderable(GTK_TREE_VIEW(view), TRUE);
-  g_signal_connect(G_OBJECT(model), "row-inserted", G_CALLBACK(_drag_data_inserted), NULL);
   GtkWidget *w = dt_gui_scroll_wrap(view);
   gtk_widget_set_size_request(w, -1, DT_PIXEL_APPLY_DPI(600));
   gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(w),
