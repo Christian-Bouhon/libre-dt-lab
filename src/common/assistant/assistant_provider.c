@@ -184,7 +184,7 @@ static char *_clean_key(const char *key)
 void dt_assistant_set_runtime_key(const dt_assistant_provider_t provider,
                                   const char *key)
 {
-  if(provider < 0 || provider >= DT_ASSISTANT_PROVIDER_COUNT) return;
+  if((guint)provider >= (guint)DT_ASSISTANT_PROVIDER_COUNT) return;
   g_mutex_lock(&_key_lock);
   g_free(_session_keys[provider]);
   _session_keys[provider] = g_strdup(key);
@@ -194,7 +194,7 @@ void dt_assistant_set_runtime_key(const dt_assistant_provider_t provider,
 
 static char *_get_runtime_key(const dt_assistant_provider_t provider)
 {
-  if(provider < 0 || provider >= DT_ASSISTANT_PROVIDER_COUNT) return NULL;
+  if((guint)provider >= (guint)DT_ASSISTANT_PROVIDER_COUNT) return NULL;
   g_mutex_lock(&_key_lock);
   char *key = _session_key_set[provider]
                 ? g_strdup(_session_keys[provider]) : NULL;
