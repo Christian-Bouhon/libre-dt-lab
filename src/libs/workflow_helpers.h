@@ -21,6 +21,10 @@
 
 #pragma GCC visibility push(default)
 
+struct dt_iop_module_t;
+
 void dt_workflow_selector_set(const int index);
+struct dt_iop_module_t *dt_workflow_find_module(const char *op);
+struct dt_iop_module_t *dt_workflow_find_or_load_module(const char *op);
 
 #pragma GCC visibility pop

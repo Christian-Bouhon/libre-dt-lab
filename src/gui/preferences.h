@@ -20,6 +20,8 @@
 
 /** shows the preferences dialog and blocks until it's closed. */
 void dt_gui_preferences_show();
+/** shows the preferences dialog on a named stack page, then blocks. */
+void dt_gui_preferences_show_page(const char *page);
 
 // return the widget for a given preference key
 GtkWidget *dt_gui_preferences_bool(GtkGrid *grid, const char *key, const guint col,

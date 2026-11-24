@@ -1,0 +1,700 @@
+{
+  "version": 1,
+  "modules": [
+    {
+      "operation": "exposure",
+      "name": "Exposure",
+      "description": "global exposure and black level correction",
+      "role": "tone",
+      "exclusive_role": false,
+      "addable": true,
+      "params": [
+        {
+          "name": "exposure",
+          "description": "exposure in EV",
+          "max_delta": 2.0,
+          "display": {
+            "suffix": " EV",
+            "decimals": 2
+          }
+        },
+        {
+          "name": "black",
+          "description": "black level correction",
+          "max_delta": 0.2
+        }
+      ]
+    },
+    {
+      "operation": "toneequal",
+      "name": "Tone Equalizer",
+      "description": "tone mapping by luminance bands; strong for local shadows and highlights",
+      "role": "tone_texture",
+      "exclusive_role": false,
+      "addable": true,
+      "params": [
+        {
+          "name": "noise",
+          "description": "blacks",
+          "max_delta": 0.5,
+          "display": {
+            "suffix": " EV",
+            "decimals": 2
+          }
+        },
+        {
+          "name": "ultra_deep_blacks",
+          "description": "deep shadows",
+          "max_delta": 0.5,
+          "display": {
+            "suffix": " EV",
+            "decimals": 2
+          }
+        },
+        {
+          "name": "deep_blacks",
+          "description": "shadows",
+          "max_delta": 0.5,
+          "display": {
+            "suffix": " EV",
+            "decimals": 2
+          }
+        },
+        {
+          "name": "blacks",
+          "description": "light shadows",
+          "max_delta": 0.5,
+          "display": {
+            "suffix": " EV",
+            "decimals": 2
+          }
+        },
+        {
+          "name": "shadows",
+          "description": "mid-tones",
+          "max_delta": 0.5,
+          "display": {
+            "suffix": " EV",
+            "decimals": 2
+          }
+        },
+        {
+          "name": "midtones",
+          "description": "dark highlights",
+          "max_delta": 0.5,
+          "display": {
+            "suffix": " EV",
+            "decimals": 2
+          }
+        },
+        {
+          "name": "highlights",
+          "description": "highlights",
+          "max_delta": 0.5,
+          "display": {
+            "suffix": " EV",
+            "decimals": 2
+          }
+        },
+        {
+          "name": "whites",
+          "description": "whites",
+          "max_delta": 0.5,
+          "display": {
+            "suffix": " EV",
+            "decimals": 2
+          }
+        },
+        {
+          "name": "speculars",
+          "description": "speculars",
+          "max_delta": 0.5,
+          "display": {
+            "suffix": " EV",
+            "decimals": 2
+          }
+        }
+      ]
+    },
+    {
+      "operation": "agx",
+      "name": "AgX",
+      "description": "scene-referred tone mapping with fine highlight and color control",
+      "role": "tone_mapper",
+      "exclusive_role": true,
+      "addable": true,
+      "params": [
+        {
+          "name": "look_brightness",
+          "description": "look brightness",
+          "max_delta": 0.3
+        },
+        {
+          "name": "look_saturation",
+          "description": "look saturation",
+          "max_delta": 0.3,
+          "display": {
+            "factor": 100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "curve_contrast_around_pivot",
+          "description": "contrast around pivot",
+          "max_delta": 1.0
+        }
+      ]
+    },
+    {
+      "operation": "filmicrgb",
+      "name": "Filmic RGB",
+      "description": "scene-referred filmic tone mapping",
+      "role": "tone_mapper",
+      "exclusive_role": true,
+      "addable": true,
+      "params": [
+        {
+          "name": "contrast",
+          "description": "contrast",
+          "max_delta": 1.0
+        },
+        {
+          "name": "saturation",
+          "description": "extreme luminance saturation",
+          "max_delta": 20.0,
+          "display": {
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "balance",
+          "description": "shadows/highlights balance",
+          "max_delta": 20.0,
+          "display": {
+            "suffix": "%",
+            "decimals": 0
+          }
+        }
+      ]
+    },
+    {
+      "operation": "sigmoid",
+      "name": "Sigmoid",
+      "description": "simple robust scene-referred tone mapping",
+      "role": "tone_mapper",
+      "exclusive_role": true,
+      "addable": true,
+      "params": [
+        {
+          "name": "middle_grey_contrast",
+          "description": "contrast",
+          "max_delta": 0.5
+        },
+        {
+          "name": "contrast_skewness",
+          "description": "skew",
+          "max_delta": 0.2
+        },
+        {
+          "name": "display_white_target",
+          "description": "target white",
+          "max_delta": 20.0,
+          "display": {
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "display_black_target",
+          "description": "target black",
+          "max_delta": 0.005,
+          "display": {
+            "suffix": "%",
+            "decimals": 4
+          }
+        },
+        {
+          "name": "input_exposure",
+          "description": "input exposure",
+          "max_delta": 0.5,
+          "display": {
+            "suffix": " EV",
+            "decimals": 2
+          }
+        }
+      ]
+    },
+    {
+      "operation": "3dcf",
+      "name": "3D Colorimetric Film",
+      "description": "spectral three-dimensional colorimetric film tone mapping",
+      "role": "tone_mapper",
+      "exclusive_role": true,
+      "addable": true,
+      "params": [
+        {
+          "name": "contrast",
+          "description": "global contrast",
+          "max_delta": 0.5,
+          "display": {
+            "factor": 50.0,
+            "offset": -112.5,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "gamma",
+          "description": "mid-tone gamma",
+          "max_delta": 0.3,
+          "display": {
+            "factor": 100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "vibrance",
+          "description": "vibrance",
+          "max_delta": 0.3,
+          "display": {
+            "factor": 100.0,
+            "offset": -100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "input_exposure",
+          "description": "input exposure",
+          "max_delta": 0.5,
+          "display": {
+            "suffix": " EV",
+            "decimals": 2
+          }
+        },
+        {
+          "name": "contrast_pivot",
+          "description": "contrast pivot",
+          "max_delta": 0.1,
+          "display": {
+            "factor": 100.0,
+            "offset": -50.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "toe_power",
+          "description": "toe power",
+          "max_delta": 0.3,
+          "display": {
+            "factor": 100.0,
+            "offset": -100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "shoulder_power",
+          "description": "shoulder power",
+          "max_delta": 0.3,
+          "display": {
+            "factor": 100.0,
+            "offset": -100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "hl_desaturation",
+          "description": "highlight roll-off",
+          "max_delta": 0.2,
+          "display": {
+            "factor": 100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "hl_detail_recovery",
+          "description": "highlight detail recovery",
+          "max_delta": 0.2,
+          "display": {
+            "factor": 100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        }
+      ]
+    },
+    {
+      "operation": "aces20",
+      "name": "ACES 2.0 Reference Rendering",
+      "description": "ACES 2.0 reference rendering tone mapping",
+      "role": "tone_mapper",
+      "exclusive_role": true,
+      "addable": true,
+      "params": [
+        {
+          "name": "exposure_ev",
+          "description": "exposure in EV",
+          "max_delta": 0.5,
+          "display": {
+            "suffix": " EV",
+            "decimals": 2
+          }
+        },
+        {
+          "name": "peak_luminance",
+          "description": "peak luminance in nits",
+          "max_delta": 200.0,
+          "display": {
+            "suffix": " nits",
+            "decimals": 0
+          }
+        }
+      ]
+    },
+    {
+      "operation": "contrast",
+      "name": "Tone & Texture",
+      "description": "tone and multiscale local contrast; strong for portrait and landscape looks",
+      "role": "tone_texture",
+      "exclusive_role": false,
+      "addable": true,
+      "params": [
+        {
+          "name": "global_scale",
+          "description": "global contrast",
+          "max_delta": 0.5,
+          "display": {
+            "factor": 100.0,
+            "offset": -100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "micro_scale",
+          "description": "micro contrast",
+          "max_delta": 0.5,
+          "display": {
+            "factor": 100.0,
+            "offset": -100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "fine_scale",
+          "description": "fine contrast",
+          "max_delta": 0.5,
+          "display": {
+            "factor": 100.0,
+            "offset": -100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "local_scale",
+          "description": "local contrast",
+          "max_delta": 0.5,
+          "display": {
+            "factor": 100.0,
+            "offset": -100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "broad_scale",
+          "description": "broad contrast",
+          "max_delta": 0.5,
+          "display": {
+            "factor": 100.0,
+            "offset": -100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "coarse_scale",
+          "description": "coarse contrast",
+          "max_delta": 0.5,
+          "display": {
+            "factor": 100.0,
+            "offset": -100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "gain_highlights",
+          "description": "highlights",
+          "max_delta": 1.0
+        },
+        {
+          "name": "gain_shadows",
+          "description": "shadows",
+          "max_delta": 1.0
+        },
+        {
+          "name": "colorful_contrast",
+          "description": "colorful contrast",
+          "max_delta": 0.2,
+          "display": {
+            "factor": 100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "contrast_balance",
+          "description": "contrast balance",
+          "max_delta": 0.2,
+          "display": {
+            "factor": 100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "color_balance",
+          "description": "colorimetric contrast",
+          "max_delta": 0.2,
+          "display": {
+            "factor": 100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        }
+      ]
+    },
+    {
+      "operation": "colorbalancergb",
+      "name": "Color Balance RGB",
+      "description": "global color grading: contrast, vibrance, saturation",
+      "role": "color",
+      "exclusive_role": false,
+      "addable": true,
+      "params": [
+        {
+          "name": "contrast",
+          "description": "color contrast",
+          "max_delta": 0.3,
+          "display": {
+            "factor": 100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "vibrance",
+          "description": "vibrance",
+          "max_delta": 0.3,
+          "display": {
+            "factor": 100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "saturation_global",
+          "description": "global saturation",
+          "max_delta": 0.3,
+          "display": {
+            "factor": 100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        },
+        {
+          "name": "chroma_global",
+          "description": "global chroma",
+          "max_delta": 0.3,
+          "display": {
+            "factor": 100.0,
+            "suffix": "%",
+            "decimals": 0
+          }
+        }
+      ]
+    },
+    {
+      "operation": "colorharmonizer",
+      "name": "Color Harmonizer",
+      "description": "harmonizes hues toward a color harmony rule",
+      "role": "color",
+      "exclusive_role": false,
+      "addable": true,
+      "params": [
+        {
+          "name": "anchor_hue",
+          "description": "anchor hue",
+          "max_delta": 0.1,
+          "display": {
+            "factor": 360.0,
+            "suffix": "°",
+            "decimals": 1
+          }
+        },
+        {
+          "name": "pull_strength",
+          "description": "pull strength",
+          "max_delta": 0.2
+        },
+        {
+          "name": "neutral_protection",
+          "description": "neutral protection",
+          "max_delta": 0.2
+        },
+        {
+          "name": "pull_width",
+          "description": "pull width",
+          "max_delta": 0.5
+        },
+        {
+          "name": "smoothing",
+          "description": "smoothing",
+          "max_delta": 0.3
+        }
+      ]
+    },
+    {
+      "operation": "primaries",
+      "name": "RGB Primaries",
+      "description": "RGB primary hue and purity color grading",
+      "role": "color",
+      "exclusive_role": false,
+      "addable": true,
+      "params": [
+        {
+          "name": "achromatic_tint_hue",
+          "description": "tint hue",
+          "max_delta": 0.1,
+          "display": {
+            "factor": 57.29577951308232,
+            "suffix": "°",
+            "decimals": 1
+          }
+        },
+        {
+          "name": "achromatic_tint_purity",
+          "description": "tint purity",
+          "max_delta": 0.2,
+          "display": {
+            "factor": 100.0,
+            "suffix": "%",
+            "decimals": 1
+          }
+        },
+        {
+          "name": "red_hue",
+          "description": "red hue",
+          "max_delta": 0.1,
+          "display": {
+            "factor": 57.29577951308232,
+            "suffix": "°",
+            "decimals": 1
+          }
+        },
+        {
+          "name": "red_purity",
+          "description": "red purity",
+          "max_delta": 0.3,
+          "display": {
+            "factor": 100.0,
+            "offset": -100.0,
+            "suffix": "%",
+            "decimals": 1
+          }
+        },
+        {
+          "name": "green_hue",
+          "description": "green hue",
+          "max_delta": 0.1,
+          "display": {
+            "factor": 57.29577951308232,
+            "suffix": "°",
+            "decimals": 1
+          }
+        },
+        {
+          "name": "green_purity",
+          "description": "green purity",
+          "max_delta": 0.3,
+          "display": {
+            "factor": 100.0,
+            "offset": -100.0,
+            "suffix": "%",
+            "decimals": 1
+          }
+        },
+        {
+          "name": "blue_hue",
+          "description": "blue hue",
+          "max_delta": 0.1,
+          "display": {
+            "factor": 57.29577951308232,
+            "suffix": "°",
+            "decimals": 1
+          }
+        },
+        {
+          "name": "blue_purity",
+          "description": "blue purity",
+          "max_delta": 0.3,
+          "display": {
+            "factor": 100.0,
+            "offset": -100.0,
+            "suffix": "%",
+            "decimals": 1
+          }
+        }
+      ]
+    },
+    {
+      "operation": "sharpen",
+      "name": "Sharpen",
+      "description": "unsharp mask sharpening",
+      "role": "detail",
+      "exclusive_role": false,
+      "addable": true,
+      "params": [
+        {
+          "name": "amount",
+          "description": "amount",
+          "max_delta": 0.3
+        },
+        {
+          "name": "threshold",
+          "description": "threshold",
+          "max_delta": 20.0
+        }
+      ]
+    },
+    {
+      "operation": "diffuse",
+      "name": "Diffuse or Sharpen",
+      "description": "multiscale diffusion and sharpening",
+      "role": "detail",
+      "exclusive_role": false,
+      "addable": true,
+      "params": [
+        {
+          "name": "sharpness",
+          "description": "sharpness",
+          "max_delta": 0.3,
+          "display": {
+            "suffix": "%",
+            "decimals": 2
+          }
+        }
+      ]
+    }
+  ]
+}

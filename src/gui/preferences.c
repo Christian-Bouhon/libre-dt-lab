@@ -33,6 +33,7 @@
 #include "gui/preferences.h"
 #ifdef HAVE_AI
 #include "gui/preferences_ai.h"
+#include "gui/preferences_assistant.h"
 #endif
 #include "gui/presets.h"
 #include "libs/lib.h"
@@ -635,7 +636,7 @@ static void init_tab_general(GtkWidget *dialog,
 ///////////// end of gui and theme language selection
 
 
-void dt_gui_preferences_show()
+static void _dt_gui_preferences_show(const char *page)
 {
   dt_stop_backthumbs_crawler(FALSE);
   GtkWindow *win = GTK_WINDOW(dt_ui_main_window(darktable.gui->ui));
@@ -676,21 +677,30 @@ void dt_gui_preferences_show()
 #ifdef HAVE_AI
   init_tab_ai(_preferences_dialog, stack);
 #endif
+  init_tab_assistant(_preferences_dialog, stack);
 #ifdef USE_LUA
   init_tab_lua(_preferences_dialog, stack);
 #endif
 
   gtk_widget_show_all(_preferences_dialog);
 
-  //open in the appropriate tab if currently in darkroom or lighttable view
-  const gchar *current_view = dt_view_manager_name(darktable.view_manager);
-
-  if(strcmp(current_view, _("darkroom")) == 0
-     || strcmp(current_view, _("lighttable")) == 0)
+  if(page && page[0])
   {
-    gtk_stack_set_visible_child(GTK_STACK(stack),
-                                gtk_stack_get_child_by_name(GTK_STACK(stack),
-                                                            current_view));
+    GtkWidget *child = gtk_stack_get_child_by_name(GTK_STACK(stack), page);
+    if(child) gtk_stack_set_visible_child(GTK_STACK(stack), child);
+  }
+  else
+  {
+    // open in the appropriate tab if currently in darkroom or lighttable view
+    const gchar *current_view = dt_view_manager_name(darktable.view_manager);
+
+    if(strcmp(current_view, _("darkroom")) == 0
+       || strcmp(current_view, _("lighttable")) == 0)
+    {
+      gtk_stack_set_visible_child(GTK_STACK(stack),
+                                  gtk_stack_get_child_by_name(GTK_STACK(stack),
+                                                              current_view));
+    }
   }
 
   (void)gtk_dialog_run(GTK_DIALOG(_preferences_dialog));
@@ -707,6 +717,16 @@ void dt_gui_preferences_show()
 
   dt_start_backthumbs_crawler();
   DT_CONTROL_SIGNAL_RAISE(DT_SIGNAL_PREFERENCES_CHANGE);
+}
+
+void dt_gui_preferences_show()
+{
+  _dt_gui_preferences_show(NULL);
+}
+
+void dt_gui_preferences_show_page(const char *page)
+{
+  _dt_gui_preferences_show(page);
 }
 
 static void cairo_destroy_from_pixbuf(guchar *pixels,

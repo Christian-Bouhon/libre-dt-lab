@@ -31,7 +31,7 @@ static const char *_tm_ops[] =
   "filmicrgb", "sigmoid", "agx", "basecurve", "3dcf", "aces20", NULL
 };
 
-static dt_iop_module_t *_find_module(const char *op)
+dt_iop_module_t *dt_workflow_find_module(const char *op)
 {
   dt_iop_module_t *mod = dt_iop_get_module(op);
   if(mod) return mod;
@@ -84,6 +84,34 @@ static dt_iop_module_t *_load_module(const char *op)
   return module;
 }
 
+static void _ensure_module_in_pipe(dt_develop_t *dev, dt_iop_module_t *module)
+{
+  if(!dev || !module || g_list_find(dev->iop, module)) return;
+
+  dev->alliop = g_list_remove(dev->alliop, module);
+  dev->iop = g_list_insert_sorted(dev->iop, module, dt_sort_iop_by_order);
+  dt_ioppr_insert_module_instance(dev, module);
+  dt_ioppr_resync_modules_order(dev);
+
+  if(!dt_iop_is_hidden(module) && !module->expander)
+  {
+    dt_iop_gui_set_expander(module);
+    dt_iop_gui_set_expanded(module, TRUE, FALSE);
+    dt_iop_gui_update_blending(module);
+  }
+}
+
+dt_iop_module_t *dt_workflow_find_or_load_module(const char *op)
+{
+  dt_iop_module_t *module = dt_workflow_find_module(op);
+  if(module)
+  {
+    _ensure_module_in_pipe(darktable.develop, module);
+    return module;
+  }
+  return _load_module(op);
+}
+
 void dt_workflow_selector_set(const int selected)
 {
   dt_develop_t *dev = darktable.develop;
@@ -105,7 +133,7 @@ void dt_workflow_selector_set(const int selected)
   // disable all tone mapper modules
   for(int i = 0; _tm_ops[i]; i++)
   {
-    dt_iop_module_t *mod = _find_module(_tm_ops[i]);
+    dt_iop_module_t *mod = dt_workflow_find_module(_tm_ops[i]);
     if(mod)
     {
       dt_iop_gui_set_expanded(mod, FALSE, FALSE);
@@ -124,7 +152,7 @@ void dt_workflow_selector_set(const int selected)
   }
 
   // find or load the selected module
-  dt_iop_module_t *mod = _find_module(op);
+  dt_iop_module_t *mod = dt_workflow_find_module(op);
   if(!mod)
   {
     mod = _load_module(op);

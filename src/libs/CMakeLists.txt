@@ -122,6 +122,10 @@ if(USE_AI)
   set(MODULES ${MODULES} neural_restore)
 endif(USE_AI)
 
+# AI assistant panel
+add_library(ai_assistant MODULE "ai_assistant.c")
+set(MODULES ${MODULES} ai_assistant)
+
 # Add libs references
 foreach(module ${MODULES})
   target_link_libraries(${module} lib_darktable)

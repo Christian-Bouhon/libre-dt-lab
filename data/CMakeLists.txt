@@ -165,6 +165,12 @@ endif()
 FILE(COPY wb_presets.json DESTINATION "${DARKTABLE_DATADIR}")
 install(FILES wb_presets.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab COMPONENT DTApplication)
 
+#
+# Install AI assistant module catalog
+#
+FILE(COPY ai_assistant_modules.json DESTINATION "${DARKTABLE_DATADIR}")
+install(FILES ai_assistant_modules.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab COMPONENT DTApplication)
+
 if(USE_AI)
   #
   # Install AI models registry
@@ -174,6 +180,14 @@ if(USE_AI)
   FILE(COPY ort_gpu.json DESTINATION "${DARKTABLE_DATADIR}")
   install(FILES ort_gpu.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab COMPONENT DTApplication)
 endif(USE_AI)
+
+if(USE_MCP)
+  #
+  # Install libre-dt-lab-mcp tool descriptions/schemas (editable without a rebuild)
+  #
+  FILE(COPY mcp_tools.json DESTINATION "${DARKTABLE_DATADIR}")
+  install(FILES mcp_tools.json DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/libre-dt-lab COMPONENT DTApplication)
+endif(USE_MCP)
 
 #
 # Transform darktableconfig.xml into darktablerc

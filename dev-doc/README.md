@@ -29,6 +29,9 @@ This guide covers building Image Operation (IOP) modules for darktable's darkroo
 |------|-------------|
 | **[AI.md](AI.md)** | AI subsystem architecture, backend API, and how to add new AI features |
 | **[AI_Tasks.md](AI_Tasks.md)** | Reference for each AI task: mask, denoise, upscale |
+| **[MCP.md](MCP.md)** | MCP server setup, Claude Code/Desktop, read-only mode |
+| **[AI_ASSISTANT.md](AI_ASSISTANT.md)** | Native darkroom assistant: setup, privacy, allowed sliders |
+| **[ai_assistant_plan_v2.md](ai_assistant_plan_v2.md)** | Assistant v2 plan: module catalog, activation, stats, model tests |
 
 ### Guides
 | File | Description |

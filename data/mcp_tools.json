@@ -1,0 +1,299 @@
+[
+  {
+    "name": "list_modules",
+    "description": "List all darktable processing modules with their current param version and whether they expose introspection.",
+    "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false }
+  },
+  {
+    "name": "module_schema",
+    "description": "Describe a module's parameter layout: each field's name, type, byte offset, and min/max/default (enum values listed).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "operation": { "type": "string", "description": "module op name, e.g. 'exposure', 'agx'" }
+      },
+      "required": ["operation"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "decode_params",
+    "description": "Decode a hex op_params blob into named field values for the given module (blob must match the module's current param size).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "operation": { "type": "string" },
+        "blob_hex": { "type": "string" }
+      },
+      "required": ["operation", "blob_hex"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "encode_params",
+    "description": "Seed a module's default params, apply the given fields (numbers, or symbolic names for enums), and return a hex op_params blob. A number outside the field's introspected min/max is rejected rather than clamped; module_schema publishes those bounds.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "operation": { "type": "string" },
+        "fields": { "description": "field name -> value. a number must sit within the min/max module_schema reports for that field, or the call is rejected; enums take their symbolic name or their integer value", "type": "object" }
+      },
+      "required": ["operation"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "render",
+    "description": "Develop a raw (by input.path or input.imgid) through the base pipeline plus an optional module stack, returning a PNG preview. Each stack entry is {operation, params{} or blob_hex, multi_priority?, enabled?, before?, after?}. A stack is written to the image's history and is how an edit is committed; use --read-only or an in-memory library to render without persisting.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" },
+            "imgid": { "type": "integer" }
+          }
+        },
+        "width": { "description": "bounding box in pixels, not a target size: the image is fitted inside width x height keeping aspect ratio, so the smaller constraint wins. omit or pass 0 to leave a dimension unconstrained, which then limits by the other alone but never enlarges past the image's own size; give both to upscale. with neither given, defaults to 1024x1024", "type": "integer" },
+        "height": { "description": "bounding box in pixels, not a target size: the image is fitted inside width x height keeping aspect ratio, so the smaller constraint wins. omit or pass 0 to leave a dimension unconstrained, which then limits by the other alone but never enlarges past the image's own size; give both to upscale. with neither given, defaults to 1024x1024", "type": "integer" },
+        "stack": {
+          "description": "edits layered on top of the base state and written to the image's own history, so they persist; run the server with --read-only, or against an in-memory library, to render without committing",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "operation": { "type": "string" },
+              "before": { "description": "place this module immediately before the named one in the pipeline. relative rather than a raw iop_order, which is an opaque number a caller cannot choose sensibly. read current positions from get_history", "type": "string" },
+              "after": { "description": "place this module immediately after the named one in the pipeline", "type": "string" },
+              "params": { "description": "field name -> value, encoded exactly as encode_params does: a number outside the field's introspected min/max is rejected, not clamped", "type": "object" },
+              "blob_hex": { "type": "string" },
+              "multi_priority": { "type": "integer" },
+              "enabled": { "type": "boolean" }
+            },
+            "required": ["operation"]
+          }
+        },
+        "disable_tone_mappers": { "description": "switch off whichever tone mapper darktable auto-applies, as set by plugins/darkroom/workflow, so that a tone mapper you add in the stack owns the tone curve. WARNING: this is written to the image's history and its sidecar like any other edit, so it outlives the request; reset_history undoes it", "type": "boolean" },
+        "history_end": { "description": "how many entries of the image's existing history to apply, counted from the start; -1 or omitted uses all of it. applied before `stack`, so the two compose: history_end picks the base state and stack adds edits on top of it. WARNING: combined with a stack this rewrites the image's history -- entries past history_end are dropped for good. on its own it changes nothing", "type": "integer" }
+      },
+      "required": ["input"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "image_stats",
+    "description": "Like render, but returns per-channel statistics (min/max/mean/p1/p50/p99 + clip counts) of the developed preview instead of a PNG. Useful for measuring the tonal effect of a param change.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" },
+            "imgid": { "type": "integer" }
+          }
+        },
+        "width": { "description": "bounding box in pixels, not a target size: the image is fitted inside width x height keeping aspect ratio, so the smaller constraint wins. omit or pass 0 to leave a dimension unconstrained, which then limits by the other alone but never enlarges past the image's own size; give both to upscale. with neither given, defaults to 512x512", "type": "integer" },
+        "height": { "description": "bounding box in pixels, not a target size: the image is fitted inside width x height keeping aspect ratio, so the smaller constraint wins. omit or pass 0 to leave a dimension unconstrained, which then limits by the other alone but never enlarges past the image's own size; give both to upscale. with neither given, defaults to 512x512", "type": "integer" },
+        "stack": { "description": "edits layered on top of the base state and written to the image's own history, so they persist; run the server with --read-only, or against an in-memory library, to render without committing", "type": "array", "items": { "type": "object" } },
+        "disable_tone_mappers": { "description": "switch off whichever tone mapper darktable auto-applies, as set by plugins/darkroom/workflow, so that a tone mapper you add in the stack owns the tone curve. WARNING: this is written to the image's history and its sidecar like any other edit, so it outlives the request; reset_history undoes it", "type": "boolean" },
+        "history_end": { "description": "how many entries of the image's existing history to apply, counted from the start; -1 or omitted uses all of it. applied before `stack`, so the two compose: history_end picks the base state and stack adds edits on top of it. WARNING: combined with a stack this rewrites the image's history -- entries past history_end are dropped for good. on its own it changes nothing", "type": "integer" }
+      },
+      "required": ["input"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "import_images",
+    "description": "add files to the library so they can be edited, rated and exported by imgid. this is the way images should enter darktable: rendering by input.path instead imports the file only for that one request and then removes it again, keeping nothing. give 'paths', or a 'folder' to add a whole shoot",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "paths": { "description": "files to import", "type": "array", "items": { "type": "string" } },
+        "folder": { "description": "import every file in this directory", "type": "string" },
+        "recursive": { "description": "with 'folder', descend into subdirectories too", "type": "boolean" }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "list_film_rolls",
+    "description": "the library's film rolls: `name` as darktable displays it, the full `folder` path, and the image count. a film roll is darktable's unit for an imported folder. list them to discover what list_images can filter on -- `film_roll` for an exact id, or `folder` for a substring that also spans a parent directory holding several rolls",
+    "inputSchema": { "type": "object", "properties": {} }
+  },
+  {
+    "name": "list_images",
+    "description": "List images in the library with their rating and color labels, optionally filtered by folder, minimum rating, color label or rejected flag. Point the server at a catalog with --core --library <db> or --core --configdir <dir>.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "limit": { "description": "maximum images to return; omit for all", "type": "integer" },
+        "film_roll": { "description": "exact film roll id from list_film_rolls", "type": "integer" },
+        "folder": { "description": "substring of the film roll's folder path, e.g. \"2026-02\"; use film_roll for an exact match", "type": "string" },
+        "rating": { "description": "minimum star rating, 0-5. omit for any", "type": "integer" },
+        "color": { "description": "only images carrying this color label: red, yellow, green, blue or purple", "type": "string" },
+        "rejected": { "description": "only images flagged as rejected", "type": "boolean" }
+      }
+    }
+  },
+  {
+    "name": "get_history",
+    "description": "Return the current edit-history stack of a library image, decoded per module (num, operation, version, enabled, multi_priority, fields).",
+    "inputSchema": {
+      "type": "object",
+      "properties": { "imgid": { "type": "integer" } },
+      "required": ["imgid"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "get_metadata",
+    "description": "camera, lens, exposure and sensor data for one image: ISO, shutter, aperture, focal length, exposure bias, capture time, and the raw black level and white point. the `raw` block gives the sensor's actual black level and white point, which is the shadow and highlight headroom available; it appears only once the image has been through the pipeline at least once, since rawprepare is what reads those values, so render it before relying on them",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "imgid": { "description": "image to describe", "type": "integer" }
+      },
+      "required": ["imgid"]
+    }
+  },
+  {
+    "name": "list_conf",
+    "description": "list darktable's declared configuration settings with their current value, type, default and allowed range. read-only: a setting is changed by restarting the server with --conf key=value, which keeps every result within one session comparable",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "prefix": { "description": "only keys starting with this, e.g. \"plugins/darkroom/\". the full namespace is large and mostly unrelated to rendering", "type": "string" }
+      }
+    }
+  },
+  {
+    "name": "get_conf",
+    "description": "one configuration setting with its current value, type, default and allowed range. settings such as plugins/darkroom/workflow and write_sidecar_files change what render and export produce, so reading them explains results that otherwise look wrong",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "key": { "description": "configuration key, e.g. \"plugins/darkroom/workflow\"", "type": "string" }
+      },
+      "required": ["key"]
+    }
+  },
+  {
+    "name": "set_rating",
+    "description": "set the star rating on one or more images, or reject them. reject is a flag beside the stars rather than a rating value, so a rejected frame keeps the rating it had. takes a list because rating is how a shoot is culled",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "imgids": { "description": "images to rate", "type": "array", "items": { "type": "integer" } },
+        "rating": { "description": "0-5 stars; required unless reject is set", "type": "integer" },
+        "reject": { "description": "flag these as rejected instead of setting stars", "type": "boolean" }
+      },
+      "required": ["imgids"]
+    }
+  },
+  {
+    "name": "set_color_label",
+    "description": "set or toggle a color label on one or more images",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "imgids": { "description": "images to label", "type": "array", "items": { "type": "integer" } },
+        "color": { "description": "red, yellow, green, blue or purple", "type": "string" },
+        "toggle": { "description": "remove the label from images that already carry it, rather than setting it everywhere", "type": "boolean" }
+      },
+      "required": ["imgids", "color"]
+    }
+  },
+  {
+    "name": "list_styles",
+    "description": "List saved darktable styles as { total, styles: [{name, description}] }. total counts every match, so a 'limit' that cut the list short is visible.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "filter": { "description": "substring, matched against both the style name and its description; omit for every style", "type": "string" },
+        "limit": { "description": "return at most this many styles; omit or 0 for all of them. a catalog of several hundred runs to tens of kilobytes", "type": "integer" }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "apply_style",
+    "description": "Apply a saved style to the history of one image (imgid) or several (imgids).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "imgid": { "description": "single image; use imgids for several", "type": "integer" },
+        "imgids": { "description": "apply to every one of these; saves a round trip per image when delivering a shoot", "type": "array", "items": { "type": "integer" } },
+        "overwrite": { "type": "boolean" }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "save_style",
+    "description": "Create a new saved style from a library image's current history.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "imgid": { "type": "integer" }
+      },
+      "required": ["name", "imgid"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "reset_history",
+    "description": "clear an image's edit history, returning it to the state it had on import. refused when the server runs with --read-only",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "imgid": { "description": "image to clear", "type": "integer" }
+      },
+      "required": ["imgid"]
+    }
+  },
+  {
+    "name": "import_style",
+    "description": "Import a .dtstyle file into the styles database.",
+    "inputSchema": {
+      "type": "object",
+      "properties": { "path": { "type": "string" } },
+      "required": ["path"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "export_images",
+    "description": "Develop and write image files: one image via input, or several via imgids. names a target with out_path/out_dir, or leaves it to darktable's configured export location. reports the paths written, and under skipped/skipped_paths any target left alone because a file was already there and darktable's conflict policy says to skip.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" },
+            "imgid": { "type": "integer" }
+          }
+        },
+        "out_path": { "description": "destination file for a single image. omit out_path and out_dir to let darktable choose, which by default is $(FILE_FOLDER)/darktable_exported/ beside each source file", "type": "string" },
+        "format": { "description": "output format: jpeg, png, tiff, webp, jxl, avif, exr, pfm, ppm, j2k (whichever your build has). inferred from out_path's extension when omitted, else darktable's configured export format, which ships as jpeg", "type": "string" },
+        "quality": { "description": "encoder quality for the lossy formats (jpeg, webp, jxl, avif); the format's configured default is used when omitted", "type": "integer" },
+        "upscale": { "description": "allow the export to be larger than the source image", "type": "boolean" },
+        "high_quality": { "description": "high quality resampling: slower, better on big downscales", "type": "boolean" },
+        "imgids": { "description": "export every one of these instead of a single input; pair with out_dir, or omit it to use darktable's configured export location", "type": "array", "items": { "type": "integer" } },
+        "out_dir": { "description": "destination directory for imgids; each file is named after its source. omit it and every image goes where darktable's own export would put it", "type": "string" },
+        "width": { "description": "bounding box in pixels, not a target size: the image is fitted inside width x height keeping aspect ratio, so the smaller constraint wins. omit or pass 0 to leave a dimension unconstrained; omit both and the image is exported at full resolution, as darktable's own export does", "type": "integer" },
+        "height": { "description": "bounding box in pixels, not a target size: the image is fitted inside width x height keeping aspect ratio, so the smaller constraint wins. omit or pass 0 to leave a dimension unconstrained; omit both and the image is exported at full resolution, as darktable's own export does", "type": "integer" },
+        "history_end": { "description": "how many entries of the image's existing history to apply, counted from the start; -1 or omitted uses all of it. this only selects what to render and never alters the image", "type": "integer" }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  }
+]

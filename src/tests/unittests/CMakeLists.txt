@@ -4,6 +4,10 @@ if(USE_AI)
   add_subdirectory(ai)
 endif(USE_AI)
 
+if(USE_MCP)
+  add_subdirectory(mcp)
+endif(USE_MCP)
+
 add_cmocka_test(test_sample
                 SOURCES test_sample.c
                 LINK_LIBRARIES cmocka)

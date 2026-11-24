@@ -20,6 +20,12 @@ FILE(GLOB SOURCE_FILES
   "bauhaus/bauhaus.c"
   "common/act_on.c"
   "common/atomic.c"
+  "common/assistant/assistant_actions.c"
+  "common/assistant/assistant_catalog.c"
+  "common/assistant/assistant_context.c"
+  "common/assistant/assistant_image.c"
+  "common/assistant/assistant_provider.c"
+  "common/assistant/assistant_stats.c"
   "common/bilateral.c"
   "common/bilateralcl.c"
   "common/box_filters.cc"
@@ -158,6 +164,7 @@ FILE(GLOB SOURCE_FILES
   "gui/import_metadata.c"
   "gui/metadata_tags.c"
   "gui/preferences.c"
+  "gui/preferences_assistant.c"
   "gui/presets.c"
   "gui/splash.c"
   "gui/welcome.c"
@@ -1095,6 +1102,11 @@ endif(HAVE_OPENCL)
 
 # have a command line interface
 add_subdirectory(cli)
+
+# have a Model Context Protocol server exposing the raw engine to AI agents
+if(USE_MCP)
+  add_subdirectory(mcp)
+endif()
 
 # have a command line utility to generate all the thumbnails
 add_subdirectory(generate-cache)
