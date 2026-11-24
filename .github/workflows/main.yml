@@ -9,6 +9,7 @@ on:
       - main
     tags:
       - 'libre-*'
+      - 'assistant-ci'
 
 permissions:
   contents: read
@@ -546,7 +547,7 @@ jobs:
           # Dev pushes (main) update the rolling "Main" prerelease; tagged
           # builds (libre-X.Y.Z) create a dedicated stable release.
           tag: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'Main' }}
-          prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/libre-') }}
           draft: false
           name: ${{ startsWith(github.ref, 'refs/tags/') && format('Libre DT-Lab {0}', github.ref_name) || format('Libre DT-Lab "experimental build" {0}', env.RELEASE_DATE) }}
           # Please do not modify the body text by adding line breaks in paragraphs, as this text should display well on screens of different widths
