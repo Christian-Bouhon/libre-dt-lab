@@ -24,6 +24,8 @@
 #include "control/conf.h"
 
 #include <curl/curl.h>
+#include <curl/urlapi.h>
+#include <gio/gio.h>
 #include <json-glib/json-glib.h>
 #include <math.h>
 #include <string.h>
@@ -375,11 +377,92 @@ void dt_assistant_config_clear(dt_assistant_config_t *config)
   memset(config, 0, sizeof(*config));
 }
 
-static gboolean _is_local_url(const char *url)
+/* Only the literal names localhost and IPv4/IPv6 loopback literals are
+ * considered local. Host names that merely resolve to a loopback address
+ * are not accepted. */
+static gboolean _is_loopback_host(const char *host)
 {
-  return url
-         && (strstr(url, "://localhost") || strstr(url, "://127.0.0.1")
-             || strstr(url, "://[::1]"));
+  if(!host || !host[0]) return FALSE;
+  if(!g_ascii_strcasecmp(host, "localhost")) return TRUE;
+
+  char *unbracketed = NULL;
+  const size_t host_len = strlen(host);
+  if(host[0] == '[' && host_len > 2 && host[host_len - 1] == ']')
+  {
+    unbracketed = g_strndup(host + 1, host_len - 2);
+    host = unbracketed;
+  }
+
+  GInetAddress *address = g_inet_address_new_from_string(host);
+  const gboolean loopback = address && g_inet_address_get_is_loopback(address);
+  if(address) g_object_unref(address);
+  g_free(unbracketed);
+  return loopback;
+}
+
+/* GLib's GUri is newer than the minimum GLib version this project supports,
+ * so use libcurl's URL parser, which is already a hard dependency. It splits
+ * the scheme, host, path and query, so a localhost-looking path cannot make a
+ * remote endpoint pass validation. */
+static gboolean _validate_endpoint_url(const char *endpoint, char **reason)
+{
+  CURLU *url = curl_url();
+  if(!url)
+  {
+    if(reason) *reason = g_strdup(_("could not initialize the URL parser"));
+    return FALSE;
+  }
+
+  const CURLUcode parse_result
+    = curl_url_set(url, CURLUPART_URL, endpoint, 0);
+  if(parse_result != CURLUE_OK)
+  {
+    if(reason) *reason = g_strdup(_("endpoint is not a valid URL"));
+    curl_url_cleanup(url);
+    return FALSE;
+  }
+
+  char *scheme = NULL;
+  char *host = NULL;
+  gboolean valid = FALSE;
+
+  if(curl_url_get(url, CURLUPART_SCHEME, &scheme, 0) != CURLUE_OK
+     || !scheme || !scheme[0])
+  {
+    if(reason) *reason = g_strdup(_("endpoint must use http:// or https://"));
+    goto cleanup;
+  }
+
+  const gboolean is_http = !g_ascii_strcasecmp(scheme, "http");
+  const gboolean is_https = !g_ascii_strcasecmp(scheme, "https");
+  if(!is_http && !is_https)
+  {
+    if(reason) *reason = g_strdup(_("endpoint must use http:// or https://"));
+    goto cleanup;
+  }
+
+  if(curl_url_get(url, CURLUPART_HOST, &host, 0) != CURLUE_OK
+     || !host || !host[0])
+  {
+    if(reason) *reason = g_strdup(_("endpoint has no host"));
+    goto cleanup;
+  }
+
+  if(is_http && !_is_loopback_host(host))
+  {
+    if(reason)
+      *reason = g_strdup(_("http endpoints are allowed only for localhost or a "
+                           "loopback address; use https:// for remote endpoints"));
+    goto cleanup;
+  }
+
+  valid = TRUE;
+
+cleanup:
+  curl_free(scheme);
+  curl_free(host);
+  curl_url_cleanup(url);
+  return valid;
 }
 
 gboolean dt_assistant_config_is_ready(const dt_assistant_config_t *config,
@@ -397,17 +480,8 @@ gboolean dt_assistant_config_is_ready(const dt_assistant_config_t *config,
     if(reason) *reason = g_strdup(_("model is empty; use detect or type a model"));
     return FALSE;
   }
-  if(!g_str_has_prefix(config->endpoint, "http://")
-     && !g_str_has_prefix(config->endpoint, "https://"))
-  {
-    if(reason) *reason = g_strdup(_("endpoint must start with http:// or https://"));
+  if(!_validate_endpoint_url(config->endpoint, reason))
     return FALSE;
-  }
-  if(!g_str_has_prefix(config->endpoint, "https://") && !_is_local_url(config->endpoint))
-  {
-    if(reason) *reason = g_strdup(_("cloud endpoints must use https:// or localhost"));
-    return FALSE;
-  }
   if(config->api_key && strpbrk(config->api_key, "\r\n"))
   {
     if(reason) *reason = g_strdup(_("API key contains invalid characters"));

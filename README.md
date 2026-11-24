@@ -155,10 +155,10 @@ activate allowed inactive modules. The allowed module list is managed in
 **Preferences -> Assistant**. By default it sends only metadata, slider values,
 local image statistics and the request as text. An optional 768 px preview of
 the current render, without metadata, can be enabled for vision-capable models.
-Ollama runs locally by default. API providers are optional and text-only by
-default: DeepSeek, OpenAI, OpenRouter, Groq, Mistral, xAI, Together, Fireworks,
-Perplexity, Google Gemini and Anthropic Claude. Each provider has its own
-endpoint, model and secure key slot.
+Ollama runs locally by default. API providers are optional: DeepSeek, OpenAI,
+OpenRouter, Groq, Mistral, xAI, Together, Fireworks, Perplexity, Google Gemini
+and Anthropic Claude. Each provider supports the optional preview when its model
+accepts images, and has its own endpoint, model and secure key slot.
 
 Configure it in **Preferences -> Assistant** (click **Detect** to list local
 Ollama models), then use **Analyze**, **Apply** and **Revert** in the darkroom

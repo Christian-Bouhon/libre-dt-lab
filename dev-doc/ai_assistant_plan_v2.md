@@ -1,7 +1,7 @@
 # AI Assistant v2 — plan
 
-- **Statut** : Phase 0/1 implémentée ; test qwen3.6 et adaptateurs Claude/Gemini à faire
-- **Date** : 2026-11-23
+- **Statut** : implémenté (catalogue, activation/revert, stats, aperçu optionnel et adaptateurs cloud) ; benchmark qwen3.6 à documenter
+- **Date** : 2026-11-24
 - **Portée** : fork personnel `libre-dt-lab`
 - **Objectif** : améliorer l'analyse et les corrections de l'assistant darkroom en
   lui donnant un catalogue de modules extensible, la possibilité d'activer des
@@ -24,20 +24,21 @@
 - Le tone mapper de référence est celui de `plugins/darkroom/workflow`, avec
   priorité au tone mapper déjà actif.
 - Premier test de qualité avec **qwen3.6**, puis ajout des adaptateurs
-  **Claude/Gemini en texte uniquement**.
-- **Aucune image n'est envoyée**. Le contexte reste du texte et des nombres.
+  **Claude/Gemini** (API natives, texte et aperçu optionnel).
+- **Aucune image n'est envoyée par défaut**. Le contexte reste du texte et des
+  nombres ; l'aperçu est une option explicite (voir §8 et `AI_ASSISTANT.md`).
 
 ---
 
-## 2. Problème actuel
+## 2. Problème initial (traité dans ce plan)
 
-L'assistant ne propose que des changements sur les modules déjà activés dans
-l'historique. Il ne connaît ni les nouveaux modules du fork (3DCF, Tone &
+L'assistant ne proposait que des changements sur les modules déjà activés dans
+l'historique. Il ne connaissait ni les nouveaux modules du fork (3DCF, Tone &
 Texture, ACES 2.0, Color Harmonizer, RGB Primaries) ni leur sémantique. Il ne
-reçoit aucune statistique d'image : le modèle ne peut pas réellement analyser
-l'exposition, le clipping ou le contraste.
+recevait aucune statistique d'image : le modèle ne pouvait pas réellement
+analyser l'exposition, le clipping ou le contraste.
 
-La qualité dépend aussi fortement du modèle local utilisé.
+La qualité dépendait aussi fortement du modèle local utilisé.
 
 ---
 
@@ -51,6 +52,8 @@ src/common/assistant/assistant_actions.c/.h   autorisation, activation,
                                               application, revert
 src/common/assistant/assistant_stats.c/.h     capture 512 px, percentiles,
                                               clipping, hints
+src/common/assistant/assistant_image.c/.h     aperçu JPEG 768 px optionnel
+                                              en mémoire
 src/libs/ai_assistant.c                 panneau darkroom
 src/gui/preferences_assistant.c         préférences, liste des modules
 src/libs/workflow_helpers.c/.h          helper find/load module partagé
@@ -186,7 +189,14 @@ Sinon, on utilise celui des préférences. On n'en active jamais un deuxième.
 
 Dans le worker, exporter l'image à **512 px en mémoire** via
 `dt_imageio_export_with_flags`, avec un format de capture inspiré de
-`neural_restore.c`. Aucun fichier, aucune image envoyée.
+`neural_restore.c`. Aucun fichier n'est écrit et cette capture de statistiques
+reste locale : elle n'est jamais envoyée.
+
+L'**aperçu optionnel** est distinct : une case « envoyer l'aperçu » génère un
+JPEG **768 px** du rendu darkroom courant, en mémoire, sans métadonnées. Il
+n'est envoyé que si elle est cochée et que le modèle choisi accepte les images ;
+sinon l'assistant continue en texte seul et journalise le repli. Voir
+`AI_ASSISTANT.md`.
 
 Calculs :
 
@@ -228,11 +238,14 @@ Toujours 5 colonnes :
    - portrait, paysage, backlight ;
    - JSON valide, latence, pertinence.
 2. Si insuffisant : DeepSeek texte (déjà supporté).
-3. Ajouter les adaptateurs **Anthropic** et **Gemini**, texte uniquement :
+3. Ajouter les adaptateurs **Anthropic** et **Gemini** (API natives) :
    - endpoints, clés, modèles dans les préférences ;
-   - même plan JSON et mêmes validations.
+   - même plan JSON et mêmes validations ;
+   - texte par défaut, aperçu 768 px optionnel si le modèle accepte les images.
 
-Aucune image ne quitte la machine.
+Par défaut, aucune image ne quitte la machine. Une image ne part que si
+l'utilisateur coche « envoyer l'aperçu » ; elle est alors réduite à 768 px,
+générée en mémoire et sans métadonnées.
 
 ---
 
@@ -243,7 +256,7 @@ Aucune image ne quitte la machine.
 | 0 | Spike activation/retrait module + revert blob + capture stats 512 px + test qwen3.6 | 4–5 jours |
 | 1 | Catalogue JSON, modules v1, préférences liste d'ajout, available_modules, tag enable, apply/revert | 2 semaines |
 | 2 | Stats + hints + prompt few-shot | 1 semaine |
-| 3 | Adaptateurs Claude/Gemini texte + benchmark modèles | 1 semaine |
+| 3 | Adaptateurs Claude/Gemini (texte + aperçu optionnel) + benchmark modèles | 1 semaine |
 
 **Total v1 : 4 à 5 semaines** à temps partiel.
 
@@ -273,7 +286,8 @@ Aucune image ne quitte la machine.
 - Un seul tone mapper à la fois.
 - Les stats locales sont présentes dans le contexte et influencent les
   propositions.
-- Aucune image n'est envoyée.
+- Par défaut, aucune image n'est envoyée ; l'aperçu 768 px est opt-in et
+  retombe en texte seul si le modèle ou le fournisseur le refuse.
 - Le revert restaure exactement les paramètres et l'état d'activation
   précédents.
 - Le test qwen3.6 est documenté.
@@ -287,5 +301,5 @@ Aucune image ne quitte la machine.
 - `primaries` et `colorharmonizer` sont créatifs : deltas conservateurs.
 - La capture 512 px doit rester dans le worker, jamais sur le thread GUI.
 - qwen3.6 est gros (36B) : latence et VRAM à mesurer.
-- Un petit modèle restera limité ; Claude/Gemini texte seront probablement
-  meilleurs pour l'analyse.
+- Un petit modèle restera limité ; Claude/Gemini (texte ou vision) seront
+  probablement meilleurs pour l'analyse.

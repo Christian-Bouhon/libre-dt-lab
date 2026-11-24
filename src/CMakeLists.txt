@@ -502,7 +502,7 @@ if(PNG_VERSION_STRING VERSION_LESS 1.5)
 endif()
 
 # Use imported target for curl
-find_package(CURL 7.56 REQUIRED)
+find_package(CURL 7.62 REQUIRED)
 list(APPEND LIBS CURL::libcurl)
 
 if(USE_AI)

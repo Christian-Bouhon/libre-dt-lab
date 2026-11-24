@@ -96,7 +96,9 @@ Presets are not authoritative: provider model lists change often, so use
 **detect**. If the current model is absent from the provider list, the assistant
 keeps it rather than silently replacing it.
 
-Cloud endpoints must use HTTPS, except localhost. Only text leaves the machine.
+Cloud endpoints must use HTTPS, except localhost and loopback addresses. By
+default only text leaves the machine; enabling **send preview image** also sends
+the 768 px JPEG.
 
 These are **API providers** for model inference, not MCP servers. The separate
 `libre-dt-lab-mcp` binary exposes darktable tools to MCP clients such as Claude
@@ -236,9 +238,11 @@ pipeline, and computes:
 - an `suggested_exposure_ev` that includes the configured exposure bias when
   highlights allow.
 
-No file is written. The image is sent only when the optional preview checkbox
-is enabled and the provider supports vision. The hints help the model make a
-first-pass proposal instead of guessing from metadata alone.
+No file is written. These statistics stay local and the 512 px capture itself
+is never sent. Only the separate optional 768 px preview is uploaded, when
+**send preview image** is enabled and the provider supports vision. The hints
+help the model make a first-pass proposal instead of guessing from metadata
+alone.
 
 ## Styles and looks
 
@@ -285,12 +289,13 @@ same allowed sliders, never the history stack, masks, or module order.
   Configure a keyring backend (Preferences -> Security) or re-enter the key.
 - **Provider model rejected**: click **detect**; provider names and defaults
   change frequently.
-- **Cloud endpoint rejected**: use HTTPS, or a localhost address.
+- **Cloud endpoint rejected**: use HTTPS, or a localhost/loopback address.
 
 ## Implementation
 
 - `src/libs/ai_assistant.c` - darkroom panel, chat, apply/revert UI.
-- `src/common/assistant/assistant_provider.c` - text-only HTTP providers.
+- `src/common/assistant/assistant_provider.c` - provider adapters (text and
+  optional preview images).
 - `src/common/assistant/assistant_catalog.c` - module catalog loading.
 - `src/common/assistant/assistant_context.c` - metadata, modules, tone mapper.
 - `src/common/assistant/assistant_actions.c` - allowlist, activation,
