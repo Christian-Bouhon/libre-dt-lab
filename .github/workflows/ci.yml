@@ -11,6 +11,8 @@ on:
       - darktable-**
       - main
       - '1.0.*'
+    tags:
+      - assistant-ci
     paths-ignore:
         - "po/**"
         - "packaging/**"
